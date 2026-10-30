@@ -16,6 +16,7 @@ import {
 import type { ContentItem, NoteItem } from "../api/tauriBridge";
 import { NOTE_FONTS, fontStack } from "../api/tauriBridge";
 import {
+  handleRichEditorKeyDown,
   htmlToMarkdown,
   isRichBoldActive,
   isRichItalicActive,
@@ -791,46 +792,8 @@ export function NoteSheet({
                       handleToolbarFormat("italic");
                       return;
                     }
-                    if (e.key === "Enter") {
-                      const sel = window.getSelection();
-                      if (sel && sel.rangeCount > 0) {
-                        const range = sel.getRangeAt(0);
-                        const textBefore = range.startContainer.textContent || "";
-                        const offset = range.startOffset;
-                        const lineBefore = textBefore.substring(0, offset);
-                        const match = lineBefore.match(/^(\s*[-*•]\s+)/);
-                        if (match) {
-                          const bullet = match[1];
-                          const textAfter = lineBefore.substring(bullet.length).trim();
-                          if (textAfter === "") {
-                            e.preventDefault();
-                            range.startContainer.textContent = "";
-                            handleEditorInput();
-                            return;
-                          } else {
-                            e.preventDefault();
-                            document.execCommand("insertParagraph", false);
-                            document.execCommand("insertText", false, bullet);
-                            handleEditorInput();
-                            return;
-                          }
-                        }
-                      }
-                    }
-                    if (e.key === "Backspace") {
-                      const sel = window.getSelection();
-                      if (sel && sel.rangeCount > 0) {
-                        const range = sel.getRangeAt(0);
-                        if (range.collapsed) {
-                          const text = range.startContainer.textContent || "";
-                          if (text.match(/^(\s*[-*•]\s*)$/)) {
-                            e.preventDefault();
-                            range.startContainer.textContent = "";
-                            handleEditorInput();
-                            return;
-                          }
-                        }
-                      }
+                    if (editorRef.current && handleRichEditorKeyDown(e, editorRef.current, handleEditorInput)) {
+                      return;
                     }
                   }}
                   onKeyUp={updateActiveFormatting}

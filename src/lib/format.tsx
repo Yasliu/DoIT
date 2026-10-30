@@ -172,3 +172,111 @@ export function isRichItalicActive(): boolean {
     return false;
   }
 }
+
+/**
+ * Intercepts Enter and Backspace keydown events in contenteditable note editors:
+ * 1. Empty Bullet Breakout on Enter: clears bullet prefix on empty bullet lines and pins caret on current line.
+ * 2. Bullet De-indentation on Backspace: strips bullet prefix and keeps caret on same line as plain text.
+ * 3. Bullet continuation on Enter: auto-prefixes next line with bullet if text exists.
+ * Returns true if the event was handled and caller should call onInput.
+ */
+export function handleRichEditorKeyDown(
+  e: React.KeyboardEvent<HTMLDivElement>,
+  editor: HTMLElement,
+  onInput: () => void,
+): boolean {
+  const sel = window.getSelection();
+  if (!sel || sel.rangeCount === 0) return false;
+  const range = sel.getRangeAt(0);
+  if (!editor.contains(range.startContainer)) return false;
+
+  const findCurrentLineElement = (): HTMLElement => {
+    let node: Node | null = range.startContainer;
+    while (node && node !== editor) {
+      if (node.nodeType === Node.ELEMENT_NODE && node.parentNode === editor) {
+        return node as HTMLElement;
+      }
+      node = node.parentNode;
+    }
+    if (range.startContainer === editor) {
+      const child = editor.childNodes[range.startOffset];
+      if (child && child.nodeType === Node.ELEMENT_NODE) {
+        return child as HTMLElement;
+      }
+    }
+    return (range.startContainer.nodeType === Node.ELEMENT_NODE
+      ? range.startContainer
+      : range.startContainer.parentElement || editor) as HTMLElement;
+  };
+
+  const lineEl = findCurrentLineElement();
+  const lineText = lineEl ? (lineEl.textContent || "") : "";
+
+  // Check for markdown bullet prefix (- , * , • )
+  const bulletMatch = lineText.match(/^(\s*[-*•]\s+)(.*)$/);
+  const isBareBullet = /^\s*[-*•]\s*$/.test(lineText);
+
+  if (e.key === "Enter") {
+    // 1. EMPTY BULLET LINE BREAKOUT LOGIC:
+    // If the current line contains exactly a markdown bullet prefix but holds zero text content after it:
+    if ((bulletMatch && bulletMatch[2].trim() === "") || (isBareBullet && lineText.trim().length > 0)) {
+      e.preventDefault();
+      // Completely clear markdown bullet characters and keep cursor on the current line as normal text
+      if (lineEl === editor) {
+        lineEl.innerHTML = "<div><br></div>";
+        const target = lineEl.firstElementChild || lineEl;
+        const newRange = document.createRange();
+        newRange.setStart(target, 0);
+        newRange.collapse(true);
+        sel.removeAllRanges();
+        sel.addRange(newRange);
+      } else {
+        lineEl.innerHTML = "<br>";
+        const newRange = document.createRange();
+        newRange.setStart(lineEl, 0);
+        newRange.collapse(true);
+        sel.removeAllRanges();
+        sel.addRange(newRange);
+      }
+      onInput();
+      return true;
+    } else if (bulletMatch) {
+      // Continuation of bullet list onto next line
+      e.preventDefault();
+      const bulletPrefix = bulletMatch[1];
+      document.execCommand("insertParagraph", false);
+      document.execCommand("insertText", false, bulletPrefix);
+      onInput();
+      return true;
+    }
+  }
+
+  if (e.key === "Backspace") {
+    // 2. BULLET DE-INDENTATION STATE ENGINE:
+    // If cursor position is right after markdown bullet prefix, and text content of that bullet line is completely empty:
+    if (sel.isCollapsed && isBareBullet && lineText.trim().length > 0) {
+      e.preventDefault();
+      // Strip markdown bullet prefix cleanly and keep active cursor pinned on same line
+      if (lineEl === editor) {
+        lineEl.innerHTML = "<div><br></div>";
+        const target = lineEl.firstElementChild || lineEl;
+        const newRange = document.createRange();
+        newRange.setStart(target, 0);
+        newRange.collapse(true);
+        sel.removeAllRanges();
+        sel.addRange(newRange);
+      } else {
+        lineEl.innerHTML = "<br>";
+        const newRange = document.createRange();
+        newRange.setStart(lineEl, 0);
+        newRange.collapse(true);
+        sel.removeAllRanges();
+        sel.addRange(newRange);
+      }
+      onInput();
+      return true;
+    }
+  }
+
+  return false;
+}
