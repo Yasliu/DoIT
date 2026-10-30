@@ -24,6 +24,12 @@ pub fn run() {
         .on_window_event(|window, event| {
             let label = window.label().to_string();
 
+            if let tauri::WindowEvent::Moved(pos) = event {
+                if label == "tray" {
+                    crate::commands::track_tray_window_moved(window, *pos);
+                }
+            }
+
             if let tauri::WindowEvent::CloseRequested { api, .. } = event {
                 // Always prevent native close — we manage visibility ourselves
                 api.prevent_close();

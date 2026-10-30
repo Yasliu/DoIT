@@ -569,7 +569,7 @@ export function TrayCompanion() {
           onContextMenu={handleContextMenu}
           className={cx(
             "group/pill relative flex h-10 select-none items-center gap-2.5 rounded-xl pl-3 pr-2.5",
-            "cursor-pointer transition-all shadow-2xl border border-white/10 hover:border-white/30",
+            "cursor-pointer transition-all shadow-2xl border border-white/10 hover:border-white/30 outline-none focus:outline-none focus:ring-0",
           )}
           style={{
             backgroundColor: "var(--theme-pill-bg, rgba(18, 19, 22, 0.9))",
@@ -595,7 +595,7 @@ export function TrayCompanion() {
               handleCreate();
               expandTray();
             }}
-            className="grid size-6 place-items-center rounded-lg text-white/50 transition-colors hover:bg-white/10 hover:text-white cursor-pointer ml-auto"
+            className="grid size-6 place-items-center rounded-lg text-white/50 transition-colors hover:bg-white/10 hover:text-white cursor-pointer ml-auto outline-none focus:outline-none focus:ring-0 border-none ring-0"
             title="New Note (⌘N)"
             aria-label="New Note"
           >

@@ -57,8 +57,24 @@
     -ms-overflow-style: none !important;
   }
   * {
+    -webkit-tap-highlight-color: transparent !important;
+    outline: none !important;
     scrollbar-width: none;
     -ms-overflow-style: none;
+  }
+  *:focus,
+  *:focus-visible,
+  *:focus-within {
+    outline: none !important;
+    box-shadow: none !important;
+  }
+  button,
+  input,
+  textarea,
+  select,
+  a {
+    outline: none !important;
+    -webkit-tap-highlight-color: transparent !important;
   }
   html::-webkit-scrollbar,
   body::-webkit-scrollbar,
