@@ -55,7 +55,7 @@
   "bundle": {
     "active": true,
     "targets": "all",
-    "resources": ["../WebView2Loader.dll"],
+    "resources": [],
     "windows": {
       "nsis": {
         "installerHooks": "hooks.nsh"
