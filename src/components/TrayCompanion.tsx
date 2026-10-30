@@ -38,15 +38,13 @@ import { accentFor, cleanText, cx, relativeShort, uid } from "../lib/text";
 
 export function TrayCompanion() {
   const { notes, categories, patch, create, remove } = useWorkspace();
-  const [expanded, setExpanded] = useState(false);
-  const [open, setOpen] = useState(true);
-  const [panelVisible, setPanelVisible] = useState(false);
+  const [isMinimized, setIsMinimized] = useState(false);
   const [drawerOpen, setDrawerOpen] = useState(true);
   const [filter, setFilter] = useState("");
   const [selectedShelf, setSelectedShelf] = useState<string | null>(null);
   const [activeNoteId, setActiveNoteId] = useState<string | null>(null);
   const [historyStack, setHistoryStack] = useState<string[]>([]);
-  const collapseTimerRef = useRef<number | null>(null);
+  const visibilityLockRef = useRef<number>(0);
   const panelRef = useRef<HTMLDivElement | null>(null);
 
   // Navigation helpers with proper history stack
@@ -79,10 +77,8 @@ export function TrayCompanion() {
     }
   }, [notes, activeNoteId]);
 
-  // Transition debouncing lock to eliminate click-through re-expansion loops
+  // Transition debouncing lock
   const isTransitioning = useRef(false);
-  const visibilityLockRef = useRef<number>(0);
-  const [showSpawnIndicator, setShowSpawnIndicator] = useState(false);
 
   // Formatting popovers
   const [fontOpen, setFontOpen] = useState(false);
@@ -114,30 +110,14 @@ export function TrayCompanion() {
 
   const shelves = useMemo(() => categories.map((c) => c.name), [categories]);
 
-  const expandTray = useCallback(() => {
+  const toggleMinimize = useCallback(() => {
     if (Date.now() < visibilityLockRef.current) return;
-    visibilityLockRef.current = Date.now() + 650;
-    if (collapseTimerRef.current) {
-      window.clearTimeout(collapseTimerRef.current);
-      collapseTimerRef.current = null;
-    }
-    setExpanded(true);
-    setOpen(true);
-  }, []);
-
-  const collapseTray = useCallback(() => {
-    if (Date.now() < visibilityLockRef.current) return;
-    visibilityLockRef.current = Date.now() + 650;
-    setOpen(false);
-    if (collapseTimerRef.current) window.clearTimeout(collapseTimerRef.current);
-    collapseTimerRef.current = window.setTimeout(() => {
-      setExpanded(false);
-    }, 600);
+    visibilityLockRef.current = Date.now() + 350;
+    setIsMinimized((prev) => !prev);
   }, []);
 
   // Force native Tauri Rust window bounds to read real-time physical height changes of the webview DOM canvas continuously
   useEffect(() => {
-    if (!expanded) return;
     const node = panelRef.current;
     if (!node) return;
 
@@ -152,41 +132,15 @@ export function TrayCompanion() {
 
     observer.observe(node);
     return () => observer.disconnect();
-  }, [expanded]);
+  }, []);
 
-  // Synchronize window size with expanded state
-  useEffect(() => {
-    isTransitioning.current = true;
-    void tauriApi.resizeTrayWindow(expanded);
-    const timer = window.setTimeout(() => {
-      isTransitioning.current = false;
-    }, 350);
-    return () => window.clearTimeout(timer);
-  }, [expanded]);
-
-  // Fluid drawer slide-in / slide-out animation synchronization
-  useEffect(() => {
-    if (expanded) {
-      const raf = requestAnimationFrame(() => {
-        setPanelVisible(true);
-      });
-      return () => cancelAnimationFrame(raf);
-    } else {
-      setPanelVisible(false);
-    }
-  }, [expanded]);
-
-  // Synchronize with external Tauri expansion events (e.g. from open_tray_mode or window manager)
+  // Synchronize with external Tauri expansion events
   useEffect(() => {
     let unlistenFn: (() => void) | null = null;
 
     getCurrentWindow()
       .listen<boolean>("set-expanded", (event) => {
-        if (event.payload) {
-          expandTray();
-        } else {
-          collapseTray();
-        }
+        setIsMinimized(!event.payload);
       })
       .then((unlisten) => {
         unlistenFn = unlisten;
@@ -195,7 +149,7 @@ export function TrayCompanion() {
     return () => {
       if (unlistenFn) unlistenFn();
     };
-  }, [expandTray, collapseTray]);
+  }, []);
 
   // Load theme mode for tray window
   useEffect(() => {
@@ -206,23 +160,8 @@ export function TrayCompanion() {
     });
   }, []);
 
-  // Listen for initial spawn position indicator signal
-  useEffect(() => {
-    let unlisten: (() => void) | null = null;
-    getCurrentWindow()
-      .listen("spawn-indicator", () => {
-        setShowSpawnIndicator(true);
-        window.setTimeout(() => setShowSpawnIndicator(false), 1400);
-      })
-      .then((fn) => {
-        unlisten = fn;
-      });
-    return () => {
-      if (unlisten) unlisten();
-    };
-  }, []);
 
-  // Global key navigation (Escape to minimize/step-back, Cmd/Ctrl+J to toggle)
+  // Global key navigation (Escape to toggle-minimize/step-back, Cmd/Ctrl+J to toggle)
   useEffect(() => {
     const handleKeyDown = (e: KeyboardEvent) => {
       if (e.key === "Escape") {
@@ -231,24 +170,20 @@ export function TrayCompanion() {
           setPreviewImage(null);
         } else if (activeNoteId) {
           handleBack();
-        } else if (expanded) {
-          collapseTray();
+        } else {
+          toggleMinimize();
         }
       }
       const meta = e.ctrlKey || e.metaKey;
       if (meta && e.key.toLowerCase() === "j" && !isTransitioning.current) {
         e.preventDefault();
-        if (expanded) {
-          collapseTray();
-        } else {
-          expandTray();
-        }
+        toggleMinimize();
       }
     };
 
     window.addEventListener("keydown", handleKeyDown);
     return () => window.removeEventListener("keydown", handleKeyDown);
-  }, [expanded, activeNoteId, previewImage, expandTray, collapseTray]);
+  }, [activeNoteId, previewImage, toggleMinimize]);
 
   const filteredNotes = useMemo(() => {
     let list = [...notes].sort((a, b) => b.last_edited - a.last_edited);
@@ -462,58 +397,6 @@ export function TrayCompanion() {
     editActive({ content });
   };
 
-  // Pointer down handler for pill: click to expand, drag to move window anywhere on screen
-  const pillDragRef = useRef({
-    startX: 0,
-    startY: 0,
-    moved: false,
-  });
-
-  const handlePillPointerDown = (e: React.PointerEvent) => {
-    if (e.button !== 0) return;
-    if (Date.now() < visibilityLockRef.current) return;
-    const startX = e.screenX;
-    const startY = e.screenY;
-    pillDragRef.current = {
-      startX,
-      startY,
-      moved: false,
-    };
-
-    let isDragging = false;
-
-    const onPointerMove = (ev: PointerEvent) => {
-      if (isDragging) return;
-      const dx = ev.screenX - startX;
-      const dy = ev.screenY - startY;
-      if (Math.hypot(dx, dy) > 4) {
-        isDragging = true;
-        pillDragRef.current.moved = true;
-        window.removeEventListener("pointermove", onPointerMove);
-        window.removeEventListener("pointerup", onPointerUp);
-        void tauriApi.startDrag().then(() => {
-          void tauriApi.saveTrayPosition();
-        });
-      }
-    };
-
-    const onPointerUp = (upEv: PointerEvent) => {
-      window.removeEventListener("pointermove", onPointerMove);
-      window.removeEventListener("pointerup", onPointerUp);
-      if (!pillDragRef.current.moved) {
-        const dist = Math.hypot(upEv.screenX - startX, upEv.screenY - startY);
-        if (dist <= 4) {
-          expandTray();
-        }
-      } else {
-        void tauriApi.saveTrayPosition();
-      }
-    };
-
-    window.addEventListener("pointermove", onPointerMove);
-    window.addEventListener("pointerup", onPointerUp);
-  };
-
   const handleContextMenu = (e: React.MouseEvent) => {
     e.preventDefault();
     e.stopPropagation();
@@ -557,7 +440,7 @@ export function TrayCompanion() {
     } catch {}
   };
 
-  // Top bar dragging and minimize handling for expanded tray: decoupled 4px threshold
+  // Top bar dragging and minimize handling for desk tray: decoupled 4px threshold
   const handleTopBarPointerDown = (e: React.PointerEvent) => {
     if (e.button !== 0) return;
     if (Date.now() < visibilityLockRef.current) return;
@@ -585,7 +468,7 @@ export function TrayCompanion() {
       if (!isDragging) {
         const dist = Math.hypot(upEv.screenX - startX, upEv.screenY - startY);
         if (dist <= 4) {
-          collapseTray();
+          toggleMinimize();
         }
       }
     };
@@ -594,89 +477,15 @@ export function TrayCompanion() {
     window.addEventListener("pointerup", onPointerUp);
   };
 
-  // ---- RENDER COLLAPSED PILL (ROUNDED RECTANGLE EDGES) ----
-  if (!expanded) {
-    return (
-      <MotionConfig transition={{ type: "spring", bounce: 0, duration: 0.6 }}>
-        <div className="flex h-full w-full items-center justify-center bg-transparent select-none p-2 relative">
-          {/* Soft fading radial spotlight ring (no hard border/edges) */}
-          {showSpawnIndicator && (
-            <div
-              className="pointer-events-none absolute inset-0 z-0 flex items-center justify-center"
-              style={{
-                animation: "radialCueFade 1.2s cubic-bezier(0.16, 1, 0.3, 1) forwards",
-              }}
-            >
-              <div
-                className="size-14 rounded-full [mask-image:radial-gradient(circle,black_20%,transparent_70%)]"
-                style={{
-                  background: "radial-gradient(circle, rgba(255,255,255,0.3) 0%, rgba(255,255,255,0.08) 40%, transparent 70%)",
-                }}
-              />
-            </div>
-          )}
-
-          <motion.div
-            layout
-            onPointerDown={handlePillPointerDown}
-            onContextMenu={handleContextMenu}
-            className={cx(
-              "group/pill relative flex h-10 select-none items-center gap-2.5 rounded-xl pl-3 pr-2.5",
-              "cursor-pointer transition-all shadow-2xl border border-white/10 hover:border-white/30 outline-none focus:outline-none focus:ring-0",
-            )}
-            style={{
-              backgroundColor: "var(--theme-pill-bg, rgba(18, 19, 22, 0.9))",
-              backdropFilter: "blur(20px)",
-              WebkitBackdropFilter: "blur(20px)",
-              boxShadow:
-                "inset 0 1px 0 rgba(255,255,255,0.12), 0 16px 40px -12px rgba(0,0,0,0.95)",
-            }}
-            title="Click to open · Hold and drag to move · Right-click for options"
-          >
-            {/* Logo icon */}
-            <Mark size={16} className="pointer-events-none shrink-0" />
-
-            <span className="text-[13px] font-medium tracking-[0.01em] text-white/90 pointer-events-none">
-              Tray
-            </span>
-
-            <motion.button
-              type="button"
-              layout
-              animate={{ scale: expanded ? 0.8 : 1 }}
-              onPointerDown={(e) => e.stopPropagation()}
-              onClick={(e) => {
-                e.stopPropagation();
-                handleCreate();
-                expandTray();
-              }}
-              className="grid size-6 place-items-center rounded-lg text-white/50 transition-colors hover:bg-white/10 hover:text-white cursor-pointer ml-auto outline-none focus:outline-none focus:ring-0 border-none ring-0"
-              title="New Note (⌘N)"
-              aria-label="New Note"
-            >
-              <Plus size={14} strokeWidth={2.2} />
-            </motion.button>
-          </motion.div>
-        </div>
-      </MotionConfig>
-    );
-  }
-
-  // ---- RENDER EXPANDED DESK TRAY (IMAGE 3) OR IN-TRAY NOTE EDITOR ----
+  // ---- RENDER DESK TRAY WORKSPACE WITH PERMANENT HEADER & SPRING BODY ----
   return (
-    <MotionConfig transition={{ type: "spring", bounce: 0, duration: 0.6 }}>
+    <MotionConfig transition={{ type: "spring", bounce: 0, duration: 0.5 }}>
       <motion.div
         ref={panelRef}
         layout
         onPaste={handlePaste}
         onContextMenu={handleContextMenu}
-        className={cx(
-          "box-border flex h-auto max-h-full w-full flex-col overflow-hidden text-ink-1 rounded-2xl border border-white/10 select-none p-3 shadow-2xl",
-          "drawer-spring-motion transform",
-          panelVisible
-            ? "translate-x-0 opacity-100"
-            : "translate-x-full opacity-0 pointer-events-none",
-        )}
+        className="box-border flex h-auto max-h-full w-full flex-col overflow-hidden text-ink-1 rounded-2xl border border-white/10 select-none p-3 shadow-2xl"
         style={{
           backgroundColor: "var(--theme-tray-bg)",
           backdropFilter: "var(--theme-tray-blur)",
@@ -684,18 +493,17 @@ export function TrayCompanion() {
           boxShadow: "inset 0 0 0 1px var(--theme-tray-border), 0 40px 90px -30px rgba(0,0,0,0.95)",
         }}
       >
-        {/* 1. Fluid unbordered top bar: Hold and drag to move, click to minimize */}
+        {/* 1. Fluid permanent top bar: Hold and drag to move, click to toggle minimize */}
         <motion.div
           layout
           onPointerDown={handleTopBarPointerDown}
-          title="Tap to minimize · Hold and drag to move"
+          title="Tap to toggle minimize · Hold and drag to move"
           className="flex h-7 shrink-0 items-center justify-between px-1 mb-2.5 select-none cursor-pointer group/topbar"
         >
           <div className="flex flex-1 items-center gap-2 py-1 pointer-events-none">
             {activeNote ? (
-              <motion.button
+              <button
                 type="button"
-                layout
                 onPointerDown={(e) => e.stopPropagation()}
                 onClick={(e) => {
                   e.stopPropagation();
@@ -706,16 +514,15 @@ export function TrayCompanion() {
               >
                 <ArrowLeft size={12} />
                 <span>Back</span>
-              </motion.button>
+              </button>
             ) : (
               <Mark size={14} className="shrink-0" />
             )}
-            <motion.span
-              layout
+            <span
               className="font-mono text-[9.5px] font-semibold uppercase tracking-[0.16em] text-white/50 group-hover/topbar:text-white/80 transition-colors"
             >
               {activeNote ? "EDIT NOTE" : "DESK TRAY"}
-            </motion.span>
+            </span>
           </div>
 
           <div
@@ -723,9 +530,8 @@ export function TrayCompanion() {
             onPointerDown={(e) => e.stopPropagation()}
             onClick={(e) => e.stopPropagation()}
           >
-            <motion.button
+            <button
               type="button"
-              layout
               onPointerDown={(e) => e.stopPropagation()}
               onClick={() => void tauriApi.openCanvasMode()}
               className="grid size-6 place-items-center rounded-md text-white/50 hover:bg-white/10 hover:text-white transition-colors cursor-pointer"
@@ -733,37 +539,35 @@ export function TrayCompanion() {
               aria-label="Open Canvas"
             >
               <ArrowUpRight size={13} strokeWidth={1.8} />
-            </motion.button>
-            <motion.button
+            </button>
+            <button
               type="button"
-              layout
               onPointerDown={(e) => e.stopPropagation()}
               onClick={(e) => {
                 e.stopPropagation();
-                collapseTray();
+                toggleMinimize();
               }}
               className="grid size-6 place-items-center rounded-md text-white/65 hover:bg-white/15 hover:text-white transition-colors cursor-pointer"
-              title="Minimize to Pill (—)"
-              aria-label="Minimize to Pill"
+              title={isMinimized ? "Restore Tray (—)" : "Minimize Tray (—)"}
+              aria-label={isMinimized ? "Restore Tray" : "Minimize Tray"}
             >
               <Minus size={13} strokeWidth={2.4} />
-            </motion.button>
-            <motion.button
+            </button>
+            <button
               type="button"
-              layout
               onPointerDown={(e) => e.stopPropagation()}
               onClick={() => {
-                collapseTray();
+                setIsMinimized(true);
                 window.setTimeout(() => {
                   void getCurrentWindow().hide();
-                }, 300);
+                }, 150);
               }}
               className="grid size-6 place-items-center rounded-md text-white/50 hover:bg-white/10 hover:text-white transition-colors cursor-pointer"
               title="Hide to System Tray (✕)"
               aria-label="Hide to System Tray"
             >
               <X size={13} strokeWidth={1.8} />
-            </motion.button>
+            </button>
           </div>
         </motion.div>
 
@@ -771,8 +575,8 @@ export function TrayCompanion() {
         <motion.div
           layout
           initial={{ opacity: 1, height: "auto" }}
-          animate={{ opacity: open ? 1 : 0, height: open ? "auto" : 0 }}
-          transition={{ type: "spring", bounce: 0, duration: 0.6 }}
+          animate={{ height: isMinimized ? 0 : "auto", opacity: isMinimized ? 0 : 1 }}
+          transition={{ type: "spring", bounce: 0, duration: 0.5 }}
           className="overflow-hidden flex flex-col flex-1"
         >
           <AnimatePresence mode="wait" initial={false}>
@@ -1313,10 +1117,10 @@ export function TrayCompanion() {
               type="button"
               layout
               onClick={() => {
-                collapseTray();
+                toggleMinimize();
               }}
               className="flex items-center gap-1.5 text-[11.5px] font-mono text-white/50 hover:text-white transition-colors cursor-pointer"
-              title="Minimize tray to small floating pill"
+              title="Minimize tray"
             >
               <Minus size={12} strokeWidth={2.4} />
               <span>Minimize</span>

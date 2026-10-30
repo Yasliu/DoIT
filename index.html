@@ -7,6 +7,19 @@
     <meta name="color-scheme" content="dark" />
     <title>DoIT</title>
     <style>
+      * {
+        -ms-overflow-style: none !important;
+        scrollbar-width: none !important;
+      }
+      *::-webkit-scrollbar,
+      ::-webkit-scrollbar {
+        display: none !important;
+        width: 0 !important;
+        height: 0 !important;
+      }
+      body, html {
+        overflow: hidden !important;
+      }
       *, *::before, *::after {
         -webkit-tap-highlight-color: transparent !important;
         outline: none !important;

@@ -430,14 +430,14 @@ pub fn open_tray_mode(app: AppHandle) -> Result<(), String> {
 
     if let (Some(tray_win), Some(mon)) = (tray_win_opt, target_mon) {
         lock_window_transition(350);
-        position_tray_on_monitor(&tray_win, &mon, false);
+        position_tray_on_monitor(&tray_win, &mon, true);
 
-        // Pre-lock initial pill physical coordinates
+        // Pre-lock initial expanded physical coordinates
         if let Ok(pos) = tray_win.outer_position() {
-            PRE_STATE_BUFFER.lock().unwrap().pill_physical_pos = Some(pos);
+            PRE_STATE_BUFFER.lock().unwrap().expanded_physical_pos = Some(pos);
         }
 
-        let _ = tray_win.emit("set-expanded", false);
+        let _ = tray_win.emit("set-expanded", true);
         let _ = tray_win.emit("spawn-indicator", ());
         let _ = tray_win.show();
         let _ = tray_win.set_always_on_top(true);
@@ -631,9 +631,9 @@ pub fn sync_tray_window_height(app: AppHandle, logical_height: f64) -> Result<()
         if let Ok(Some(monitor)) = tray_win.current_monitor() {
             let scale = monitor.scale_factor();
             let phys_h = (logical_height * scale).round() as u32;
-            let small_h_phys = (64.0 * scale).round() as u32;
-            let expanded_h_phys = (560.0 * scale).round() as u32;
-            let clamped_h = phys_h.clamp(small_h_phys, expanded_h_phys);
+            let min_h_phys = (48.0 * scale).round() as u32;
+            let expanded_h_phys = (580.0 * scale).round() as u32;
+            let clamped_h = phys_h.clamp(min_h_phys, expanded_h_phys);
 
             if let Ok(cur_size) = tray_win.outer_size() {
                 if let Ok(cur_pos) = tray_win.outer_position() {
