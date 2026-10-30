@@ -8,7 +8,7 @@ use tauri::{
     image::Image,
     menu::{Menu, MenuItem},
     tray::{MouseButton, MouseButtonState, TrayIconBuilder, TrayIconEvent},
-    Emitter, Manager,
+    Manager,
 };
 
 const TRAY_ICON_BYTES: &[u8] = include_bytes!("../icons/tray_rgba.bin");
@@ -55,27 +55,7 @@ pub fn run() {
                         }
 
                         // X button on main → switch to floating tray companion on the same monitor
-                        if let Some(tray_win) = app.get_webview_window("tray") {
-                            let target_mon = app
-                                .get_webview_window("main")
-                                .and_then(|w| w.current_monitor().ok().flatten())
-                                .or_else(|| tray_win.current_monitor().ok().flatten())
-                                .or_else(|| tray_win.primary_monitor().ok().flatten());
-
-                            if let Some(mon) = target_mon {
-                                position_tray_on_monitor(&tray_win, &mon, false);
-                            }
-
-                            let _ = tray_win.emit("set-expanded", false);
-                            let _ = tray_win.show();
-                            let _ = tray_win.set_always_on_top(true);
-                            // Small delay then focus so the window manager registers it
-                            std::thread::sleep(std::time::Duration::from_millis(60));
-                            let _ = tray_win.set_focus();
-                        }
-                        if let Some(main_win) = app.get_webview_window("main") {
-                            let _ = main_win.hide();
-                        }
+                        let _ = open_tray_mode(app.clone());
                     } else {
                         // X button on tray companion → just hide it
                         if let Some(tray_win) = app.get_webview_window("tray") {

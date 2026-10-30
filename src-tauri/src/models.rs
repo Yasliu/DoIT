@@ -88,14 +88,21 @@ pub fn default_note_storage_path() -> String {
         let mut p = std::path::PathBuf::from(profile);
         p.push("Documents");
         p.push("DoIT");
+        p.push("Notes");
+        p.to_string_lossy().to_string()
+    } else if let Some(home) = std::env::var_os("HOME") {
+        let mut p = std::path::PathBuf::from(home);
+        p.push("Documents");
+        p.push("DoIT");
+        p.push("Notes");
         p.to_string_lossy().to_string()
     } else if let Some(app_data) = std::env::var_os("APPDATA") {
         let mut p = std::path::PathBuf::from(app_data);
         p.push("DoIT");
-        p.push("notes");
+        p.push("Notes");
         p.to_string_lossy().to_string()
     } else {
-        "./doit_notes".to_string()
+        "./DoIT/Notes".to_string()
     }
 }
 
@@ -373,7 +380,7 @@ impl NoteItem {
         let is_italic = frontmatter_map.get("is_italic").map(|s| clean_yaml_scalar(s).eq_ignore_ascii_case("true")).or(Some(false));
         let is_pinned = frontmatter_map.get("is_pinned").map(|s| clean_yaml_scalar(s).eq_ignore_ascii_case("true")).or(Some(false));
 
-        // Media URLs parsing
+        // Media URLs parsing (Uses strict '|||' delimiter to preserve base64 data URIs)
         let mut media_urls: Vec<String> = Vec::new();
         if let Some(urls_str) = frontmatter_map.get("media_urls").filter(|s| !s.trim().is_empty()) {
             let cleaned_urls = clean_yaml_scalar(urls_str);
@@ -383,6 +390,11 @@ impl NoteItem {
                     if !trimmed.is_empty() && !media_urls.contains(&trimmed) {
                         media_urls.push(trimmed);
                     }
+                }
+            } else if cleaned_urls.contains("data:") || cleaned_urls.contains(";base64,") {
+                // Single base64 data URI must never be split on commas
+                if !media_urls.contains(&cleaned_urls) {
+                    media_urls.push(cleaned_urls);
                 }
             } else {
                 for u in cleaned_urls.split(',') {

@@ -13,6 +13,20 @@ pub struct MainWindowState {
 }
 
 pub static SAVED_MAIN_WINDOW_STATE: Mutex<Option<MainWindowState>> = Mutex::new(None);
+
+#[derive(Clone, Debug)]
+pub struct TrayPositionState {
+    pub collapsed_pos: Option<tauri::PhysicalPosition<i32>>,
+    pub expanded_pos: Option<tauri::PhysicalPosition<i32>>,
+    pub last_monitor_name: Option<String>,
+}
+
+pub static TRAY_POSITION_STATE: Mutex<TrayPositionState> = Mutex::new(TrayPositionState {
+    collapsed_pos: None,
+    expanded_pos: None,
+    last_monitor_name: None,
+});
+
 pub static TRAY_COLLAPSED_POSITION: Mutex<Option<tauri::PhysicalPosition<i32>>> = Mutex::new(None);
 pub static TRAY_WINDOW_CUSTOM_POSITION: Mutex<Option<tauri::PhysicalPosition<i32>>> = Mutex::new(None);
 
@@ -201,6 +215,58 @@ pub fn toggle_window_minimize(window: Window) -> Result<(), String> {
     window.minimize().map_err(|e| e.to_string())
 }
 
+pub fn get_window_active_monitor(window: &tauri::WebviewWindow) -> Option<tauri::Monitor> {
+    if let Ok(Some(mon)) = window.current_monitor() {
+        return Some(mon);
+    }
+
+    if let (Ok(pos), Ok(sz)) = (window.outer_position(), window.outer_size()) {
+        let center_x = pos.x + (sz.width as i32) / 2;
+        let center_y = pos.y + (sz.height as i32) / 2;
+
+        if let Ok(monitors) = window.available_monitors() {
+            for mon in &monitors {
+                let mp = mon.position();
+                let ms = mon.size();
+                if center_x >= mp.x
+                    && center_x < mp.x + (ms.width as i32)
+                    && center_y >= mp.y
+                    && center_y < mp.y + (ms.height as i32)
+                {
+                    return Some(mon.clone());
+                }
+            }
+
+            let mut best_overlap = 0i64;
+            let mut best_mon = None;
+
+            for mon in monitors {
+                let mp = mon.position();
+                let ms = mon.size();
+
+                let x_overlap =
+                    (pos.x + sz.width as i32).min(mp.x + ms.width as i32) - pos.x.max(mp.x);
+                let y_overlap =
+                    (pos.y + sz.height as i32).min(mp.y + ms.height as i32) - pos.y.max(mp.y);
+
+                if x_overlap > 0 && y_overlap > 0 {
+                    let overlap = (x_overlap as i64) * (y_overlap as i64);
+                    if overlap > best_overlap {
+                        best_overlap = overlap;
+                        best_mon = Some(mon);
+                    }
+                }
+            }
+
+            if best_mon.is_some() {
+                return best_mon;
+            }
+        }
+    }
+
+    window.primary_monitor().ok().flatten()
+}
+
 pub fn position_tray_on_monitor(
     window: &tauri::WebviewWindow,
     monitor: &tauri::Monitor,
@@ -220,78 +286,65 @@ pub fn position_tray_on_monitor(
 
     let min_x = m_pos.x + 8;
     let min_y = m_pos.y + 8;
-    let max_small_x = m_pos.x + (m_size.width as i32) - small_w_phys - 8;
-    let max_small_y = m_pos.y + (m_size.height as i32) - small_h_phys - 8;
+    let max_small_x = (m_pos.x + (m_size.width as i32) - small_w_phys - 8).max(min_x);
+    let max_small_y = (m_pos.y + (m_size.height as i32) - small_h_phys - 8).max(min_y);
 
-    // Retrieve last saved collapsed position on this monitor, if any
-    let collapsed_pos = {
-        let guard = TRAY_COLLAPSED_POSITION.lock().unwrap();
-        *guard
-    };
+    let default_x = (m_pos.x + (m_size.width as i32) - small_w_phys - margin_x).clamp(min_x, max_small_x);
+    let default_y = (m_pos.y + (m_size.height as i32) - small_h_phys - margin_y).clamp(min_y, max_small_y);
 
-    let base_collapsed = if let Some(pos) = collapsed_pos {
-        // Verify pos is within this monitor's bounds
+    let mut mem = TRAY_POSITION_STATE.lock().unwrap();
+
+    let base_collapsed = if let Some(pos) = mem.collapsed_pos {
         if pos.x >= min_x - 50 && pos.x <= max_small_x + 50 && pos.y >= min_y - 50 && pos.y <= max_small_y + 50 {
             tauri::PhysicalPosition::new(
-                pos.x.clamp(min_x, max_small_x.max(min_x)),
-                pos.y.clamp(min_y, max_small_y.max(min_y)),
+                pos.x.clamp(min_x, max_small_x),
+                pos.y.clamp(min_y, max_small_y),
             )
         } else {
-            // Default to bottom-right of current monitor
-            let def_x = m_pos.x + (m_size.width as i32) - small_w_phys - margin_x;
-            let def_y = m_pos.y + (m_size.height as i32) - small_h_phys - margin_y;
-            tauri::PhysicalPosition::new(def_x, def_y)
+            tauri::PhysicalPosition::new(default_x, default_y)
         }
     } else {
-        // Default to bottom-right of current monitor
-        let def_x = m_pos.x + (m_size.width as i32) - small_w_phys - margin_x;
-        let def_y = m_pos.y + (m_size.height as i32) - small_h_phys - margin_y;
-        tauri::PhysicalPosition::new(def_x, def_y)
+        tauri::PhysicalPosition::new(default_x, default_y)
     };
 
-    // Save back clamped base collapsed
-    *TRAY_COLLAPSED_POSITION.lock().unwrap() = Some(base_collapsed);
+    mem.collapsed_pos = Some(base_collapsed);
+    mem.last_monitor_name = monitor.name().cloned();
 
     if expanded {
-        let max_expanded_x = m_pos.x + (m_size.width as i32) - expanded_w_phys - 8;
-        let max_expanded_y = m_pos.y + (m_size.height as i32) - expanded_h_phys - 8;
+        let max_expanded_x = (m_pos.x + (m_size.width as i32) - expanded_w_phys - 8).max(min_x);
+        let max_expanded_y = (m_pos.y + (m_size.height as i32) - expanded_h_phys - 8).max(min_y);
 
-        // Anchor expanded view: if base_collapsed is near the right edge, expand leftwards; else rightwards
         let target_x = if base_collapsed.x + expanded_w_phys > max_expanded_x {
-            (base_collapsed.x + small_w_phys) - expanded_w_phys
+            (base_collapsed.x + small_w_phys - expanded_w_phys).clamp(min_x, max_expanded_x)
         } else {
-            base_collapsed.x
+            base_collapsed.x.clamp(min_x, max_expanded_x)
         };
 
-        // If base_collapsed is near the bottom edge, expand upwards; else downwards
         let target_y = if base_collapsed.y + expanded_h_phys > max_expanded_y {
-            (base_collapsed.y + small_h_phys) - expanded_h_phys
+            (base_collapsed.y + small_h_phys - expanded_h_phys).clamp(min_y, max_expanded_y)
         } else {
-            base_collapsed.y
+            base_collapsed.y.clamp(min_y, max_expanded_y)
         };
 
-        let clamped_x = target_x.clamp(min_x, max_expanded_x.max(min_x));
-        let clamped_y = target_y.clamp(min_y, max_expanded_y.max(min_y));
+        mem.expanded_pos = Some(tauri::PhysicalPosition::new(target_x, target_y));
+        drop(mem);
 
-        let _ = window.set_position(tauri::PhysicalPosition::new(clamped_x, clamped_y));
         let _ = window.set_size(tauri::PhysicalSize::new(expanded_w_phys as u32, expanded_h_phys as u32));
+        let _ = window.set_position(tauri::PhysicalPosition::new(target_x, target_y));
     } else {
-        // Minimizing: shrink to collapsed size and position at base_collapsed
+        drop(mem);
         let _ = window.set_size(tauri::PhysicalSize::new(small_w_phys as u32, small_h_phys as u32));
         let _ = window.set_position(base_collapsed);
     }
 }
 
 pub fn position_tray_window(app: &AppHandle, window: &tauri::WebviewWindow, expanded: bool) {
-    let target_monitor = window
-        .current_monitor()
-        .ok()
-        .flatten()
+    let target_monitor = get_window_active_monitor(window)
         .or_else(|| {
             app.get_webview_window("main")
-                .and_then(|w| w.current_monitor().ok().flatten())
+                .and_then(|w| get_window_active_monitor(&w))
         })
-        .or_else(|| window.primary_monitor().ok().flatten());
+        .or_else(|| app.primary_monitor().ok().flatten());
 
     if let Some(mon) = target_monitor {
         position_tray_on_monitor(window, &mon, expanded);
@@ -300,34 +353,16 @@ pub fn position_tray_window(app: &AppHandle, window: &tauri::WebviewWindow, expa
 
 #[tauri::command]
 pub fn open_tray_mode(app: AppHandle) -> Result<(), String> {
-    // Save main window exact display state (fullscreen, maximized, or custom dimensions)
-    let mut main_monitor: Option<tauri::Monitor> = None;
-    if let Some(main_win) = app.get_webview_window("main") {
+    let main_win_opt = app.get_webview_window("main");
+    let tray_win_opt = app.get_webview_window("tray");
+
+    let active_monitor = if let Some(ref main_win) = main_win_opt {
         let is_fullscreen = main_win.is_fullscreen().unwrap_or(false);
         let is_maximized = main_win.is_maximized().unwrap_or(false);
         let size = main_win.outer_size().ok();
         let position = main_win.outer_position().ok();
-
-        // Detect which monitor contains the main window
-        main_monitor = main_win.current_monitor().ok().flatten().or_else(|| {
-            if let (Some(pos), Some(sz)) = (position, size) {
-                let center_x = pos.x + (sz.width as i32) / 2;
-                let center_y = pos.y + (sz.height as i32) / 2;
-                if let Ok(mons) = main_win.available_monitors() {
-                    for m in mons {
-                        let mp = m.position();
-                        let ms = m.size();
-                        if center_x >= mp.x && center_x < mp.x + (ms.width as i32)
-                            && center_y >= mp.y && center_y < mp.y + (ms.height as i32) {
-                            return Some(m);
-                        }
-                    }
-                }
-            }
-            None
-        });
-
-        let monitor_name = main_monitor.as_ref().and_then(|m| m.name().cloned());
+        let mon = get_window_active_monitor(main_win);
+        let monitor_name = mon.as_ref().and_then(|m| m.name().cloned());
 
         *SAVED_MAIN_WINDOW_STATE.lock().unwrap() = Some(MainWindowState {
             is_maximized,
@@ -336,31 +371,17 @@ pub fn open_tray_mode(app: AppHandle) -> Result<(), String> {
             size,
             monitor_name,
         });
-    }
+        mon
+    } else {
+        None
+    };
 
-    // Show tray FIRST before hiding main — ensures the app never has zero visible windows
-    if let Some(tray_win) = app.get_webview_window("tray") {
-        let target_monitor = main_monitor
-            .or_else(|| tray_win.current_monitor().ok().flatten())
-            .or_else(|| tray_win.primary_monitor().ok().flatten());
+    let target_mon = active_monitor
+        .or_else(|| tray_win_opt.as_ref().and_then(get_window_active_monitor))
+        .or_else(|| app.primary_monitor().ok().flatten());
 
-        if let Some(mon) = target_monitor {
-            let m_pos = mon.position();
-            let m_size = mon.size();
-
-            // If existing collapsed pos is on a different monitor, reset it so it loads bottom-right of current monitor
-            let mut guard = TRAY_COLLAPSED_POSITION.lock().unwrap();
-            if let Some(pos) = *guard {
-                let on_this_mon = pos.x >= m_pos.x && pos.x < m_pos.x + (m_size.width as i32)
-                    && pos.y >= m_pos.y && pos.y < m_pos.y + (m_size.height as i32);
-                if !on_this_mon {
-                    *guard = None;
-                }
-            }
-            drop(guard);
-
-            position_tray_on_monitor(&tray_win, &mon, false);
-        }
+    if let (Some(tray_win), Some(mon)) = (tray_win_opt, target_mon) {
+        position_tray_on_monitor(&tray_win, &mon, false);
 
         let _ = tray_win.emit("set-expanded", false);
         let _ = tray_win.emit("spawn-indicator", ());
@@ -368,9 +389,11 @@ pub fn open_tray_mode(app: AppHandle) -> Result<(), String> {
         let _ = tray_win.set_always_on_top(true);
         let _ = tray_win.set_focus();
     }
-    if let Some(main_win) = app.get_webview_window("main") {
+
+    if let Some(main_win) = main_win_opt {
         let _ = main_win.hide();
     }
+
     Ok(())
 }
 
@@ -380,12 +403,9 @@ pub fn open_canvas_mode(app: AppHandle) -> Result<(), String> {
         app.get_webview_window("tray"),
         app.get_webview_window("main"),
     ) {
-        let target_mon = tray_win
-            .current_monitor()
-            .ok()
-            .flatten()
-            .or_else(|| main_win.current_monitor().ok().flatten())
-            .or_else(|| main_win.primary_monitor().ok().flatten());
+        let target_mon = get_window_active_monitor(&tray_win)
+            .or_else(|| get_window_active_monitor(&main_win))
+            .or_else(|| app.primary_monitor().ok().flatten());
 
         let saved = SAVED_MAIN_WINDOW_STATE.lock().unwrap().clone();
 
@@ -443,16 +463,12 @@ pub fn open_canvas_mode(app: AppHandle) -> Result<(), String> {
 #[tauri::command]
 pub fn resize_tray_window(app: AppHandle, expanded: bool) -> Result<(), String> {
     if let Some(tray_win) = app.get_webview_window("tray") {
-        // When minimizing to smaller tile or expanding, explicitly query window.current_monitor()
-        let target_monitor = tray_win
-            .current_monitor()
-            .ok()
-            .flatten()
+        let target_monitor = get_window_active_monitor(&tray_win)
             .or_else(|| {
                 app.get_webview_window("main")
-                    .and_then(|w| w.current_monitor().ok().flatten())
+                    .and_then(|w| get_window_active_monitor(&w))
             })
-            .or_else(|| tray_win.primary_monitor().ok().flatten());
+            .or_else(|| app.primary_monitor().ok().flatten());
 
         if let Some(mon) = target_monitor {
             position_tray_on_monitor(&tray_win, &mon, expanded);
@@ -471,11 +487,8 @@ pub fn save_tray_position(app: AppHandle) -> Result<(), String> {
     if let Some(tray_win) = app.get_webview_window("tray") {
         if let Ok(pos) = tray_win.outer_position() {
             let win_size = tray_win.outer_size().unwrap_or(tauri::PhysicalSize::new(160, 64));
-            let target_mon = tray_win
-                .current_monitor()
-                .ok()
-                .flatten()
-                .or_else(|| tray_win.primary_monitor().ok().flatten());
+            let target_mon = get_window_active_monitor(&tray_win)
+                .or_else(|| app.primary_monitor().ok().flatten());
 
             if let Some(mon) = target_mon {
                 let m_pos = mon.position();
@@ -492,30 +505,25 @@ pub fn save_tray_position(app: AppHandle) -> Result<(), String> {
                 let clamped_x = pos.x.clamp(min_x, max_x);
                 let clamped_y = pos.y.clamp(min_y, max_y);
 
-                // Enforce physical screen blockage: snap window back if pushed beyond edges
+                // Desktop Screen Edge Constraints: Enforce physical screen blockage
                 if clamped_x != pos.x || clamped_y != pos.y {
                     let _ = tray_win.set_position(tauri::PhysicalPosition::new(clamped_x, clamped_y));
                 }
 
+                let mut mem = TRAY_POSITION_STATE.lock().unwrap();
                 if (win_size.width as i32) <= small_w + 30 {
-                    // Small collapsed tile was dragged
+                    mem.collapsed_pos = Some(tauri::PhysicalPosition::new(clamped_x, clamped_y));
                     *TRAY_COLLAPSED_POSITION.lock().unwrap() = Some(tauri::PhysicalPosition::new(clamped_x, clamped_y));
                 } else {
-                    // Expanded tray was dragged: compute collapsed anchor relative to current monitor
+                    mem.expanded_pos = Some(tauri::PhysicalPosition::new(clamped_x, clamped_y));
                     let max_small_x = (m_pos.x + m_size.width as i32 - small_w - 8).max(min_x);
                     let max_small_y = (m_pos.y + m_size.height as i32 - small_h - 8).max(min_y);
-                    let anchor_x = if clamped_x + (win_size.width as i32) / 2 > m_pos.x + (m_size.width as i32) / 2 {
-                        (clamped_x + win_size.width as i32 - small_w).clamp(min_x, max_small_x)
-                    } else {
-                        clamped_x.clamp(min_x, max_small_x)
-                    };
-                    let anchor_y = if clamped_y + (win_size.height as i32) / 2 > m_pos.y + (m_size.height as i32) / 2 {
-                        (clamped_y + win_size.height as i32 - small_h).clamp(min_y, max_small_y)
-                    } else {
-                        clamped_y.clamp(min_y, max_small_y)
-                    };
+                    let anchor_x = (clamped_x + (win_size.width as i32 - small_w) / 2).clamp(min_x, max_small_x);
+                    let anchor_y = (clamped_y + (win_size.height as i32 - small_h) / 2).clamp(min_y, max_small_y);
+                    mem.collapsed_pos = Some(tauri::PhysicalPosition::new(anchor_x, anchor_y));
                     *TRAY_COLLAPSED_POSITION.lock().unwrap() = Some(tauri::PhysicalPosition::new(anchor_x, anchor_y));
                 }
+                mem.last_monitor_name = mon.name().cloned();
                 *TRAY_WINDOW_CUSTOM_POSITION.lock().unwrap() = Some(tauri::PhysicalPosition::new(clamped_x, clamped_y));
             }
         }

@@ -20,8 +20,6 @@ import {
   isRichBoldActive,
   isRichItalicActive,
   markdownToHtml,
-  toggleRichBold,
-  toggleRichItalic,
 } from "../lib/format";
 import { springTo } from "../lib/spring";
 import { accentFor, cleanText, cx, fullStamp, uid } from "../lib/text";
@@ -36,49 +34,10 @@ interface NoteSheetProps {
   onDelete: (note: NoteItem) => void;
 }
 
-interface Rect {
-  left: number;
-  top: number;
-  width: number;
-  height: number;
-}
-
-function targetRect(_canvas: HTMLElement | null, note: NoteItem): Rect {
-  const vw = typeof window !== "undefined" ? window.innerWidth : 1280;
-  const vh = typeof window !== "undefined" ? window.innerHeight : 800;
-
-  // Sizing: Generously wide up to 880px, strictly centered on the viewport
-  const width = Math.min(880, Math.max(540, Math.floor(vw * 0.72)));
-  const availH = vh - 48;
-
-  // Dynamic height calculation based on lines, title, and images:
-  const lineCount = note.content.length;
-  const totalChars = note.content.reduce((acc, c) => acc + c.text.length, 0);
-  const hasImages = (note.media_urls && note.media_urls.length > 0) || !!note.media_url;
-  const imageCount = (note.media_urls && note.media_urls.length > 0) ? note.media_urls.length : (note.media_url ? 1 : 0);
-
-  const baseHeaderAndFooter = 160;
-  const textSpace = Math.max(180, lineCount * 36 + Math.floor(totalChars / 80) * 24);
-  const imageSpace = imageCount > 0 ? 140 : 0;
-
-  const contentEstimate = baseHeaderAndFooter + textSpace + (hasImages ? imageSpace : 0);
-
-  // Dynamic height capped at max screen boundary (90% of available height)
-  // When content exceeds maxLimit, internal smooth scrolling takes over automatically.
-  const minHeight = 460;
-  const maxLimit = Math.max(minHeight, Math.floor(availH * 0.90));
-  const height = Math.max(minHeight, Math.min(maxLimit, contentEstimate));
-
-  const left = Math.round((vw - width) / 2);
-  const top = Math.round(Math.max(20, (vh - height) / 2));
-
-  return { left, top, width, height };
-}
-
 export function NoteSheet({
   note,
   origin: _origin,
-  canvas,
+  canvas: _canvas,
   shelves,
   onCommit,
   onClose,
@@ -86,7 +45,6 @@ export function NoteSheet({
 }: NoteSheetProps) {
   const frame = useRef<HTMLDivElement | null>(null);
   const scrim = useRef<HTMLDivElement | null>(null);
-  const target = useRef<Rect>(targetRect(canvas, note));
   const closing = useRef(false);
   const deleted = useRef(false);
   const commitRef = useRef(onCommit);
@@ -119,10 +77,12 @@ export function NoteSheet({
 
   const initEditor = useCallback((node: HTMLDivElement | null) => {
     editorRef.current = node;
-    if (node && lastNoteIdRef.current !== draft.id) {
-      lastNoteIdRef.current = draft.id;
-      const md = draft.content.map((c) => c.text).join("\n");
-      node.innerHTML = markdownToHtml(md);
+    if (node) {
+      if (lastNoteIdRef.current !== draft.id || !node.innerHTML || node.innerHTML === "<div><br></div>") {
+        lastNoteIdRef.current = draft.id;
+        const md = draft.content.map((c) => c.text).join("\n");
+        node.innerHTML = markdownToHtml(md);
+      }
     }
   }, [draft.id, draft.content]);
 
@@ -148,6 +108,63 @@ export function NoteSheet({
     }));
     commit({ ...draftRef.current, content, last_edited: Date.now() });
     updateActiveFormatting();
+  };
+
+  const handleToolbarFormat = (style: "bold" | "italic") => {
+    const activeEl = document.activeElement;
+
+    // 1. Task line input selection formatting
+    if (activeEl instanceof HTMLInputElement && focusLine) {
+      const start = activeEl.selectionStart ?? 0;
+      const end = activeEl.selectionEnd ?? 0;
+      if (start !== end) {
+        const val = activeEl.value;
+        const selected = val.slice(start, end);
+        const marker = style === "bold" ? "**" : "*";
+
+        let nextVal: string;
+        let newStart: number;
+        let newEnd: number;
+
+        if (selected.startsWith(marker) && selected.endsWith(marker) && selected.length >= marker.length * 2) {
+          const unwrapped = selected.slice(marker.length, selected.length - marker.length);
+          nextVal = val.slice(0, start) + unwrapped + val.slice(end);
+          newStart = start;
+          newEnd = start + unwrapped.length;
+        } else {
+          const wrapped = `${marker}${selected}${marker}`;
+          nextVal = val.slice(0, start) + wrapped + val.slice(end);
+          newStart = start;
+          newEnd = start + wrapped.length;
+        }
+
+        patchLine(focusLine, { text: nextVal });
+        requestAnimationFrame(() => {
+          activeEl.setSelectionRange(newStart, newEnd);
+        });
+        return;
+      }
+    }
+
+    // 2. Contenteditable freeform editor selection formatting
+    if (editorRef.current) {
+      const sel = window.getSelection();
+      const hasSelection = sel && sel.rangeCount > 0 && !sel.isCollapsed && editorRef.current.contains(sel.anchorNode);
+
+      if (hasSelection) {
+        // Text is highlighted: apply formatting strictly to that exact text slice
+        document.execCommand(style, false);
+        handleEditorInput();
+        updateActiveFormatting();
+      } else {
+        // No text selected: toggle formatting state for subsequent typed characters forward
+        if (!editorRef.current.contains(document.activeElement)) {
+          editorRef.current.focus();
+        }
+        document.execCommand(style, false);
+        updateActiveFormatting();
+      }
+    }
   };
 
   const appendImages = (newUrls: string[]) => {
@@ -418,26 +435,21 @@ export function NoteSheet({
         aria-hidden="true"
       />
 
-      <div
-        ref={frame}
-        role="dialog"
-        aria-modal="true"
-        aria-label={draft.title || "Untitled note"}
-        tabIndex={-1}
-        onPaste={handlePaste}
-        onDragOver={(e) => {
-          e.preventDefault();
-          e.dataTransfer.dropEffect = "copy";
-        }}
-        onDrop={handleDrop}
-        className="sheet-frame glass-sheet outline-none"
-        style={{
-          left: target.current.left,
-          top: target.current.top,
-          width: target.current.width,
-          height: target.current.height,
-        }}
-      >
+      <div className="fixed inset-0 z-60 flex items-center justify-center p-4 sm:p-6 md:p-8 pointer-events-none">
+        <div
+          ref={frame}
+          role="dialog"
+          aria-modal="true"
+          aria-label={draft.title || "Untitled note"}
+          tabIndex={-1}
+          onPaste={handlePaste}
+          onDragOver={(e) => {
+            e.preventDefault();
+            e.dataTransfer.dropEffect = "copy";
+          }}
+          onDrop={handleDrop}
+          className="pointer-events-auto flex flex-col w-[94vw] max-w-[960px] h-[86vh] max-h-[86vh] overflow-hidden rounded-[24px] glass-sheet outline-none border border-white/10 shadow-[0_30px_90px_rgba(0,0,0,0.85)]"
+        >
         <div
           className="h-[2px] shrink-0 origin-left"
           style={{ backgroundColor: accent, animation: "strip-in 620ms cubic-bezier(0.22,1,0.36,1) both" }}
@@ -575,11 +587,7 @@ export function NoteSheet({
             <button
               type="button"
               onMouseDown={(e) => e.preventDefault()}
-              onClick={() => {
-                toggleRichBold();
-                updateActiveFormatting();
-                handleEditorInput();
-              }}
+              onClick={() => handleToolbarFormat("bold")}
               aria-label="Toggle Bold"
               title="Bold text (Ctrl+B)"
               data-active={isBoldActive || undefined}
@@ -590,11 +598,7 @@ export function NoteSheet({
             <button
               type="button"
               onMouseDown={(e) => e.preventDefault()}
-              onClick={() => {
-                toggleRichItalic();
-                updateActiveFormatting();
-                handleEditorInput();
-              }}
+              onClick={() => handleToolbarFormat("italic")}
               aria-label="Toggle Italic"
               title="Italic text (Ctrl+I)"
               data-active={isItalicActive || undefined}
@@ -666,7 +670,7 @@ export function NoteSheet({
         </div>
 
         <div className="scroll min-h-0 flex-1 overflow-y-auto px-6">
-          <div className="mx-auto w-full max-w-[640px] pb-8 pt-2">
+          <div className="mx-auto w-full max-w-[760px] pb-8 pt-2">
             <input
               ref={titleRef}
               value={cleanText(draft.title)}
@@ -738,16 +742,12 @@ export function NoteSheet({
                     const meta = e.ctrlKey || e.metaKey;
                     if (meta && e.key.toLowerCase() === "b") {
                       e.preventDefault();
-                      toggleRichBold();
-                      updateActiveFormatting();
-                      handleEditorInput();
+                      handleToolbarFormat("bold");
                       return;
                     }
                     if (meta && e.key.toLowerCase() === "i") {
                       e.preventDefault();
-                      toggleRichItalic();
-                      updateActiveFormatting();
-                      handleEditorInput();
+                      handleToolbarFormat("italic");
                       return;
                     }
                     if (e.key === "Enter") {
@@ -833,6 +833,7 @@ export function NoteSheet({
                           if (node) lineRefs.current.set(item.id, node);
                           else lineRefs.current.delete(item.id);
                         }}
+                        onFocus={() => setFocusLine(item.id)}
                         value={item.text}
                         onChange={(event) => patchLine(item.id, { text: event.target.value })}
                         onKeyDown={(event) => {
@@ -895,6 +896,7 @@ export function NoteSheet({
             new line · esc
           </span>
         </div>
+      </div>
       </div>
 
       {/* Lightbox Preview Modal */}

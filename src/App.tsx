@@ -332,6 +332,10 @@ export default function App() {
                 onToggleCollapse={toggleCollapse}
                 onOpen={openTile}
                 onNewNote={newNote}
+                onNewCategory={(name) => {
+                  void createCategory(name);
+                  setActive(name);
+                }}
                 onToggleItem={toggleItem}
                 onMoveCategory={(id, shelf) => void moveCategory(id, shelf)}
                 onDeleteCategory={(cat) => void deleteCategory(cat)}

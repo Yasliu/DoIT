@@ -31,8 +31,6 @@ import {
   isRichBoldActive,
   isRichItalicActive,
   markdownToHtml,
-  toggleRichBold,
-  toggleRichItalic,
 } from "../lib/format";
 import { accentFor, cleanText, cx, relativeShort, uid } from "../lib/text";
 
@@ -288,10 +286,12 @@ export function TrayCompanion() {
   // Synchronize HTML into contenteditable when opening or switching notes
   const initEditor = useCallback((node: HTMLDivElement | null) => {
     editorRef.current = node;
-    if (node && activeNote && lastActiveNoteIdRef.current !== activeNote.id) {
-      lastActiveNoteIdRef.current = activeNote.id;
-      const md = activeNote.content.map((c) => c.text).join("\n");
-      node.innerHTML = markdownToHtml(md);
+    if (node && activeNote) {
+      if (lastActiveNoteIdRef.current !== activeNote.id || !node.innerHTML || node.innerHTML === "<div><br></div>") {
+        lastActiveNoteIdRef.current = activeNote.id;
+        const md = activeNote.content.map((c) => c.text).join("\n");
+        node.innerHTML = markdownToHtml(md);
+      }
     }
   }, [activeNote]);
 
@@ -321,6 +321,60 @@ export function TrayCompanion() {
     }));
     editActive({ content });
     updateActiveFormatting();
+  };
+
+  const handleToolbarFormat = (style: "bold" | "italic") => {
+    const activeEl = document.activeElement;
+
+    if (activeEl instanceof HTMLInputElement) {
+      const start = activeEl.selectionStart ?? 0;
+      const end = activeEl.selectionEnd ?? 0;
+      if (start !== end) {
+        const val = activeEl.value;
+        const selected = val.slice(start, end);
+        const marker = style === "bold" ? "**" : "*";
+
+        let nextVal: string;
+        let newStart: number;
+        let newEnd: number;
+
+        if (selected.startsWith(marker) && selected.endsWith(marker) && selected.length >= marker.length * 2) {
+          const unwrapped = selected.slice(marker.length, selected.length - marker.length);
+          nextVal = val.slice(0, start) + unwrapped + val.slice(end);
+          newStart = start;
+          newEnd = start + unwrapped.length;
+        } else {
+          const wrapped = `${marker}${selected}${marker}`;
+          nextVal = val.slice(0, start) + wrapped + val.slice(end);
+          newStart = start;
+          newEnd = start + wrapped.length;
+        }
+
+        activeEl.value = nextVal;
+        activeEl.dispatchEvent(new Event("input", { bubbles: true }));
+        requestAnimationFrame(() => {
+          activeEl.setSelectionRange(newStart, newEnd);
+        });
+        return;
+      }
+    }
+
+    if (editorRef.current) {
+      const sel = window.getSelection();
+      const hasSelection = sel && sel.rangeCount > 0 && !sel.isCollapsed && editorRef.current.contains(sel.anchorNode);
+
+      if (hasSelection) {
+        document.execCommand(style, false);
+        handleEditorInput();
+        updateActiveFormatting();
+      } else {
+        if (!editorRef.current.contains(document.activeElement)) {
+          editorRef.current.focus();
+        }
+        document.execCommand(style, false);
+        updateActiveFormatting();
+      }
+    }
   };
 
   const isTasksMode = useMemo(() => {
@@ -381,49 +435,12 @@ export function TrayCompanion() {
     window.addEventListener("pointerup", onPointerUp);
   };
 
-  // Top bar dragging & minimization handler for expanded tray
-  const topBarDragRef = useRef({
-    isDown: false,
-    startX: 0,
-    startY: 0,
-    moved: false,
-  });
-
+  // Top bar dragging for expanded tray: immediate smooth dragging across workspace
   const handleTopBarPointerDown = (e: React.PointerEvent) => {
     if (e.button !== 0 || isTransitioning.current) return;
-    topBarDragRef.current = {
-      isDown: true,
-      startX: e.screenX,
-      startY: e.screenY,
-      moved: false,
-    };
-
-    const onPointerMove = (ev: PointerEvent) => {
-      if (!topBarDragRef.current.isDown) return;
-      const dx = ev.screenX - topBarDragRef.current.startX;
-      const dy = ev.screenY - topBarDragRef.current.startY;
-      if (Math.hypot(dx, dy) > 4) {
-        topBarDragRef.current.moved = true;
-        window.removeEventListener("pointermove", onPointerMove);
-        window.removeEventListener("pointerup", onPointerUp);
-        void tauriApi.startDrag().then(() => {
-          void tauriApi.saveTrayPosition();
-        });
-      }
-    };
-
-    const onPointerUp = () => {
-      window.removeEventListener("pointermove", onPointerMove);
-      window.removeEventListener("pointerup", onPointerUp);
-      if (topBarDragRef.current.isDown && !topBarDragRef.current.moved && !isTransitioning.current) {
-        setDrawerOpen(false);
-        setExpanded(false);
-      }
-      topBarDragRef.current.isDown = false;
-    };
-
-    window.addEventListener("pointermove", onPointerMove);
-    window.addEventListener("pointerup", onPointerUp);
+    void tauriApi.beginDrag().then(() => {
+      void tauriApi.saveTrayPosition();
+    });
   };
 
   // ---- RENDER COLLAPSED PILL (ROUNDED RECTANGLE EDGES) ----
@@ -433,7 +450,7 @@ export function TrayCompanion() {
         <div
           onPointerDown={handlePillPointerDown}
           className={cx(
-            "group/pill relative flex h-10 select-none items-center gap-2.5 rounded-[14px] pl-3 pr-2.5",
+            "group/pill relative flex h-10 select-none items-center gap-2.5 rounded-xl pl-3 pr-2.5",
             "cursor-pointer hover:border-white/40 transition-all shadow-2xl",
           )}
           style={{
@@ -448,8 +465,8 @@ export function TrayCompanion() {
           {/* Visual spawn indicator (pulse radar ripple) */}
           {showSpawnIndicator && (
             <>
-              <div className="absolute -inset-1.5 rounded-[18px] border-2 border-white/60 animate-ping pointer-events-none opacity-80" />
-              <div className="absolute -inset-1 rounded-[16px] shadow-[0_0_25px_rgba(255,255,255,0.7)] border border-white/80 animate-pulse pointer-events-none" />
+              <div className="absolute -inset-1.5 rounded-xl border-2 border-white/60 animate-ping pointer-events-none opacity-80" />
+              <div className="absolute -inset-1 rounded-xl shadow-[0_0_25px_rgba(255,255,255,0.7)] border border-white/80 animate-pulse pointer-events-none" />
             </>
           )}
 
@@ -484,7 +501,7 @@ export function TrayCompanion() {
   return (
     <div
       onPaste={handlePaste}
-      className="box-border flex h-full w-full max-h-full max-w-full flex-col overflow-hidden text-ink-1 rounded-[24px] border border-white/10 select-none p-3 animate-drawer-open"
+      className="box-border flex h-full w-full max-h-full max-w-full flex-col overflow-hidden text-ink-1 rounded-2xl border border-white/10 select-none p-3 animate-drawer-open"
       style={{
         backgroundColor: "var(--theme-tray-bg)",
         backdropFilter: "var(--theme-tray-blur)",
@@ -657,11 +674,7 @@ export function TrayCompanion() {
               <button
                 type="button"
                 onMouseDown={(e) => e.preventDefault()}
-                onClick={() => {
-                  toggleRichBold();
-                  setIsBoldActive(isRichBoldActive());
-                  handleEditorInput();
-                }}
+                onClick={() => handleToolbarFormat("bold")}
                 className={cx("icon-btn !size-6 cursor-pointer", isBoldActive && "!bg-white/20 !text-white")}
                 title="Toggle Bold (Ctrl+B)"
               >
@@ -670,11 +683,7 @@ export function TrayCompanion() {
               <button
                 type="button"
                 onMouseDown={(e) => e.preventDefault()}
-                onClick={() => {
-                  toggleRichItalic();
-                  setIsItalicActive(isRichItalicActive());
-                  handleEditorInput();
-                }}
+                onClick={() => handleToolbarFormat("italic")}
                 className={cx("icon-btn !size-6 cursor-pointer", isItalicActive && "!bg-white/20 !text-white")}
                 title="Toggle Italic (Ctrl+I)"
               >
@@ -806,16 +815,12 @@ export function TrayCompanion() {
                   const meta = e.ctrlKey || e.metaKey;
                   if (meta && e.key.toLowerCase() === "b") {
                     e.preventDefault();
-                    toggleRichBold();
-                    setIsBoldActive(isRichBoldActive());
-                    handleEditorInput();
+                    handleToolbarFormat("bold");
                     return;
                   }
                   if (meta && e.key.toLowerCase() === "i") {
                     e.preventDefault();
-                    toggleRichItalic();
-                    setIsItalicActive(isRichItalicActive());
-                    handleEditorInput();
+                    handleToolbarFormat("italic");
                     return;
                   }
                   if (e.key === "Enter") {

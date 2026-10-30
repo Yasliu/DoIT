@@ -101,6 +101,14 @@ impl StorageManager {
                                 if note.category.eq_ignore_ascii_case("Architecture") || note.category.eq_ignore_ascii_case("Ideas") {
                                     note.category = "Uncategorized".to_string();
                                 }
+                                note.title = crate::models::clean_yaml_scalar(&note.title);
+                                note.category = crate::models::clean_yaml_scalar(&note.category);
+                                if note.category.trim().is_empty() {
+                                    note.category = "Uncategorized".to_string();
+                                }
+                                if let Some(ref f) = note.font_family {
+                                    note.font_family = Some(crate::models::clean_yaml_scalar(f));
+                                }
                                 file_map.insert(note.id.clone(), path.clone());
                                 notes.push(note);
                             }
@@ -244,6 +252,16 @@ impl StorageManager {
     }
 
     pub fn upsert_note(&self, note: NoteItem) -> Result<NoteItem, String> {
+        let mut note = note;
+        note.title = crate::models::clean_yaml_scalar(&note.title);
+        note.category = crate::models::clean_yaml_scalar(&note.category);
+        if note.category.trim().is_empty() {
+            note.category = "Uncategorized".to_string();
+        }
+        if let Some(ref f) = note.font_family {
+            note.font_family = Some(crate::models::clean_yaml_scalar(f));
+        }
+
         let mut lock = self.data.write().map_err(|e| e.to_string())?;
 
         // Auto-register category if not present
