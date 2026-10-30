@@ -1,6 +1,7 @@
 import { useEffect, useRef, useState } from "react";
 import { ArrowUpRight, Plus, Search, X } from "lucide-react";
 import type { NoteItem } from "../api/tauriBridge";
+import { tauriApi } from "../api/tauriBridge";
 import { Mark } from "./Mark";
 import { springTo } from "../lib/spring";
 import { accentFor, cx, relativeShort } from "../lib/text";
@@ -399,6 +400,11 @@ export function DeskWidget({
             if (open) hide();
             else show();
           }
+        }}
+        onContextMenu={(e) => {
+          e.preventDefault();
+          e.stopPropagation();
+          void tauriApi.showTrayContextMenu();
         }}
         className={cx(
           "glass flex h-10 select-none items-center gap-2.5 rounded-xl pl-3 pr-2",

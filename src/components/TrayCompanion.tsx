@@ -84,7 +84,6 @@ export function TrayCompanion() {
   const [imagePan, setImagePan] = useState({ x: 0, y: 0 });
   const isPanningImage = useRef(false);
   const panStartRef = useRef({ x: 0, y: 0, panX: 0, panY: 0, moved: false });
-  const [showSpawnIndicator, setShowSpawnIndicator] = useState<boolean>(false);
   const fileInputRef = useRef<HTMLInputElement | null>(null);
   const grabScrollRef = useRef<HTMLDivElement | null>(null);
   const dragScrollState = useRef({ isDown: false, startX: 0, scrollLeft: 0, moved: false });
@@ -120,7 +119,6 @@ export function TrayCompanion() {
   // Synchronize with external Tauri expansion events (e.g. from open_tray_mode or window manager)
   useEffect(() => {
     let unlistenFn: (() => void) | null = null;
-    let unlistenIndicator: (() => void) | null = null;
 
     getCurrentWindow()
       .listen<boolean>("set-expanded", (event) => {
@@ -136,18 +134,8 @@ export function TrayCompanion() {
         unlistenFn = unlisten;
       });
 
-    getCurrentWindow()
-      .listen("spawn-indicator", () => {
-        setShowSpawnIndicator(true);
-        window.setTimeout(() => setShowSpawnIndicator(false), 2400);
-      })
-      .then((unlisten) => {
-        unlistenIndicator = unlisten;
-      });
-
     return () => {
       if (unlistenFn) unlistenFn();
-      if (unlistenIndicator) unlistenIndicator();
     };
   }, []);
 
@@ -392,28 +380,27 @@ export function TrayCompanion() {
     editActive({ content });
   };
 
-  // Pointer down handler for pill: click to expand, click & drag to move window anywhere on screen
+  // Pointer down handler for pill: click to expand, drag to move window anywhere on screen
   const pillDragRef = useRef({
-    isDown: false,
     startX: 0,
     startY: 0,
     moved: false,
   });
 
   const handlePillPointerDown = (e: React.PointerEvent) => {
-    if (e.button !== 0 || isTransitioning.current) return;
+    if (e.button !== 0) return;
+    const startX = e.screenX;
+    const startY = e.screenY;
     pillDragRef.current = {
-      isDown: true,
-      startX: e.screenX,
-      startY: e.screenY,
+      startX,
+      startY,
       moved: false,
     };
 
     const onPointerMove = (ev: PointerEvent) => {
-      if (!pillDragRef.current.isDown) return;
-      const dx = ev.screenX - pillDragRef.current.startX;
-      const dy = ev.screenY - pillDragRef.current.startY;
-      if (Math.hypot(dx, dy) > 4) {
+      const dx = ev.screenX - startX;
+      const dy = ev.screenY - startY;
+      if (Math.hypot(dx, dy) > 8) {
         pillDragRef.current.moved = true;
         window.removeEventListener("pointermove", onPointerMove);
         window.removeEventListener("pointerup", onPointerUp);
@@ -426,16 +413,21 @@ export function TrayCompanion() {
     const onPointerUp = () => {
       window.removeEventListener("pointermove", onPointerMove);
       window.removeEventListener("pointerup", onPointerUp);
-      if (pillDragRef.current.isDown && !pillDragRef.current.moved && !isTransitioning.current) {
+      if (!pillDragRef.current.moved) {
         setExpanded(true);
-      } else if (pillDragRef.current.moved) {
+      } else {
         void tauriApi.saveTrayPosition();
       }
-      pillDragRef.current.isDown = false;
     };
 
     window.addEventListener("pointermove", onPointerMove);
     window.addEventListener("pointerup", onPointerUp);
+  };
+
+  const handleContextMenu = (e: React.MouseEvent) => {
+    e.preventDefault();
+    e.stopPropagation();
+    void tauriApi.showTrayContextMenu();
   };
 
   // Image Lightbox Holding & Dragging Pan Handlers
@@ -496,41 +488,25 @@ export function TrayCompanion() {
       <div className="flex h-full w-full items-center justify-center bg-transparent select-none p-2 relative">
         <div
           onPointerDown={handlePillPointerDown}
+          onClick={() => {
+            if (pillDragRef.current.moved) return;
+            setExpanded(true);
+          }}
+          onContextMenu={handleContextMenu}
           className={cx(
             "group/pill relative flex h-10 select-none items-center gap-2.5 rounded-xl pl-3 pr-2.5",
-            "cursor-pointer hover:border-white/40 transition-all shadow-2xl",
+            "cursor-pointer transition-all shadow-2xl border border-white/10 hover:border-white/30",
           )}
           style={{
-            backgroundColor: "var(--theme-pill-bg)",
-            backdropFilter: "var(--theme-pill-blur)",
-            WebkitBackdropFilter: "var(--theme-pill-blur)",
+            backgroundColor: "var(--theme-pill-bg, rgba(18, 19, 22, 0.9))",
+            backdropFilter: "blur(20px)",
+            WebkitBackdropFilter: "blur(20px)",
             boxShadow:
-              "inset 0 0 0 1px var(--theme-pill-border), inset 0 1px 0 rgba(255,255,255,0.12), 0 16px 40px -12px rgba(0,0,0,0.95)",
+              "inset 0 1px 0 rgba(255,255,255,0.12), 0 16px 40px -12px rgba(0,0,0,0.95)",
           }}
-          title="Click to open · Hold and drag to move"
+          title="Click to open · Hold and drag to move · Right-click for options"
         >
-          {/* Visual spawn indicator (pure fading radial light bloom in all directions, no borders) */}
-          {showSpawnIndicator && (
-            <div className="absolute inset-0 flex items-center justify-center pointer-events-none z-[-1] overflow-visible">
-              <div
-                className="absolute size-44 rounded-full pointer-events-none blur-xl"
-                style={{
-                  background: "radial-gradient(circle, rgba(255, 255, 255, 0.7) 0%, rgba(255, 255, 255, 0.25) 35%, rgba(255, 255, 255, 0) 70%)",
-                  animation: "spawnBloomFade 2.2s cubic-bezier(0.16, 1, 0.3, 1) forwards",
-                }}
-              />
-              <div
-                className="absolute size-64 rounded-full pointer-events-none blur-2xl"
-                style={{
-                  background: "radial-gradient(circle, rgba(255, 255, 255, 0.45) 0%, rgba(255, 255, 255, 0.12) 45%, rgba(255, 255, 255, 0) 75%)",
-                  animation: "spawnBloomFade 2.2s cubic-bezier(0.16, 1, 0.3, 1) forwards",
-                  animationDelay: "120ms",
-                }}
-              />
-            </div>
-          )}
-
-          {/* Logo icon instead of circle dot */}
+          {/* Logo icon */}
           <Mark size={16} className="pointer-events-none shrink-0" />
 
           <span className="text-[13px] font-medium tracking-[0.01em] text-white/90 pointer-events-none">
@@ -542,7 +518,6 @@ export function TrayCompanion() {
             onPointerDown={(e) => e.stopPropagation()}
             onClick={(e) => {
               e.stopPropagation();
-              if (isTransitioning.current) return;
               handleCreate();
               setExpanded(true);
             }}
@@ -561,6 +536,7 @@ export function TrayCompanion() {
   return (
     <div
       onPaste={handlePaste}
+      onContextMenu={handleContextMenu}
       className="box-border flex h-full w-full max-h-full max-w-full flex-col overflow-hidden text-ink-1 rounded-2xl border border-white/10 select-none p-3 animate-drawer-open"
       style={{
         backgroundColor: "var(--theme-tray-bg)",

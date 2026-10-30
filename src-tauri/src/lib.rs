@@ -65,6 +65,17 @@ pub fn run() {
                 });
             }
         })
+        .on_menu_event(|app, event| {
+            match event.id.as_ref() {
+                "maximize" | "show" => {
+                    let _ = open_canvas_mode(app.clone());
+                }
+                "quit" => {
+                    app.exit(0);
+                }
+                _ => {}
+            }
+        })
         .setup(|app| {
             // Native Windows taskbar notification tray icon
             let show_item = MenuItem::with_id(app, "show", "Open Canvas", true, None::<&str>)?;
@@ -141,7 +152,9 @@ pub fn run() {
             resize_tray_window,
             start_drag,
             save_tray_position,
-            restart_app
+            restart_app,
+            quit_app,
+            show_tray_context_menu
         ])
         .run(tauri::generate_context!())
         .expect("error while running DoIT tauri application");

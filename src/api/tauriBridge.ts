@@ -390,4 +390,25 @@ export const tauriApi = {
       /* ignore */
     }
   },
+
+  async quitApp(): Promise<void> {
+    if (isTauri()) {
+      try {
+        await invoke("quit_app");
+        return;
+      } catch {
+        /* ignore */
+      }
+    }
+    window.close();
+  },
+
+  async showTrayContextMenu(): Promise<void> {
+    if (!isTauri()) return;
+    try {
+      await invoke("show_tray_context_menu");
+    } catch {
+      /* ignore */
+    }
+  },
 };

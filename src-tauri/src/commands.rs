@@ -544,6 +544,34 @@ pub fn restart_app(app: AppHandle) {
 }
 
 #[tauri::command]
+pub fn quit_app(app: AppHandle) {
+    app.exit(0);
+}
+
+#[tauri::command]
+pub fn show_tray_context_menu(app: AppHandle, window: tauri::WebviewWindow) -> Result<(), String> {
+    use tauri::menu::{MenuBuilder, MenuItemBuilder, PredefinedMenuItem};
+
+    let maximize_item = MenuItemBuilder::with_id("maximize", "Maximize")
+        .build(&app)
+        .map_err(|e| e.to_string())?;
+    let separator = PredefinedMenuItem::separator(&app).map_err(|e| e.to_string())?;
+    let quit_item = MenuItemBuilder::with_id("quit", "Quit DoIT")
+        .build(&app)
+        .map_err(|e| e.to_string())?;
+
+    let menu = MenuBuilder::new(&app)
+        .item(&maximize_item)
+        .item(&separator)
+        .item(&quit_item)
+        .build()
+        .map_err(|e| e.to_string())?;
+
+    window.popup_menu(&menu).map_err(|e| e.to_string())?;
+    Ok(())
+}
+
+#[tauri::command]
 pub fn set_mini_window_mode(window: Window, mini: bool) -> Result<(), String> {
     if mini {
         let _ = window.set_size(tauri::LogicalSize::new(420.0, 360.0));
