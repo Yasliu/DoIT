@@ -56,18 +56,22 @@
     scrollbar-width: none !important;
     -ms-overflow-style: none !important;
   }
-  * {
+  *, *::before, *::after {
     -webkit-tap-highlight-color: transparent !important;
     outline: none !important;
+    box-shadow: none !important;
     scrollbar-width: none;
     -ms-overflow-style: none;
   }
+  *:hover,
   *:focus,
   *:focus-visible,
-  *:focus-within {
+  *:focus-within,
+  *:active {
     outline: none !important;
     box-shadow: none !important;
     ring: 0 !important;
+    -webkit-focus-ring-color: transparent !important;
   }
   button,
   input,

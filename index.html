@@ -10,12 +10,14 @@
       *, *::before, *::after {
         -webkit-tap-highlight-color: transparent !important;
         outline: none !important;
+        box-shadow: none !important;
         -webkit-focus-ring-color: transparent !important;
       }
-      *:focus, *:focus-visible, *:focus-within {
+      *:hover, *:focus, *:focus-visible, *:focus-within, *:active {
         outline: none !important;
-        ring: 0 !important;
         box-shadow: none !important;
+        ring: 0 !important;
+        -webkit-focus-ring-color: transparent !important;
       }
     </style>
   </head>

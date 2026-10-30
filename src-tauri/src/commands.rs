@@ -15,6 +15,38 @@ pub struct MainWindowState {
 pub static SAVED_MAIN_WINDOW_STATE: Mutex<Option<MainWindowState>> = Mutex::new(None);
 
 #[derive(Clone, Debug, Default)]
+pub struct PreStatePositionBuffer {
+    pub pill_physical_pos: Option<tauri::PhysicalPosition<i32>>,
+    pub expanded_physical_pos: Option<tauri::PhysicalPosition<i32>>,
+    pub main_physical_pos: Option<tauri::PhysicalPosition<i32>>,
+    pub main_physical_size: Option<tauri::PhysicalSize<u32>>,
+}
+
+pub static PRE_STATE_BUFFER: Mutex<PreStatePositionBuffer> = Mutex::new(PreStatePositionBuffer {
+    pill_physical_pos: None,
+    expanded_physical_pos: None,
+    main_physical_pos: None,
+    main_physical_size: None,
+});
+
+pub static TRANSITION_LOCK_UNTIL: std::sync::atomic::AtomicU64 = std::sync::atomic::AtomicU64::new(0);
+
+fn current_timestamp_ms() -> u64 {
+    std::time::SystemTime::now()
+        .duration_since(std::time::UNIX_EPOCH)
+        .unwrap_or_default()
+        .as_millis() as u64
+}
+
+pub fn lock_window_transition(duration_ms: u64) {
+    TRANSITION_LOCK_UNTIL.store(current_timestamp_ms() + duration_ms, std::sync::atomic::Ordering::SeqCst);
+}
+
+pub fn is_window_transitioning() -> bool {
+    current_timestamp_ms() < TRANSITION_LOCK_UNTIL.load(std::sync::atomic::Ordering::SeqCst)
+}
+
+#[derive(Clone, Debug, Default)]
 pub struct TrayPositionState {
     pub pill_offset: Option<tauri::PhysicalPosition<i32>>,
     pub expanded_offset: Option<tauri::PhysicalPosition<i32>>,
@@ -391,10 +423,19 @@ pub fn open_tray_mode(app: AppHandle) -> Result<(), String> {
         let mut mem = TRAY_POSITION_STATE.lock().unwrap();
         mem.pill_offset = None;
         mem.expanded_offset = None;
+        let mut buf = PRE_STATE_BUFFER.lock().unwrap();
+        buf.pill_physical_pos = None;
+        buf.expanded_physical_pos = None;
     }
 
     if let (Some(tray_win), Some(mon)) = (tray_win_opt, target_mon) {
+        lock_window_transition(350);
         position_tray_on_monitor(&tray_win, &mon, false);
+
+        // Pre-lock initial pill physical coordinates
+        if let Ok(pos) = tray_win.outer_position() {
+            PRE_STATE_BUFFER.lock().unwrap().pill_physical_pos = Some(pos);
+        }
 
         let _ = tray_win.emit("set-expanded", false);
         let _ = tray_win.emit("spawn-indicator", ());
@@ -416,6 +457,19 @@ pub fn open_canvas_mode(app: AppHandle) -> Result<(), String> {
         app.get_webview_window("tray"),
         app.get_webview_window("main"),
     ) {
+        // Pre-State Lock: Capture tray physical position before hiding
+        if let Ok(tray_pos) = tray_win.outer_position() {
+            let win_size = tray_win.outer_size().unwrap_or(tauri::PhysicalSize::new(160, 64));
+            let scale = get_window_active_monitor(&tray_win).map(|m| m.scale_factor()).unwrap_or(1.0);
+            let small_w = (160.0 * scale).round() as i32;
+            let mut buf = PRE_STATE_BUFFER.lock().unwrap();
+            if (win_size.width as i32) <= small_w + 40 {
+                buf.pill_physical_pos = Some(tray_pos);
+            } else {
+                buf.expanded_physical_pos = Some(tray_pos);
+            }
+        }
+
         let target_mon = get_window_active_monitor(&tray_win)
             .or_else(|| get_window_active_monitor(&main_win))
             .or_else(|| app.primary_monitor().ok().flatten());
@@ -476,15 +530,96 @@ pub fn open_canvas_mode(app: AppHandle) -> Result<(), String> {
 #[tauri::command]
 pub fn resize_tray_window(app: AppHandle, expanded: bool) -> Result<(), String> {
     if let Some(tray_win) = app.get_webview_window("tray") {
+        // 1. PRE-STATE POSITION LOCK: Capture physical coordinates FIRST before calling any resize or visibility functions
+        let pre_pos = tray_win.outer_position().map_err(|e| e.to_string())?;
+
         let target_monitor = get_window_active_monitor(&tray_win)
             .or_else(|| {
                 app.get_webview_window("main")
                     .and_then(|w| get_window_active_monitor(&w))
             })
-            .or_else(|| app.primary_monitor().ok().flatten());
+            .or_else(|| app.primary_monitor().ok().flatten())
+            .ok_or_else(|| "No active monitor found".to_string())?;
 
-        if let Some(mon) = target_monitor {
-            position_tray_on_monitor(&tray_win, &mon, expanded);
+        let scale = target_monitor.scale_factor();
+        let m_pos = target_monitor.position();
+        let m_size = target_monitor.size();
+
+        let small_w_phys = (160.0 * scale).round() as u32;
+        let small_h_phys = (64.0 * scale).round() as u32;
+        let expanded_w_phys = (380.0 * scale).round() as u32;
+        let expanded_h_phys = (560.0 * scale).round() as u32;
+
+        let min_x = m_pos.x + 8;
+        let min_y = m_pos.y + 8;
+        let max_small_x = (m_pos.x + m_size.width as i32 - small_w_phys as i32 - 8).max(min_x);
+        let max_small_y = (m_pos.y + m_size.height as i32 - small_h_phys as i32 - 8).max(min_y);
+        let max_expanded_x = (m_pos.x + m_size.width as i32 - expanded_w_phys as i32 - 8).max(min_x);
+        let max_expanded_y = (m_pos.y + m_size.height as i32 - expanded_h_phys as i32 - 8).max(min_y);
+
+        let target_pos = if expanded {
+            // 2. Cache pill position into global thread-safe state mutex BEFORE mutating size
+            {
+                let mut buf = PRE_STATE_BUFFER.lock().unwrap();
+                buf.pill_physical_pos = Some(pre_pos);
+            }
+
+            // 4. Force back to exact pre-locked physical pixels
+            let saved_expanded = PRE_STATE_BUFFER.lock().unwrap().expanded_physical_pos;
+            if let Some(saved) = saved_expanded {
+                tauri::PhysicalPosition::new(
+                    saved.x.clamp(min_x, max_expanded_x),
+                    saved.y.clamp(min_y, max_expanded_y),
+                )
+            } else {
+                let anchor_x = if pre_pos.x + expanded_w_phys as i32 > max_expanded_x {
+                    (pre_pos.x + small_w_phys as i32 - expanded_w_phys as i32).clamp(min_x, max_expanded_x)
+                } else {
+                    pre_pos.x.clamp(min_x, max_expanded_x)
+                };
+                let anchor_y = if pre_pos.y + expanded_h_phys as i32 > max_expanded_y {
+                    (pre_pos.y + small_h_phys as i32 - expanded_h_phys as i32).clamp(min_y, max_expanded_y)
+                } else {
+                    pre_pos.y.clamp(min_y, max_expanded_y)
+                };
+                let pos = tauri::PhysicalPosition::new(anchor_x, anchor_y);
+                PRE_STATE_BUFFER.lock().unwrap().expanded_physical_pos = Some(pos);
+                pos
+            }
+        } else {
+            // 2. Cache expanded panel position into mutex BEFORE mutating size
+            {
+                let mut buf = PRE_STATE_BUFFER.lock().unwrap();
+                buf.expanded_physical_pos = Some(pre_pos);
+            }
+
+            // 4. Force back to exact pre-locked pill physical pixels
+            let saved_pill = PRE_STATE_BUFFER.lock().unwrap().pill_physical_pos;
+            if let Some(saved) = saved_pill {
+                tauri::PhysicalPosition::new(
+                    saved.x.clamp(min_x, max_small_x),
+                    saved.y.clamp(min_y, max_small_y),
+                )
+            } else {
+                let margin_x = (24.0 * scale).round() as i32;
+                let margin_y = (72.0 * scale).round() as i32;
+                let def_x = (m_pos.x + m_size.width as i32 - small_w_phys as i32 - margin_x).clamp(min_x, max_small_x);
+                let def_y = (m_pos.y + m_size.height as i32 - small_h_phys as i32 - margin_y).clamp(min_y, max_small_y);
+                let pos = tauri::PhysicalPosition::new(def_x, def_y);
+                PRE_STATE_BUFFER.lock().unwrap().pill_physical_pos = Some(pos);
+                pos
+            }
+        };
+
+        // 3. ONLY AFTER COORDINATES ARE SAFELY LOCKED IN MEMORY, execute size mutation and set position
+        lock_window_transition(350);
+
+        if expanded {
+            let _ = tray_win.set_size(tauri::Size::Physical(tauri::PhysicalSize::new(expanded_w_phys, expanded_h_phys)));
+            let _ = tray_win.set_position(tauri::Position::Physical(target_pos));
+        } else {
+            let _ = tray_win.set_size(tauri::Size::Physical(tauri::PhysicalSize::new(small_w_phys, small_h_phys)));
+            let _ = tray_win.set_position(tauri::Position::Physical(target_pos));
         }
     }
     Ok(())
@@ -497,6 +632,9 @@ pub fn start_drag(window: Window) -> Result<(), String> {
 
 #[tauri::command]
 pub fn save_tray_position(app: AppHandle) -> Result<(), String> {
+    if is_window_transitioning() {
+        return Ok(());
+    }
     if let Some(tray_win) = app.get_webview_window("tray") {
         if let Ok(pos) = tray_win.outer_position() {
             let win_size = tray_win.outer_size().unwrap_or(tauri::PhysicalSize::new(160, 64));
@@ -508,9 +646,6 @@ pub fn save_tray_position(app: AppHandle) -> Result<(), String> {
                 let m_size = mon.size();
                 let scale = mon.scale_factor();
                 let small_w = (160.0 * scale).round() as i32;
-                let small_h = (64.0 * scale).round() as i32;
-                let _expanded_w = (380.0 * scale).round() as i32;
-                let _expanded_h = (560.0 * scale).round() as i32;
 
                 let min_x = m_pos.x + 8;
                 let min_y = m_pos.y + 8;
@@ -525,24 +660,14 @@ pub fn save_tray_position(app: AppHandle) -> Result<(), String> {
                     let _ = tray_win.set_position(tauri::Position::Physical(tauri::PhysicalPosition::new(clamped_x, clamped_y)));
                 }
 
-                let mut mem = TRAY_POSITION_STATE.lock().unwrap();
-                let offset_x = clamped_x - m_pos.x;
-                let offset_y = clamped_y - m_pos.y;
-
-                if (win_size.width as i32) <= small_w + 30 {
-                    mem.pill_offset = Some(tauri::PhysicalPosition::new(offset_x, offset_y));
-                    *TRAY_COLLAPSED_POSITION.lock().unwrap() = Some(tauri::PhysicalPosition::new(clamped_x, clamped_y));
+                let clamped_pos = tauri::PhysicalPosition::new(clamped_x, clamped_y);
+                let mut buf = PRE_STATE_BUFFER.lock().unwrap();
+                if (win_size.width as i32) <= small_w + 40 {
+                    buf.pill_physical_pos = Some(clamped_pos);
+                    buf.expanded_physical_pos = None;
                 } else {
-                    mem.expanded_offset = Some(tauri::PhysicalPosition::new(offset_x, offset_y));
-                    let max_small_x = (m_pos.x + m_size.width as i32 - small_w - 8).max(min_x);
-                    let max_small_y = (m_pos.y + m_size.height as i32 - small_h - 8).max(min_y);
-                    let anchor_x = (clamped_x + (win_size.width as i32 - small_w) / 2).clamp(min_x, max_small_x);
-                    let anchor_y = (clamped_y + (win_size.height as i32 - small_h) / 2).clamp(min_y, max_small_y);
-                    mem.pill_offset = Some(tauri::PhysicalPosition::new(anchor_x - m_pos.x, anchor_y - m_pos.y));
-                    *TRAY_COLLAPSED_POSITION.lock().unwrap() = Some(tauri::PhysicalPosition::new(anchor_x, anchor_y));
+                    buf.expanded_physical_pos = Some(clamped_pos);
                 }
-                mem.last_monitor_name = mon.name().cloned();
-                *TRAY_WINDOW_CUSTOM_POSITION.lock().unwrap() = Some(tauri::PhysicalPosition::new(clamped_x, clamped_y));
             }
         }
     }
@@ -550,42 +675,23 @@ pub fn save_tray_position(app: AppHandle) -> Result<(), String> {
 }
 
 pub fn track_tray_window_moved(window: &Window, pos: tauri::PhysicalPosition<i32>) {
+    if is_window_transitioning() {
+        return;
+    }
     let app = window.app_handle();
     if let Some(tray_win) = app.get_webview_window("tray") {
         let win_size = tray_win.outer_size().unwrap_or(tauri::PhysicalSize::new(160, 64));
         if let Some(mon) = get_window_active_monitor(&tray_win).or_else(|| app.primary_monitor().ok().flatten()) {
-            let m_pos = mon.position();
-            let m_size = mon.size();
             let scale = mon.scale_factor();
             let small_w = (160.0 * scale).round() as i32;
-            let small_h = (64.0 * scale).round() as i32;
 
-            let min_x = m_pos.x + 8;
-            let min_y = m_pos.y + 8;
-            let max_x = (m_pos.x + m_size.width as i32 - win_size.width as i32 - 8).max(min_x);
-            let max_y = (m_pos.y + m_size.height as i32 - win_size.height as i32 - 8).max(min_y);
-
-            let clamped_x = pos.x.clamp(min_x, max_x);
-            let clamped_y = pos.y.clamp(min_y, max_y);
-
-            let mut mem = TRAY_POSITION_STATE.lock().unwrap();
-            let offset_x = clamped_x - m_pos.x;
-            let offset_y = clamped_y - m_pos.y;
-
+            let mut buf = PRE_STATE_BUFFER.lock().unwrap();
             if (win_size.width as i32) <= small_w + 40 {
-                mem.pill_offset = Some(tauri::PhysicalPosition::new(offset_x, offset_y));
-                *TRAY_COLLAPSED_POSITION.lock().unwrap() = Some(tauri::PhysicalPosition::new(clamped_x, clamped_y));
+                buf.pill_physical_pos = Some(pos);
+                buf.expanded_physical_pos = None;
             } else {
-                mem.expanded_offset = Some(tauri::PhysicalPosition::new(offset_x, offset_y));
-                let max_small_x = (m_pos.x + m_size.width as i32 - small_w - 8).max(min_x);
-                let max_small_y = (m_pos.y + m_size.height as i32 - small_h - 8).max(min_y);
-                let anchor_x = (clamped_x + (win_size.width as i32 - small_w) / 2).clamp(min_x, max_small_x);
-                let anchor_y = (clamped_y + (win_size.height as i32 - small_h) / 2).clamp(min_y, max_small_y);
-                mem.pill_offset = Some(tauri::PhysicalPosition::new(anchor_x - m_pos.x, anchor_y - m_pos.y));
-                *TRAY_COLLAPSED_POSITION.lock().unwrap() = Some(tauri::PhysicalPosition::new(anchor_x, anchor_y));
+                buf.expanded_physical_pos = Some(pos);
             }
-            mem.last_monitor_name = mon.name().cloned();
-            *TRAY_WINDOW_CUSTOM_POSITION.lock().unwrap() = Some(tauri::PhysicalPosition::new(clamped_x, clamped_y));
         }
     }
 }
