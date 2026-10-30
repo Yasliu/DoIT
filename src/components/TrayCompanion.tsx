@@ -463,103 +463,123 @@ export function TrayCompanion() {
     window.addEventListener("pointerup", onPointerUp);
   };
 
-  // ---- RENDER DESK TRAY WORKSPACE WITH PERMANENT HEADER & EXPLICIT BOUNDS ----
+  // ---- RENDER DESK TRAY WORKSPACE WITH 2D SPRING MORPHING ----
   return (
-    <div
-      ref={panelRef}
-      onPaste={handlePaste}
-      onContextMenu={handleContextMenu}
-      className="box-border flex h-screen max-h-screen w-full flex-col overflow-hidden text-ink-1 rounded-2xl border border-white/10 select-none p-3 shadow-2xl scale-100"
-      style={{
-        backgroundColor: "var(--theme-tray-bg)",
-        backdropFilter: "var(--theme-tray-blur)",
-        WebkitBackdropFilter: "var(--theme-tray-blur)",
-        boxShadow: "inset 0 0 0 1px var(--theme-tray-border), 0 40px 90px -30px rgba(0,0,0,0.95)",
-      }}
-    >
-      {/* 1. Fluid permanent top bar: Hold and drag to move, click to toggle minimize */}
-      <div
-        onPointerDown={handleTopBarPointerDown}
-        title="Tap to toggle minimize · Hold and drag to move"
-        className="flex h-7 shrink-0 items-center justify-between px-1 mb-2.5 select-none cursor-pointer group/topbar scale-100"
+    <div className="flex h-screen w-screen items-end justify-end p-0 m-0 overflow-hidden bg-transparent select-none">
+      <motion.div
+        ref={panelRef}
+        animate={{
+          width: isMinimized ? 180 : 380,
+          height: isMinimized ? 44 : 480,
+        }}
+        transition={{ type: "spring", bounce: 0, duration: 0.6 }}
+        onUpdate={(latest) => {
+          if (typeof latest.width === "number" && typeof latest.height === "number") {
+            void tauriApi.syncTrayWindowBounds(latest.width, latest.height);
+          }
+        }}
+        onPaste={handlePaste}
+        onContextMenu={handleContextMenu}
+        className="box-border flex flex-col overflow-hidden text-ink-1 rounded-2xl border border-white/10 select-none p-2.5 shadow-2xl scale-100"
+        style={{
+          backgroundColor: "var(--theme-tray-bg)",
+          backdropFilter: "var(--theme-tray-blur)",
+          WebkitBackdropFilter: "var(--theme-tray-blur)",
+          boxShadow: "inset 0 0 0 1px var(--theme-tray-border), 0 40px 90px -30px rgba(0,0,0,0.95)",
+        }}
       >
-        <div className="flex flex-1 items-center gap-2 py-1 pointer-events-none">
-          {activeNote ? (
+        {/* 1. Fluid permanent top bar: Hold and drag to move, click to toggle minimize */}
+        <div
+          onPointerDown={handleTopBarPointerDown}
+          title="Tap to toggle minimize · Hold and drag to move"
+          className="flex h-6 shrink-0 items-center justify-between px-0.5 select-none cursor-pointer group/topbar scale-100 overflow-hidden"
+        >
+          <div className="flex flex-1 items-center gap-1.5 py-0.5 pointer-events-none min-w-0 overflow-hidden">
+            {activeNote && !isMinimized ? (
+              <button
+                type="button"
+                onPointerDown={(e) => e.stopPropagation()}
+                onClick={(e) => {
+                  e.stopPropagation();
+                  handleBack();
+                }}
+                className="flex items-center gap-1 h-5 rounded px-1 -ml-1 text-[10px] font-mono text-white/60 hover:bg-white/10 hover:text-white transition-colors cursor-pointer pointer-events-auto shrink-0"
+                title="Back to notes list"
+              >
+                <ArrowLeft size={11} />
+                <span>Back</span>
+              </button>
+            ) : (
+              <Mark size={13} className="shrink-0" />
+            )}
+            <span
+              className="font-mono text-[9px] font-semibold uppercase tracking-[0.14em] text-white/60 group-hover/topbar:text-white/90 transition-colors truncate"
+            >
+              {activeNote && !isMinimized ? "EDIT NOTE" : "DESK TRAY"}
+            </span>
+          </div>
+
+          <div
+            className="flex items-center gap-0.5 shrink-0 z-20"
+            onPointerDown={(e) => e.stopPropagation()}
+            onClick={(e) => e.stopPropagation()}
+          >
+            {!isMinimized && (
+              <button
+                type="button"
+                onPointerDown={(e) => e.stopPropagation()}
+                onClick={(e) => {
+                  e.stopPropagation();
+                  void tauriApi.openCanvasMode();
+                }}
+                className="grid size-5 place-items-center rounded text-white/50 hover:bg-white/10 hover:text-white transition-colors cursor-pointer"
+                title="Open Canvas"
+                aria-label="Open Canvas"
+              >
+                <ArrowUpRight size={12} strokeWidth={1.8} />
+              </button>
+            )}
             <button
               type="button"
               onPointerDown={(e) => e.stopPropagation()}
               onClick={(e) => {
                 e.stopPropagation();
-                handleBack();
+                toggleMinimize();
               }}
-              className="flex items-center gap-1 h-6 rounded-md px-1.5 -ml-1 text-[11px] font-mono text-white/60 hover:bg-white/10 hover:text-white transition-colors cursor-pointer pointer-events-auto"
-              title="Back to notes list"
+              className="grid size-5 place-items-center rounded text-white/65 hover:bg-white/15 hover:text-white transition-colors cursor-pointer"
+              title={isMinimized ? "Restore Tray (—)" : "Minimize Tray (—)"}
+              aria-label={isMinimized ? "Restore Tray" : "Minimize Tray"}
             >
-              <ArrowLeft size={12} />
-              <span>Back</span>
+              <Minus size={12} strokeWidth={2.4} />
             </button>
-          ) : (
-            <Mark size={14} className="shrink-0" />
-          )}
-          <span
-            className="font-mono text-[9.5px] font-semibold uppercase tracking-[0.16em] text-white/50 group-hover/topbar:text-white/80 transition-colors"
-          >
-            {activeNote ? "EDIT NOTE" : "DESK TRAY"}
-          </span>
+            <button
+              type="button"
+              onPointerDown={(e) => e.stopPropagation()}
+              onClick={(e) => {
+                e.stopPropagation();
+                void getCurrentWindow().hide();
+              }}
+              className="grid size-5 place-items-center rounded text-white/50 hover:bg-white/10 hover:text-white transition-colors cursor-pointer"
+              title="Hide to System Tray (✕)"
+              aria-label="Hide to System Tray"
+            >
+              <X size={12} strokeWidth={1.8} />
+            </button>
+          </div>
         </div>
 
-        <div
-          className="flex items-center gap-1 shrink-0 z-20"
-          onPointerDown={(e) => e.stopPropagation()}
-          onClick={(e) => e.stopPropagation()}
-        >
-          <button
-            type="button"
-            onPointerDown={(e) => e.stopPropagation()}
-            onClick={(e) => {
-              e.stopPropagation();
-              void tauriApi.openCanvasMode();
-            }}
-            className="grid size-6 place-items-center rounded-md text-white/50 hover:bg-white/10 hover:text-white transition-colors cursor-pointer"
-            title="Open Canvas"
-            aria-label="Open Canvas"
-          >
-            <ArrowUpRight size={13} strokeWidth={1.8} />
-          </button>
-          <button
-            type="button"
-            onPointerDown={(e) => e.stopPropagation()}
-            onClick={(e) => {
-              e.stopPropagation();
-              toggleMinimize();
-            }}
-            className="grid size-6 place-items-center rounded-md text-white/65 hover:bg-white/15 hover:text-white transition-colors cursor-pointer"
-            title={isMinimized ? "Restore Tray (—)" : "Minimize Tray (—)"}
-            aria-label={isMinimized ? "Restore Tray" : "Minimize Tray"}
-          >
-            <Minus size={13} strokeWidth={2.4} />
-          </button>
-          <button
-            type="button"
-            onPointerDown={(e) => e.stopPropagation()}
-            onClick={(e) => {
-              e.stopPropagation();
-              void getCurrentWindow().hide();
-            }}
-            className="grid size-6 place-items-center rounded-md text-white/50 hover:bg-white/10 hover:text-white transition-colors cursor-pointer"
-            title="Hide to System Tray (✕)"
-            aria-label="Hide to System Tray"
-          >
-            <X size={13} strokeWidth={1.8} />
-          </button>
-        </div>
-      </div>
-
-      {/* Lower note collection container: strictly 100% literal rendering size */}
-      {!isMinimized && (
-        <div className="flex flex-1 flex-col overflow-hidden min-h-0 scale-100">
-          <AnimatePresence mode="wait" initial={false}>
-            {activeNote ? (
+        {/* Lower note collection container: smooth fade with 100% scale */}
+        <AnimatePresence>
+          {!isMinimized && (
+            <motion.div
+              initial={{ opacity: 0 }}
+              animate={{ opacity: 1 }}
+              exit={{ opacity: 0 }}
+              transition={{ duration: 0.2 }}
+              className="pt-2 flex flex-1 flex-col overflow-hidden min-h-0 scale-100"
+            >
+              <AnimatePresence mode="wait" initial={false}>
+                {activeNote ? (
           /* ---- IN-TRAY PROPER NOTE EDITOR ---- */
           <motion.div
             key={`editor-${activeNote.id}`}
@@ -1105,8 +1125,9 @@ export function TrayCompanion() {
         </motion.div>
       )}
       </AnimatePresence>
-      </div>
+      </motion.div>
       )}
+      </AnimatePresence>
 
       {/* Lightbox Preview Modal with Full Interactive Zoom */}
       {previewImage && (
@@ -1209,6 +1230,7 @@ export function TrayCompanion() {
           </div>
         </div>
       )}
+      </motion.div>
     </div>
   );
 }

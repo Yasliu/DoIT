@@ -308,10 +308,10 @@ pub fn position_tray_on_monitor(
     let m_pos = monitor.position(); // PhysicalPosition<i32> { x, y }
     let m_size = monitor.size();     // PhysicalSize<u32> { width, height }
 
-    let small_w_phys = (380.0 * scale_factor).round() as i32;
-    let small_h_phys = (52.0 * scale_factor).round() as i32;
+    let small_w_phys = (180.0 * scale_factor).round() as i32;
+    let small_h_phys = (44.0 * scale_factor).round() as i32;
     let expanded_w_phys = (380.0 * scale_factor).round() as i32;
-    let expanded_h_phys = (520.0 * scale_factor).round() as i32;
+    let expanded_h_phys = (480.0 * scale_factor).round() as i32;
 
     let margin_x = (24.0 * scale_factor).round() as i32;
     let margin_y = (72.0 * scale_factor).round() as i32;
@@ -626,24 +626,33 @@ pub fn resize_tray_window(app: AppHandle, expanded: bool) -> Result<(), String> 
 }
 
 #[tauri::command]
-pub fn sync_tray_window_height(app: AppHandle, logical_height: f64) -> Result<(), String> {
+pub fn sync_tray_window_bounds(
+    app: AppHandle,
+    logical_width: f64,
+    logical_height: f64,
+) -> Result<(), String> {
     if let Some(tray_win) = app.get_webview_window("tray") {
         if let Ok(Some(monitor)) = tray_win.current_monitor() {
             let scale = monitor.scale_factor();
-            let phys_h = (logical_height * scale).round() as u32;
-            let min_h_phys = (48.0 * scale).round() as u32;
-            let expanded_h_phys = (580.0 * scale).round() as u32;
-            let clamped_h = phys_h.clamp(min_h_phys, expanded_h_phys);
+            let target_w_phys = (logical_width * scale).round() as u32;
+            let target_h_phys = (logical_height * scale).round() as u32;
+            let min_w_phys = (150.0 * scale).round() as u32;
+            let max_w_phys = (400.0 * scale).round() as u32;
+            let min_h_phys = (36.0 * scale).round() as u32;
+            let max_h_phys = (560.0 * scale).round() as u32;
 
-            if let Ok(cur_size) = tray_win.outer_size() {
-                if let Ok(cur_pos) = tray_win.outer_position() {
-                    let delta_y = cur_size.height as i32 - clamped_h as i32;
-                    if delta_y != 0 {
-                        lock_window_transition(200);
-                        let new_pos = tauri::PhysicalPosition::new(cur_pos.x, cur_pos.y + delta_y);
-                        let _ = tray_win.set_size(tauri::Size::Physical(tauri::PhysicalSize::new(cur_size.width, clamped_h)));
-                        let _ = tray_win.set_position(tauri::Position::Physical(new_pos));
-                    }
+            let clamped_w = target_w_phys.clamp(min_w_phys, max_w_phys);
+            let clamped_h = target_h_phys.clamp(min_h_phys, max_h_phys);
+
+            if let (Ok(cur_size), Ok(cur_pos)) = (tray_win.outer_size(), tray_win.outer_position()) {
+                let delta_x = cur_size.width as i32 - clamped_w as i32;
+                let delta_y = cur_size.height as i32 - clamped_h as i32;
+
+                if delta_x != 0 || delta_y != 0 {
+                    let new_x = cur_pos.x + delta_x;
+                    let new_y = cur_pos.y + delta_y;
+                    let _ = tray_win.set_size(tauri::Size::Physical(tauri::PhysicalSize::new(clamped_w, clamped_h)));
+                    let _ = tray_win.set_position(tauri::Position::Physical(tauri::PhysicalPosition::new(new_x, new_y)));
                 }
             }
         }
@@ -652,25 +661,13 @@ pub fn sync_tray_window_height(app: AppHandle, logical_height: f64) -> Result<()
 }
 
 #[tauri::command]
+pub fn sync_tray_window_height(app: AppHandle, logical_height: f64) -> Result<(), String> {
+    sync_tray_window_bounds(app, 380.0, logical_height)
+}
+
+#[tauri::command]
 pub fn set_tray_minimized(app: AppHandle, minimized: bool) -> Result<(), String> {
     if let Some(tray_win) = app.get_webview_window("tray") {
-        if let Ok(Some(monitor)) = tray_win.current_monitor() {
-            let scale = monitor.scale_factor();
-            let target_w_logical = 380.0;
-            let target_h_logical = if minimized { 52.0 } else { 520.0 };
-            let target_w_phys = (target_w_logical * scale).round() as u32;
-            let target_h_phys = (target_h_logical * scale).round() as u32;
-
-            if let (Ok(cur_size), Ok(cur_pos)) = (tray_win.outer_size(), tray_win.outer_position()) {
-                let delta_y = cur_size.height as i32 - target_h_phys as i32;
-                let new_y = cur_pos.y + delta_y;
-                lock_window_transition(250);
-                let _ = tray_win.set_size(tauri::Size::Physical(tauri::PhysicalSize::new(target_w_phys, target_h_phys)));
-                if delta_y != 0 {
-                    let _ = tray_win.set_position(tauri::Position::Physical(tauri::PhysicalPosition::new(cur_pos.x, new_y)));
-                }
-            }
-        }
         let _ = tray_win.emit("set-expanded", !minimized);
     }
     Ok(())

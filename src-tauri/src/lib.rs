@@ -157,6 +157,7 @@ pub fn run() {
             open_canvas_mode,
             resize_tray_window,
             sync_tray_window_height,
+            sync_tray_window_bounds,
             set_tray_minimized,
             start_drag,
             save_tray_position,
