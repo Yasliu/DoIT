@@ -145,27 +145,22 @@ pub fn format_date(timestamp_ms: i64) -> String {
 
 pub fn clean_yaml_scalar(s: &str) -> String {
     let mut val = s.trim();
+    let unescaped = val.replace("\\\"", "").replace("\\\\", "").replace('\\', "");
+    val = unescaped.trim();
     for _ in 0..10 {
         let prev = val;
         val = val.trim();
-        while val.starts_with('\\') {
-            val = &val[1..];
-        }
-        while val.ends_with('\\') {
-            val = &val[..val.len() - 1];
-        }
-        val = val.trim();
-        if (val.starts_with('"') && val.ends_with('"') && val.len() >= 2)
+        while (val.starts_with('"') && val.ends_with('"') && val.len() >= 2)
             || (val.starts_with('\'') && val.ends_with('\'') && val.len() >= 2)
         {
-            val = &val[1..val.len() - 1];
+            val = val[1..val.len() - 1].trim();
         }
         val = val.trim_matches(|c| c == '"' || c == '\'' || c == '\\');
         if val == prev {
             break;
         }
     }
-    val.replace("\\\"", "").replace("\\\\", "").trim_matches(|c| c == '"' || c == '\'' || c == '\\').to_string()
+    val.trim_matches(|c| c == '"' || c == '\'' || c == '\\').to_string()
 }
 pub fn sanitize_filename(name: &str) -> String {
     let cleaned_name = clean_yaml_scalar(name);

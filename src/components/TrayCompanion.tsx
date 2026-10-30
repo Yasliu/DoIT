@@ -81,6 +81,9 @@ export function TrayCompanion() {
   const [shelfOpen, setShelfOpen] = useState(false);
   const [previewImage, setPreviewImage] = useState<string | null>(null);
   const [zoomLevel, setZoomLevel] = useState<number>(1);
+  const [imagePan, setImagePan] = useState({ x: 0, y: 0 });
+  const isPanningImage = useRef(false);
+  const panStartRef = useRef({ x: 0, y: 0, panX: 0, panY: 0, moved: false });
   const [showSpawnIndicator, setShowSpawnIndicator] = useState<boolean>(false);
   const fileInputRef = useRef<HTMLInputElement | null>(null);
   const grabScrollRef = useRef<HTMLDivElement | null>(null);
@@ -435,12 +438,56 @@ export function TrayCompanion() {
     window.addEventListener("pointerup", onPointerUp);
   };
 
-  // Top bar dragging for expanded tray: immediate smooth dragging across workspace
+  // Image Lightbox Holding & Dragging Pan Handlers
+  const handleImagePointerDown = (e: React.PointerEvent) => {
+    if (e.button !== 0) return; // Left mouse click
+    e.preventDefault();
+    e.stopPropagation();
+    isPanningImage.current = true;
+    panStartRef.current = {
+      x: e.clientX,
+      y: e.clientY,
+      panX: imagePan.x,
+      panY: imagePan.y,
+      moved: false,
+    };
+    (e.currentTarget as HTMLElement).setPointerCapture(e.pointerId);
+  };
+
+  const handleImagePointerMove = (e: React.PointerEvent) => {
+    if (!isPanningImage.current) return;
+    const dx = e.clientX - panStartRef.current.x;
+    const dy = e.clientY - panStartRef.current.y;
+    if (Math.abs(dx) > 3 || Math.abs(dy) > 3) {
+      panStartRef.current.moved = true;
+    }
+    setImagePan({
+      x: panStartRef.current.panX + dx,
+      y: panStartRef.current.panY + dy,
+    });
+  };
+
+  const handleImagePointerUp = (e: React.PointerEvent) => {
+    if (!isPanningImage.current) return;
+    isPanningImage.current = false;
+    try {
+      (e.currentTarget as HTMLElement).releasePointerCapture(e.pointerId);
+    } catch {}
+  };
+
+  // Top bar dragging and minimize handling for expanded tray
+  const topBarMoveRef = useRef({ startX: 0, startY: 0, moved: false });
   const handleTopBarPointerDown = (e: React.PointerEvent) => {
-    if (e.button !== 0 || isTransitioning.current) return;
+    if (e.button !== 0) return;
+    topBarMoveRef.current = { startX: e.screenX, startY: e.screenY, moved: false };
     void tauriApi.beginDrag().then(() => {
       void tauriApi.saveTrayPosition();
     });
+  };
+
+  const handleTopBarClick = () => {
+    setDrawerOpen(false);
+    setExpanded(false);
   };
 
   // ---- RENDER COLLAPSED PILL (ROUNDED RECTANGLE EDGES) ----
@@ -462,12 +509,25 @@ export function TrayCompanion() {
           }}
           title="Click to open · Hold and drag to move"
         >
-          {/* Visual spawn indicator (pulse radar ripple) */}
+          {/* Visual spawn indicator (pure fading radial light bloom in all directions, no borders) */}
           {showSpawnIndicator && (
-            <>
-              <div className="absolute -inset-1.5 rounded-xl border-2 border-white/60 animate-ping pointer-events-none opacity-80" />
-              <div className="absolute -inset-1 rounded-xl shadow-[0_0_25px_rgba(255,255,255,0.7)] border border-white/80 animate-pulse pointer-events-none" />
-            </>
+            <div className="absolute inset-0 flex items-center justify-center pointer-events-none z-[-1] overflow-visible">
+              <div
+                className="absolute size-44 rounded-full pointer-events-none blur-xl"
+                style={{
+                  background: "radial-gradient(circle, rgba(255, 255, 255, 0.7) 0%, rgba(255, 255, 255, 0.25) 35%, rgba(255, 255, 255, 0) 70%)",
+                  animation: "spawnBloomFade 2.2s cubic-bezier(0.16, 1, 0.3, 1) forwards",
+                }}
+              />
+              <div
+                className="absolute size-64 rounded-full pointer-events-none blur-2xl"
+                style={{
+                  background: "radial-gradient(circle, rgba(255, 255, 255, 0.45) 0%, rgba(255, 255, 255, 0.12) 45%, rgba(255, 255, 255, 0) 75%)",
+                  animation: "spawnBloomFade 2.2s cubic-bezier(0.16, 1, 0.3, 1) forwards",
+                  animationDelay: "120ms",
+                }}
+              />
+            </div>
           )}
 
           {/* Logo icon instead of circle dot */}
@@ -512,7 +572,8 @@ export function TrayCompanion() {
       {/* 1. Fluid unbordered top bar: Hold and drag to move, click to minimize */}
       <div
         onPointerDown={handleTopBarPointerDown}
-        title="Hold top to move · Tap to minimize"
+        onClick={handleTopBarClick}
+        title="Tap to minimize · Hold and drag to move"
         className="flex h-7 shrink-0 items-center justify-between px-1 mb-2.5 select-none cursor-pointer group/topbar"
       >
         <div className="flex flex-1 items-center gap-2 py-1 pointer-events-none">
@@ -547,7 +608,7 @@ export function TrayCompanion() {
             type="button"
             onPointerDown={(e) => e.stopPropagation()}
             onClick={() => void tauriApi.openCanvasMode()}
-            className="grid size-6 place-items-center rounded-md text-white/40 hover:bg-white/10 hover:text-white transition-colors cursor-pointer"
+            className="grid size-6 place-items-center rounded-md text-white/50 hover:bg-white/10 hover:text-white transition-colors cursor-pointer"
             title="Open Canvas"
             aria-label="Open Canvas"
           >
@@ -556,16 +617,16 @@ export function TrayCompanion() {
           <button
             type="button"
             onPointerDown={(e) => e.stopPropagation()}
-            onClick={() => {
-              if (isTransitioning.current) return;
+            onClick={(e) => {
+              e.stopPropagation();
               setDrawerOpen(false);
               setExpanded(false);
             }}
-            className="grid size-6 place-items-center rounded-md text-white/40 hover:bg-white/10 hover:text-white transition-colors cursor-pointer"
+            className="grid size-6 place-items-center rounded-md text-white/65 hover:bg-white/15 hover:text-white transition-colors cursor-pointer"
             title="Minimize to Pill (—)"
             aria-label="Minimize to Pill"
           >
-            <Minus size={13} strokeWidth={2} />
+            <Minus size={13} strokeWidth={2.4} />
           </button>
           <button
             type="button"
@@ -575,7 +636,7 @@ export function TrayCompanion() {
               setExpanded(false);
               void getCurrentWindow().hide();
             }}
-            className="grid size-6 place-items-center rounded-md text-white/40 hover:bg-white/10 hover:text-white transition-colors cursor-pointer"
+            className="grid size-6 place-items-center rounded-md text-white/50 hover:bg-white/10 hover:text-white transition-colors cursor-pointer"
             title="Hide to System Tray (✕)"
             aria-label="Hide to System Tray"
           >
@@ -773,7 +834,7 @@ export function TrayCompanion() {
                         setPreviewImage(imgUrl);
                         setZoomLevel(1);
                       }}
-                      className="relative group aspect-video rounded-lg overflow-hidden bg-black/50 border border-white/10 flex items-center justify-center cursor-pointer hover:border-white/30 transition-all"
+                      className="relative group aspect-video min-h-[80px] rounded-lg overflow-hidden bg-black/50 border border-white/10 flex items-center justify-center cursor-pointer hover:border-white/30 transition-all"
                       title="Click to zoom & inspect full image"
                     >
                       <img
@@ -1089,15 +1150,29 @@ export function TrayCompanion() {
             )}
           </div>
 
-          {/* Back to the canvas link matching Screenshot 3 */}
-          <div className="pt-1 border-t border-white/[0.06]">
+          {/* Bottom Action Footer: Minimize to Pill and Open Canvas */}
+          <div className="pt-1.5 border-t border-white/[0.08] flex items-center justify-between px-2">
+            <button
+              type="button"
+              onClick={() => {
+                setDrawerOpen(false);
+                setExpanded(false);
+              }}
+              className="flex items-center gap-1.5 text-[11.5px] font-mono text-white/50 hover:text-white transition-colors cursor-pointer"
+              title="Minimize tray to small floating pill"
+            >
+              <Minus size={12} strokeWidth={2.4} />
+              <span>Minimize</span>
+            </button>
+
             <button
               type="button"
               onClick={() => tauriApi.openCanvasMode()}
-              className="flex h-8 w-full items-center justify-between px-2 text-[12px] text-white/40 hover:text-white transition-colors"
+              className="flex items-center gap-1 text-[11.5px] font-mono text-white/50 hover:text-white transition-colors cursor-pointer"
+              title="Maximize back to full canvas"
             >
-              <span>Back to the canvas</span>
-              <ArrowUpRight size={13} />
+              <span>Canvas</span>
+              <ArrowUpRight size={12} strokeWidth={2} />
             </button>
           </div>
         </div>
@@ -1138,7 +1213,10 @@ export function TrayCompanion() {
             </button>
             <button
               type="button"
-              onClick={() => setZoomLevel(1)}
+              onClick={() => {
+                setZoomLevel(1);
+                setImagePan({ x: 0, y: 0 });
+              }}
               className="ml-1 text-[9.5px] font-mono uppercase px-1.5 py-0.5 rounded bg-white/10 hover:bg-white/20 text-white/90 cursor-pointer"
               title="Reset Zoom (100%)"
             >
@@ -1150,6 +1228,7 @@ export function TrayCompanion() {
               onClick={() => {
                 setPreviewImage(null);
                 setZoomLevel(1);
+                setImagePan({ x: 0, y: 0 });
               }}
               className="grid size-6 place-items-center rounded-full text-white/70 hover:text-white hover:bg-white/10 cursor-pointer"
               title="Close preview"
@@ -1158,30 +1237,44 @@ export function TrayCompanion() {
             </button>
           </div>
 
-          {/* Interactive Zoomable Viewport */}
+          {/* Interactive Zoomable & Pannable Viewport */}
           <div
-            className="relative flex-1 w-full overflow-auto flex items-center justify-center p-2 cursor-grab active:cursor-grabbing scroll no-scrollbar"
+            className="relative flex-1 w-full overflow-hidden flex items-center justify-center p-2 cursor-grab active:cursor-grabbing select-none"
             onClick={(e) => e.stopPropagation()}
+            onPointerDown={handleImagePointerDown}
+            onPointerMove={handleImagePointerMove}
+            onPointerUp={handleImagePointerUp}
+            onPointerCancel={handleImagePointerUp}
             onWheel={(e) => {
               e.preventDefault();
               if (e.deltaY < 0) {
-                setZoomLevel((z) => Math.min(4, Number((z + 0.2).toFixed(2))));
+                setZoomLevel((z) => Math.min(4, Number((z + 0.25).toFixed(2))));
               } else {
-                setZoomLevel((z) => Math.max(0.5, Number((z - 0.2).toFixed(2))));
+                setZoomLevel((z) => Math.max(0.5, Number((z - 0.25).toFixed(2))));
               }
             }}
           >
             <img
               src={previewImage}
               alt="Preview"
+              draggable={false}
               style={{
-                transform: `scale(${zoomLevel})`,
+                transform: `translate3d(${imagePan.x}px, ${imagePan.y}px, 0) scale(${zoomLevel})`,
                 transformOrigin: "center center",
-                transition: "transform 0.12s ease-out",
+                transition: isPanningImage.current ? "none" : "transform 0.1s ease-out",
               }}
-              onClick={() => setZoomLevel((z) => (z === 1 ? 2 : 1))}
-              className="max-w-[90vw] max-h-[75vh] object-contain rounded-xl border border-white/20 shadow-2xl cursor-pointer"
-              title="Click to toggle 2x zoom · Scroll to zoom freely"
+              onClick={(e) => {
+                e.stopPropagation();
+                if (!panStartRef.current.moved) {
+                  setZoomLevel((z) => {
+                    if (z === 1) return 2;
+                    setImagePan({ x: 0, y: 0 });
+                    return 1;
+                  });
+                }
+              }}
+              className="max-w-[90vw] max-h-[75vh] object-contain rounded-xl border border-white/20 shadow-2xl select-none"
+              title="Hold and drag to move · Click to toggle 2x zoom · Scroll to zoom"
             />
           </div>
         </div>

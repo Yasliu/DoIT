@@ -77,13 +77,12 @@ export function uid(prefix: string): string {
 export function cleanText(str: string | null | undefined): string {
   if (!str) return "";
   let s = str.trim();
+  // Remove escaped quotes and backslashes
+  s = s.replace(/\\+"/g, "").replace(/\\+/g, "");
   for (let i = 0; i < 10; i++) {
     const prev = s;
     s = s.trim();
-    while (s.startsWith("\\")) s = s.slice(1);
-    while (s.endsWith("\\")) s = s.slice(0, -1);
-    s = s.trim();
-    if (
+    while (
       (s.startsWith('"') && s.endsWith('"') && s.length >= 2) ||
       (s.startsWith("'") && s.endsWith("'") && s.length >= 2)
     ) {

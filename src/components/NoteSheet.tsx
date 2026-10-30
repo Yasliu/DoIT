@@ -56,6 +56,10 @@ export function NoteSheet({
   const [fontOpen, setFontOpen] = useState(false);
   const [shelfOpen, setShelfOpen] = useState(false);
   const [previewImage, setPreviewImage] = useState<string | null>(null);
+  const [zoomLevel, setZoomLevel] = useState<number>(1);
+  const [imagePan, setImagePan] = useState({ x: 0, y: 0 });
+  const isPanningImage = useRef(false);
+  const panStartRef = useRef({ x: 0, y: 0, panX: 0, panY: 0, moved: false });
   const fileInputRef = useRef<HTMLInputElement | null>(null);
   const [newShelf, setNewShelf] = useState("");
   const [focusLine, setFocusLine] = useState<string | null>(null);
@@ -209,6 +213,43 @@ export function NoteSheet({
       };
       reader.readAsDataURL(file);
     });
+  };
+
+  // Image Lightbox Holding & Dragging Pan Handlers
+  const handleImagePointerDown = (e: React.PointerEvent) => {
+    if (e.button !== 0) return; // Left mouse click
+    e.preventDefault();
+    e.stopPropagation();
+    isPanningImage.current = true;
+    panStartRef.current = {
+      x: e.clientX,
+      y: e.clientY,
+      panX: imagePan.x,
+      panY: imagePan.y,
+      moved: false,
+    };
+    (e.currentTarget as HTMLElement).setPointerCapture(e.pointerId);
+  };
+
+  const handleImagePointerMove = (e: React.PointerEvent) => {
+    if (!isPanningImage.current) return;
+    const dx = e.clientX - panStartRef.current.x;
+    const dy = e.clientY - panStartRef.current.y;
+    if (Math.abs(dx) > 3 || Math.abs(dy) > 3) {
+      panStartRef.current.moved = true;
+    }
+    setImagePan({
+      x: panStartRef.current.panX + dx,
+      y: panStartRef.current.panY + dy,
+    });
+  };
+
+  const handleImagePointerUp = (e: React.PointerEvent) => {
+    if (!isPanningImage.current) return;
+    isPanningImage.current = false;
+    try {
+      (e.currentTarget as HTMLElement).releasePointerCapture(e.pointerId);
+    } catch {}
   };
 
   const handleDrop = (event: React.DragEvent) => {
@@ -440,7 +481,7 @@ export function NoteSheet({
           ref={frame}
           role="dialog"
           aria-modal="true"
-          aria-label={draft.title || "Untitled note"}
+          aria-label={cleanText(draft.title) || "Untitled note"}
           tabIndex={-1}
           onPaste={handlePaste}
           onDragOver={(e) => {
@@ -448,7 +489,7 @@ export function NoteSheet({
             e.dataTransfer.dropEffect = "copy";
           }}
           onDrop={handleDrop}
-          className="pointer-events-auto flex flex-col w-[94vw] max-w-[960px] h-[86vh] max-h-[86vh] overflow-hidden rounded-[24px] glass-sheet outline-none border border-white/10 shadow-[0_30px_90px_rgba(0,0,0,0.85)]"
+          className="pointer-events-auto flex flex-col w-[92vw] max-w-[920px] min-h-[380px] max-h-[88vh] h-auto overflow-hidden rounded-[24px] glass-sheet outline-none border border-white/10 shadow-[0_30px_90px_rgba(0,0,0,0.85)]"
         >
         <div
           className="h-[2px] shrink-0 origin-left"
@@ -697,7 +738,7 @@ export function NoteSheet({
                       <div
                         key={`img-${idx}`}
                         onClick={() => setPreviewImage(imgUrl)}
-                        className="relative group aspect-video rounded-[10px] overflow-hidden bg-black/50 border border-white/10 shadow-sm cursor-pointer hover:border-white/30 transition-all flex items-center justify-center"
+                        className="relative group aspect-video min-h-[100px] rounded-[10px] overflow-hidden bg-black/50 border border-white/10 shadow-sm cursor-pointer hover:border-white/30 transition-all flex items-center justify-center"
                         title="Click to preview full image"
                       >
                         <img
@@ -899,26 +940,105 @@ export function NoteSheet({
       </div>
       </div>
 
-      {/* Lightbox Preview Modal */}
+      {/* Lightbox Preview Modal with Zoom & Holding-Mouse Pan */}
       {previewImage && (
         <div
-          onClick={() => setPreviewImage(null)}
-          className="fixed inset-0 z-[100] flex items-center justify-center bg-black/85 backdrop-blur-md p-6 cursor-zoom-out"
+          onClick={() => {
+            setPreviewImage(null);
+            setZoomLevel(1);
+            setImagePan({ x: 0, y: 0 });
+          }}
+          className="fixed inset-0 z-[100] flex flex-col items-center justify-center bg-black/90 backdrop-blur-md p-4 select-none"
         >
-          <div className="relative max-w-[90vw] max-h-[88vh] flex items-center justify-center" onClick={(e) => e.stopPropagation()}>
+          {/* Zoom & Action Controls Bar */}
+          <div
+            className="flex items-center gap-2 mb-2 z-20 bg-black/80 px-3.5 py-1.5 rounded-full border border-white/20 shadow-xl"
+            onClick={(e) => e.stopPropagation()}
+          >
+            <button
+              type="button"
+              onClick={() => setZoomLevel((z) => Math.max(0.5, Number((z - 0.25).toFixed(2))))}
+              className="grid size-6 place-items-center rounded text-white/70 hover:text-white hover:bg-white/10 text-[14px] font-bold cursor-pointer"
+              title="Zoom out"
+            >
+              -
+            </button>
+            <span className="font-mono text-[10px] text-white/90 min-w-[36px] text-center font-semibold">
+              {Math.round(zoomLevel * 100)}%
+            </span>
+            <button
+              type="button"
+              onClick={() => setZoomLevel((z) => Math.min(4, Number((z + 0.25).toFixed(2))))}
+              className="grid size-6 place-items-center rounded text-white/70 hover:text-white hover:bg-white/10 text-[14px] font-bold cursor-pointer"
+              title="Zoom in"
+            >
+              +
+            </button>
+            <button
+              type="button"
+              onClick={() => {
+                setZoomLevel(1);
+                setImagePan({ x: 0, y: 0 });
+              }}
+              className="ml-1 text-[9.5px] font-mono uppercase px-1.5 py-0.5 rounded bg-white/10 hover:bg-white/20 text-white/90 cursor-pointer"
+              title="Reset Zoom (100%)"
+            >
+              1:1
+            </button>
+            <span className="mx-0.5 h-3 w-px bg-white/20" />
+            <button
+              type="button"
+              onClick={() => {
+                setPreviewImage(null);
+                setZoomLevel(1);
+                setImagePan({ x: 0, y: 0 });
+              }}
+              className="grid size-6 place-items-center rounded-full text-white/70 hover:text-white hover:bg-white/10 cursor-pointer"
+              title="Close preview"
+            >
+              <X size={13} strokeWidth={2.4} />
+            </button>
+          </div>
+
+          {/* Interactive Zoomable & Pannable Viewport */}
+          <div
+            className="relative flex-1 w-full overflow-hidden flex items-center justify-center p-2 cursor-grab active:cursor-grabbing select-none"
+            onClick={(e) => e.stopPropagation()}
+            onPointerDown={handleImagePointerDown}
+            onPointerMove={handleImagePointerMove}
+            onPointerUp={handleImagePointerUp}
+            onPointerCancel={handleImagePointerUp}
+            onWheel={(e) => {
+              e.preventDefault();
+              if (e.deltaY < 0) {
+                setZoomLevel((z) => Math.min(4, Number((z + 0.25).toFixed(2))));
+              } else {
+                setZoomLevel((z) => Math.max(0.5, Number((z - 0.25).toFixed(2))));
+              }
+            }}
+          >
             <img
               src={previewImage}
               alt="Preview"
-              className="max-w-[90vw] max-h-[85vh] object-contain rounded-xl border border-white/15 shadow-2xl"
+              draggable={false}
+              style={{
+                transform: `translate3d(${imagePan.x}px, ${imagePan.y}px, 0) scale(${zoomLevel})`,
+                transformOrigin: "center center",
+                transition: isPanningImage.current ? "none" : "transform 0.1s ease-out",
+              }}
+              onClick={(e) => {
+                e.stopPropagation();
+                if (!panStartRef.current.moved) {
+                  setZoomLevel((z) => {
+                    if (z === 1) return 2;
+                    setImagePan({ x: 0, y: 0 });
+                    return 1;
+                  });
+                }
+              }}
+              className="max-w-[90vw] max-h-[82vh] object-contain rounded-xl border border-white/20 shadow-2xl select-none"
+              title="Hold and drag to move · Click to toggle 2x zoom · Scroll to zoom"
             />
-            <button
-              type="button"
-              onClick={() => setPreviewImage(null)}
-              className="absolute -top-3 -right-3 grid size-8 place-items-center rounded-full bg-black/90 text-white/90 hover:text-white hover:bg-black border border-white/20 shadow-lg cursor-pointer"
-              title="Close preview"
-            >
-              <X size={16} strokeWidth={2.4} />
-            </button>
           </div>
         </div>
       )}

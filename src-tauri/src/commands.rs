@@ -380,6 +380,13 @@ pub fn open_tray_mode(app: AppHandle) -> Result<(), String> {
         .or_else(|| tray_win_opt.as_ref().and_then(get_window_active_monitor))
         .or_else(|| app.primary_monitor().ok().flatten());
 
+    // Mandatory: Entering desk tray mode from canvas/maximized MUST always begin at the bottom right corner
+    {
+        let mut mem = TRAY_POSITION_STATE.lock().unwrap();
+        mem.collapsed_pos = None;
+        mem.expanded_pos = None;
+    }
+
     if let (Some(tray_win), Some(mon)) = (tray_win_opt, target_mon) {
         position_tray_on_monitor(&tray_win, &mon, false);
 
