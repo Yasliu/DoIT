@@ -67,6 +67,7 @@
   *:focus-within {
     outline: none !important;
     box-shadow: none !important;
+    ring: 0 !important;
   }
   button,
   input,

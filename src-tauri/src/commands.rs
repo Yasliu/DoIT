@@ -14,16 +14,16 @@ pub struct MainWindowState {
 
 pub static SAVED_MAIN_WINDOW_STATE: Mutex<Option<MainWindowState>> = Mutex::new(None);
 
-#[derive(Clone, Debug)]
+#[derive(Clone, Debug, Default)]
 pub struct TrayPositionState {
-    pub collapsed_pos: Option<tauri::PhysicalPosition<i32>>,
-    pub expanded_pos: Option<tauri::PhysicalPosition<i32>>,
+    pub pill_offset: Option<tauri::PhysicalPosition<i32>>,
+    pub expanded_offset: Option<tauri::PhysicalPosition<i32>>,
     pub last_monitor_name: Option<String>,
 }
 
 pub static TRAY_POSITION_STATE: Mutex<TrayPositionState> = Mutex::new(TrayPositionState {
-    collapsed_pos: None,
-    expanded_pos: None,
+    pill_offset: None,
+    expanded_offset: None,
     last_monitor_name: None,
 });
 
@@ -284,75 +284,63 @@ pub fn position_tray_on_monitor(
     let margin_x = (24.0 * scale_factor).round() as i32;
     let margin_y = (72.0 * scale_factor).round() as i32;
 
-    let min_x = m_pos.x + 8;
-    let min_y = m_pos.y + 8;
-    let max_small_x = (m_pos.x + (m_size.width as i32) - small_w_phys - 8).max(min_x);
-    let max_small_y = (m_pos.y + (m_size.height as i32) - small_h_phys - 8).max(min_y);
+    let min_offset_x = 8;
+    let min_offset_y = 8;
+    let max_small_offset_x = (m_size.width as i32 - small_w_phys - 8).max(min_offset_x);
+    let max_small_offset_y = (m_size.height as i32 - small_h_phys - 8).max(min_offset_y);
 
-    let default_x = (m_pos.x + (m_size.width as i32) - small_w_phys - margin_x).clamp(min_x, max_small_x);
-    let default_y = (m_pos.y + (m_size.height as i32) - small_h_phys - margin_y).clamp(min_y, max_small_y);
+    let max_expanded_offset_x = (m_size.width as i32 - expanded_w_phys - 8).max(min_offset_x);
+    let max_expanded_offset_y = (m_size.height as i32 - expanded_h_phys - 8).max(min_offset_y);
 
-    let win_size = window.outer_size().unwrap_or(tauri::PhysicalSize::new(160, 64));
-    let live_pos = window.outer_position().ok();
+    let default_pill_offset_x = (m_size.width as i32 - small_w_phys - margin_x).clamp(min_offset_x, max_small_offset_x);
+    let default_pill_offset_y = (m_size.height as i32 - small_h_phys - margin_y).clamp(min_offset_y, max_small_offset_y);
 
     let mut mem = TRAY_POSITION_STATE.lock().unwrap();
 
-    // Prioritize live physical position of the window if it's currently on this monitor
-    let live_collapsed = if let Some(lp) = live_pos {
-        if lp.x >= min_x - 100 && lp.x <= max_small_x + 100 && lp.y >= min_y - 100 && lp.y <= max_small_y + 100 {
-            if (win_size.width as i32) <= small_w_phys + 50 {
-                Some(tauri::PhysicalPosition::new(
-                    lp.x.clamp(min_x, max_small_x),
-                    lp.y.clamp(min_y, max_small_y),
-                ))
-            } else {
-                let anchor_x = (lp.x + (win_size.width as i32 - small_w_phys) / 2).clamp(min_x, max_small_x);
-                let anchor_y = (lp.y + (win_size.height as i32 - small_h_phys) / 2).clamp(min_y, max_small_y);
-                Some(tauri::PhysicalPosition::new(anchor_x, anchor_y))
-            }
-        } else {
-            None
-        }
-    } else {
-        None
-    };
-
-    let base_collapsed = live_collapsed
-        .or_else(|| {
-            mem.collapsed_pos.filter(|p| {
-                p.x >= min_x - 50 && p.x <= max_small_x + 50 && p.y >= min_y - 50 && p.y <= max_small_y + 50
-            }).map(|p| tauri::PhysicalPosition::new(p.x.clamp(min_x, max_small_x), p.y.clamp(min_y, max_small_y)))
-        })
-        .unwrap_or_else(|| tauri::PhysicalPosition::new(default_x, default_y));
-
-    mem.collapsed_pos = Some(base_collapsed);
+    let pill_offset = mem.pill_offset.unwrap_or(tauri::PhysicalPosition::new(default_pill_offset_x, default_pill_offset_y));
+    let clamped_pill_x = pill_offset.x.clamp(min_offset_x, max_small_offset_x);
+    let clamped_pill_y = pill_offset.y.clamp(min_offset_y, max_small_offset_y);
+    let active_pill_offset = tauri::PhysicalPosition::new(clamped_pill_x, clamped_pill_y);
+    mem.pill_offset = Some(active_pill_offset);
     mem.last_monitor_name = monitor.name().cloned();
 
     if expanded {
-        let max_expanded_x = (m_pos.x + (m_size.width as i32) - expanded_w_phys - 8).max(min_x);
-        let max_expanded_y = (m_pos.y + (m_size.height as i32) - expanded_h_phys - 8).max(min_y);
-
-        let target_x = if base_collapsed.x + expanded_w_phys > max_expanded_x {
-            (base_collapsed.x + small_w_phys - expanded_w_phys).clamp(min_x, max_expanded_x)
+        let expanded_offset = if let Some(exp) = mem.expanded_offset {
+            tauri::PhysicalPosition::new(
+                exp.x.clamp(min_offset_x, max_expanded_offset_x),
+                exp.y.clamp(min_offset_y, max_expanded_offset_y),
+            )
         } else {
-            base_collapsed.x.clamp(min_x, max_expanded_x)
+            // Anchor expanded tray adjacent to the pill
+            let target_x = if active_pill_offset.x + expanded_w_phys > max_expanded_offset_x {
+                (active_pill_offset.x + small_w_phys - expanded_w_phys).clamp(min_offset_x, max_expanded_offset_x)
+            } else {
+                active_pill_offset.x.clamp(min_offset_x, max_expanded_offset_x)
+            };
+            let target_y = if active_pill_offset.y + expanded_h_phys > max_expanded_offset_y {
+                (active_pill_offset.y + small_h_phys - expanded_h_phys).clamp(min_offset_y, max_expanded_offset_y)
+            } else {
+                active_pill_offset.y.clamp(min_offset_y, max_expanded_offset_y)
+            };
+            tauri::PhysicalPosition::new(target_x, target_y)
         };
 
-        let target_y = if base_collapsed.y + expanded_h_phys > max_expanded_y {
-            (base_collapsed.y + small_h_phys - expanded_h_phys).clamp(min_y, max_expanded_y)
-        } else {
-            base_collapsed.y.clamp(min_y, max_expanded_y)
-        };
-
-        mem.expanded_pos = Some(tauri::PhysicalPosition::new(target_x, target_y));
+        mem.expanded_offset = Some(expanded_offset);
         drop(mem);
 
-        let _ = window.set_size(tauri::PhysicalSize::new(expanded_w_phys as u32, expanded_h_phys as u32));
-        let _ = window.set_position(tauri::PhysicalPosition::new(target_x, target_y));
+        let final_x = m_pos.x + expanded_offset.x;
+        let final_y = m_pos.y + expanded_offset.y;
+
+        let _ = window.set_size(tauri::Size::Physical(tauri::PhysicalSize::new(expanded_w_phys as u32, expanded_h_phys as u32)));
+        let _ = window.set_position(tauri::Position::Physical(tauri::PhysicalPosition::new(final_x, final_y)));
     } else {
         drop(mem);
-        let _ = window.set_size(tauri::PhysicalSize::new(small_w_phys as u32, small_h_phys as u32));
-        let _ = window.set_position(base_collapsed);
+
+        let final_x = m_pos.x + active_pill_offset.x;
+        let final_y = m_pos.y + active_pill_offset.y;
+
+        let _ = window.set_size(tauri::Size::Physical(tauri::PhysicalSize::new(small_w_phys as u32, small_h_phys as u32)));
+        let _ = window.set_position(tauri::Position::Physical(tauri::PhysicalPosition::new(final_x, final_y)));
     }
 }
 
@@ -401,8 +389,8 @@ pub fn open_tray_mode(app: AppHandle) -> Result<(), String> {
     // Mandatory: Entering desk tray mode from canvas/maximized MUST always begin at the bottom right corner
     {
         let mut mem = TRAY_POSITION_STATE.lock().unwrap();
-        mem.collapsed_pos = None;
-        mem.expanded_pos = None;
+        mem.pill_offset = None;
+        mem.expanded_offset = None;
     }
 
     if let (Some(tray_win), Some(mon)) = (tray_win_opt, target_mon) {
@@ -521,6 +509,8 @@ pub fn save_tray_position(app: AppHandle) -> Result<(), String> {
                 let scale = mon.scale_factor();
                 let small_w = (160.0 * scale).round() as i32;
                 let small_h = (64.0 * scale).round() as i32;
+                let _expanded_w = (380.0 * scale).round() as i32;
+                let _expanded_h = (560.0 * scale).round() as i32;
 
                 let min_x = m_pos.x + 8;
                 let min_y = m_pos.y + 8;
@@ -532,20 +522,23 @@ pub fn save_tray_position(app: AppHandle) -> Result<(), String> {
 
                 // Desktop Screen Edge Constraints: Enforce physical screen blockage
                 if clamped_x != pos.x || clamped_y != pos.y {
-                    let _ = tray_win.set_position(tauri::PhysicalPosition::new(clamped_x, clamped_y));
+                    let _ = tray_win.set_position(tauri::Position::Physical(tauri::PhysicalPosition::new(clamped_x, clamped_y)));
                 }
 
                 let mut mem = TRAY_POSITION_STATE.lock().unwrap();
+                let offset_x = clamped_x - m_pos.x;
+                let offset_y = clamped_y - m_pos.y;
+
                 if (win_size.width as i32) <= small_w + 30 {
-                    mem.collapsed_pos = Some(tauri::PhysicalPosition::new(clamped_x, clamped_y));
+                    mem.pill_offset = Some(tauri::PhysicalPosition::new(offset_x, offset_y));
                     *TRAY_COLLAPSED_POSITION.lock().unwrap() = Some(tauri::PhysicalPosition::new(clamped_x, clamped_y));
                 } else {
-                    mem.expanded_pos = Some(tauri::PhysicalPosition::new(clamped_x, clamped_y));
+                    mem.expanded_offset = Some(tauri::PhysicalPosition::new(offset_x, offset_y));
                     let max_small_x = (m_pos.x + m_size.width as i32 - small_w - 8).max(min_x);
                     let max_small_y = (m_pos.y + m_size.height as i32 - small_h - 8).max(min_y);
                     let anchor_x = (clamped_x + (win_size.width as i32 - small_w) / 2).clamp(min_x, max_small_x);
                     let anchor_y = (clamped_y + (win_size.height as i32 - small_h) / 2).clamp(min_y, max_small_y);
-                    mem.collapsed_pos = Some(tauri::PhysicalPosition::new(anchor_x, anchor_y));
+                    mem.pill_offset = Some(tauri::PhysicalPosition::new(anchor_x - m_pos.x, anchor_y - m_pos.y));
                     *TRAY_COLLAPSED_POSITION.lock().unwrap() = Some(tauri::PhysicalPosition::new(anchor_x, anchor_y));
                 }
                 mem.last_monitor_name = mon.name().cloned();
@@ -576,16 +569,19 @@ pub fn track_tray_window_moved(window: &Window, pos: tauri::PhysicalPosition<i32
             let clamped_y = pos.y.clamp(min_y, max_y);
 
             let mut mem = TRAY_POSITION_STATE.lock().unwrap();
+            let offset_x = clamped_x - m_pos.x;
+            let offset_y = clamped_y - m_pos.y;
+
             if (win_size.width as i32) <= small_w + 40 {
-                mem.collapsed_pos = Some(tauri::PhysicalPosition::new(clamped_x, clamped_y));
+                mem.pill_offset = Some(tauri::PhysicalPosition::new(offset_x, offset_y));
                 *TRAY_COLLAPSED_POSITION.lock().unwrap() = Some(tauri::PhysicalPosition::new(clamped_x, clamped_y));
             } else {
-                mem.expanded_pos = Some(tauri::PhysicalPosition::new(clamped_x, clamped_y));
+                mem.expanded_offset = Some(tauri::PhysicalPosition::new(offset_x, offset_y));
                 let max_small_x = (m_pos.x + m_size.width as i32 - small_w - 8).max(min_x);
                 let max_small_y = (m_pos.y + m_size.height as i32 - small_h - 8).max(min_y);
                 let anchor_x = (clamped_x + (win_size.width as i32 - small_w) / 2).clamp(min_x, max_small_x);
                 let anchor_y = (clamped_y + (win_size.height as i32 - small_h) / 2).clamp(min_y, max_small_y);
-                mem.collapsed_pos = Some(tauri::PhysicalPosition::new(anchor_x, anchor_y));
+                mem.pill_offset = Some(tauri::PhysicalPosition::new(anchor_x - m_pos.x, anchor_y - m_pos.y));
                 *TRAY_COLLAPSED_POSITION.lock().unwrap() = Some(tauri::PhysicalPosition::new(anchor_x, anchor_y));
             }
             mem.last_monitor_name = mon.name().cloned();
