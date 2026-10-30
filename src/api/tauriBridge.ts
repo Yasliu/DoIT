@@ -286,6 +286,15 @@ export const tauriApi = {
     }
   },
 
+  async syncTrayWindowHeight(logicalHeight: number): Promise<void> {
+    if (!isTauri()) return;
+    try {
+      await invoke("sync_tray_window_height", { logicalHeight });
+    } catch (err) {
+      console.warn("sync_tray_window_height failed", err);
+    }
+  },
+
   async setMiniMode(mini: boolean): Promise<void> {
     if (!isTauri()) return;
     try {

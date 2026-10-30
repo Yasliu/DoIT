@@ -156,6 +156,7 @@ pub fn run() {
             open_tray_mode,
             open_canvas_mode,
             resize_tray_window,
+            sync_tray_window_height,
             start_drag,
             save_tray_position,
             restart_app,

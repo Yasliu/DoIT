@@ -626,6 +626,32 @@ pub fn resize_tray_window(app: AppHandle, expanded: bool) -> Result<(), String> 
 }
 
 #[tauri::command]
+pub fn sync_tray_window_height(app: AppHandle, logical_height: f64) -> Result<(), String> {
+    if let Some(tray_win) = app.get_webview_window("tray") {
+        if let Ok(Some(monitor)) = tray_win.current_monitor() {
+            let scale = monitor.scale_factor();
+            let phys_h = (logical_height * scale).round() as u32;
+            let small_h_phys = (64.0 * scale).round() as u32;
+            let expanded_h_phys = (560.0 * scale).round() as u32;
+            let clamped_h = phys_h.clamp(small_h_phys, expanded_h_phys);
+
+            if let Ok(cur_size) = tray_win.outer_size() {
+                if let Ok(cur_pos) = tray_win.outer_position() {
+                    let delta_y = cur_size.height as i32 - clamped_h as i32;
+                    if delta_y != 0 {
+                        lock_window_transition(200);
+                        let new_pos = tauri::PhysicalPosition::new(cur_pos.x, cur_pos.y + delta_y);
+                        let _ = tray_win.set_size(tauri::Size::Physical(tauri::PhysicalSize::new(cur_size.width, clamped_h)));
+                        let _ = tray_win.set_position(tauri::Position::Physical(new_pos));
+                    }
+                }
+            }
+        }
+    }
+    Ok(())
+}
+
+#[tauri::command]
 pub fn start_drag(window: Window) -> Result<(), String> {
     window.start_dragging().map_err(|e| e.to_string())
 }

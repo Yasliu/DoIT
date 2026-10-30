@@ -39,6 +39,7 @@ import { accentFor, cleanText, cx, relativeShort, uid } from "../lib/text";
 export function TrayCompanion() {
   const { notes, categories, patch, create, remove } = useWorkspace();
   const [expanded, setExpanded] = useState(false);
+  const [open, setOpen] = useState(true);
   const [panelVisible, setPanelVisible] = useState(false);
   const [drawerOpen, setDrawerOpen] = useState(true);
   const [filter, setFilter] = useState("");
@@ -46,6 +47,7 @@ export function TrayCompanion() {
   const [activeNoteId, setActiveNoteId] = useState<string | null>(null);
   const [historyStack, setHistoryStack] = useState<string[]>([]);
   const collapseTimerRef = useRef<number | null>(null);
+  const panelRef = useRef<HTMLDivElement | null>(null);
 
   // Navigation helpers with proper history stack
   const openNoteById = (id: string) => {
@@ -114,23 +116,43 @@ export function TrayCompanion() {
 
   const expandTray = useCallback(() => {
     if (Date.now() < visibilityLockRef.current) return;
-    visibilityLockRef.current = Date.now() + 350;
+    visibilityLockRef.current = Date.now() + 650;
     if (collapseTimerRef.current) {
       window.clearTimeout(collapseTimerRef.current);
       collapseTimerRef.current = null;
     }
     setExpanded(true);
+    setOpen(true);
   }, []);
 
   const collapseTray = useCallback(() => {
     if (Date.now() < visibilityLockRef.current) return;
-    visibilityLockRef.current = Date.now() + 350;
-    setPanelVisible(false);
+    visibilityLockRef.current = Date.now() + 650;
+    setOpen(false);
     if (collapseTimerRef.current) window.clearTimeout(collapseTimerRef.current);
     collapseTimerRef.current = window.setTimeout(() => {
       setExpanded(false);
-    }, 300);
+    }, 600);
   }, []);
+
+  // Force native Tauri Rust window bounds to read real-time physical height changes of the webview DOM canvas continuously
+  useEffect(() => {
+    if (!expanded) return;
+    const node = panelRef.current;
+    if (!node) return;
+
+    const observer = new ResizeObserver((entries) => {
+      for (const entry of entries) {
+        const h = entry.borderBoxSize?.[0]?.blockSize ?? node.offsetHeight;
+        if (h > 0) {
+          void tauriApi.syncTrayWindowHeight(h);
+        }
+      }
+    });
+
+    observer.observe(node);
+    return () => observer.disconnect();
+  }, [expanded]);
 
   // Synchronize window size with expanded state
   useEffect(() => {
@@ -644,11 +666,12 @@ export function TrayCompanion() {
   return (
     <MotionConfig transition={{ type: "spring", bounce: 0, duration: 0.6 }}>
       <motion.div
+        ref={panelRef}
         layout
         onPaste={handlePaste}
         onContextMenu={handleContextMenu}
         className={cx(
-          "box-border flex h-full w-full max-h-full max-w-full flex-col overflow-hidden text-ink-1 rounded-2xl border border-white/10 select-none p-3",
+          "box-border flex h-auto max-h-full w-full flex-col overflow-hidden text-ink-1 rounded-2xl border border-white/10 select-none p-3 shadow-2xl",
           "drawer-spring-motion transform",
           panelVisible
             ? "translate-x-0 opacity-100"
@@ -744,8 +767,16 @@ export function TrayCompanion() {
           </div>
         </motion.div>
 
-      <AnimatePresence mode="wait" initial={false}>
-        {activeNote ? (
+        {/* Collapsible content block using exact golden template spring configuration */}
+        <motion.div
+          layout
+          initial={{ opacity: 1, height: "auto" }}
+          animate={{ opacity: open ? 1 : 0, height: open ? "auto" : 0 }}
+          transition={{ type: "spring", bounce: 0, duration: 0.6 }}
+          className="overflow-hidden flex flex-col flex-1"
+        >
+          <AnimatePresence mode="wait" initial={false}>
+            {activeNote ? (
           /* ---- IN-TRAY PROPER NOTE EDITOR ---- */
           <motion.div
             key={`editor-${activeNote.id}`}
@@ -1305,6 +1336,7 @@ export function TrayCompanion() {
         </motion.div>
       )}
       </AnimatePresence>
+      </motion.div>
 
       {/* Lightbox Preview Modal with Full Interactive Zoom */}
       {previewImage && (
