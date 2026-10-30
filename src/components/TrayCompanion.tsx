@@ -115,7 +115,10 @@ export function TrayCompanion() {
     visibilityLockRef.current = Date.now() + 350;
     setIsMinimized((prev) => {
       const next = !prev;
-      void tauriApi.setTrayMinimized(next);
+      if (!next) {
+        // Expanding: instantly allocate outer native window space so the spring morphs fluidly at 60 FPS
+        void tauriApi.snapTrayWindow(380, 480);
+      }
       return next;
     });
   }, []);
@@ -126,7 +129,11 @@ export function TrayCompanion() {
 
     getCurrentWindow()
       .listen<boolean>("set-expanded", (event) => {
-        setIsMinimized(!event.payload);
+        const expanded = event.payload;
+        if (expanded) {
+          void tauriApi.snapTrayWindow(380, 480);
+        }
+        setIsMinimized(!expanded);
       })
       .then((unlisten) => {
         unlistenFn = unlisten;
@@ -473,14 +480,14 @@ export function TrayCompanion() {
           height: isMinimized ? 44 : 480,
         }}
         transition={{ type: "spring", bounce: 0, duration: 0.6 }}
-        onUpdate={(latest) => {
-          if (typeof latest.width === "number" && typeof latest.height === "number") {
-            void tauriApi.syncTrayWindowBounds(latest.width, latest.height);
+        onAnimationComplete={() => {
+          if (isMinimized) {
+            void tauriApi.snapTrayWindow(180, 44);
           }
         }}
         onPaste={handlePaste}
         onContextMenu={handleContextMenu}
-        className="box-border flex flex-col overflow-hidden text-ink-1 rounded-2xl border border-white/10 select-none p-2.5 shadow-2xl scale-100"
+        className="box-border flex flex-col overflow-hidden text-ink-1 rounded-2xl border border-white/10 select-none p-2.5 shadow-2xl scale-100 will-change-[width,height]"
         style={{
           backgroundColor: "var(--theme-tray-bg)",
           backdropFilter: "var(--theme-tray-blur)",
@@ -492,9 +499,9 @@ export function TrayCompanion() {
         <div
           onPointerDown={handleTopBarPointerDown}
           title="Tap to toggle minimize · Hold and drag to move"
-          className="flex h-6 shrink-0 items-center justify-between px-0.5 select-none cursor-pointer group/topbar scale-100 overflow-hidden"
+          className="flex h-6 w-full shrink-0 items-center justify-between px-1 select-none cursor-pointer group/topbar scale-100 overflow-hidden"
         >
-          <div className="flex flex-1 items-center gap-1.5 py-0.5 pointer-events-none min-w-0 overflow-hidden">
+          <div className="flex items-center gap-2 pointer-events-none min-w-0 overflow-hidden h-full">
             {activeNote && !isMinimized ? (
               <button
                 type="button"
@@ -510,17 +517,19 @@ export function TrayCompanion() {
                 <span>Back</span>
               </button>
             ) : (
-              <Mark size={13} className="shrink-0" />
+              <div className="flex items-center justify-center shrink-0 size-3.5">
+                <Mark size={13} className="shrink-0 block" />
+              </div>
             )}
             <span
-              className="font-mono text-[9px] font-semibold uppercase tracking-[0.14em] text-white/60 group-hover/topbar:text-white/90 transition-colors truncate"
+              className="font-mono text-[9.5px] font-semibold uppercase tracking-[0.14em] text-white/70 group-hover/topbar:text-white/95 transition-colors truncate select-none leading-none flex items-center"
             >
               {activeNote && !isMinimized ? "EDIT NOTE" : "DESK TRAY"}
             </span>
           </div>
 
           <div
-            className="flex items-center gap-0.5 shrink-0 z-20"
+            className="flex items-center gap-1 shrink-0 z-20 h-full"
             onPointerDown={(e) => e.stopPropagation()}
             onClick={(e) => e.stopPropagation()}
           >
@@ -539,19 +548,6 @@ export function TrayCompanion() {
                 <ArrowUpRight size={12} strokeWidth={1.8} />
               </button>
             )}
-            <button
-              type="button"
-              onPointerDown={(e) => e.stopPropagation()}
-              onClick={(e) => {
-                e.stopPropagation();
-                toggleMinimize();
-              }}
-              className="grid size-5 place-items-center rounded text-white/65 hover:bg-white/15 hover:text-white transition-colors cursor-pointer"
-              title={isMinimized ? "Restore Tray (—)" : "Minimize Tray (—)"}
-              aria-label={isMinimized ? "Restore Tray" : "Minimize Tray"}
-            >
-              <Minus size={12} strokeWidth={2.4} />
-            </button>
             <button
               type="button"
               onPointerDown={(e) => e.stopPropagation()}

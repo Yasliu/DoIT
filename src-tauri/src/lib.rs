@@ -158,6 +158,7 @@ pub fn run() {
             resize_tray_window,
             sync_tray_window_height,
             sync_tray_window_bounds,
+            snap_tray_window,
             set_tray_minimized,
             start_drag,
             save_tray_position,

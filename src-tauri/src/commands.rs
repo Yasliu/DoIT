@@ -626,7 +626,7 @@ pub fn resize_tray_window(app: AppHandle, expanded: bool) -> Result<(), String> 
 }
 
 #[tauri::command]
-pub fn sync_tray_window_bounds(
+pub fn snap_tray_window(
     app: AppHandle,
     logical_width: f64,
     logical_height: f64,
@@ -636,22 +636,16 @@ pub fn sync_tray_window_bounds(
             let scale = monitor.scale_factor();
             let target_w_phys = (logical_width * scale).round() as u32;
             let target_h_phys = (logical_height * scale).round() as u32;
-            let min_w_phys = (150.0 * scale).round() as u32;
-            let max_w_phys = (400.0 * scale).round() as u32;
-            let min_h_phys = (36.0 * scale).round() as u32;
-            let max_h_phys = (560.0 * scale).round() as u32;
-
-            let clamped_w = target_w_phys.clamp(min_w_phys, max_w_phys);
-            let clamped_h = target_h_phys.clamp(min_h_phys, max_h_phys);
 
             if let (Ok(cur_size), Ok(cur_pos)) = (tray_win.outer_size(), tray_win.outer_position()) {
-                let delta_x = cur_size.width as i32 - clamped_w as i32;
-                let delta_y = cur_size.height as i32 - clamped_h as i32;
+                let delta_x = cur_size.width as i32 - target_w_phys as i32;
+                let delta_y = cur_size.height as i32 - target_h_phys as i32;
 
                 if delta_x != 0 || delta_y != 0 {
+                    lock_window_transition(200);
                     let new_x = cur_pos.x + delta_x;
                     let new_y = cur_pos.y + delta_y;
-                    let _ = tray_win.set_size(tauri::Size::Physical(tauri::PhysicalSize::new(clamped_w, clamped_h)));
+                    let _ = tray_win.set_size(tauri::Size::Physical(tauri::PhysicalSize::new(target_w_phys, target_h_phys)));
                     let _ = tray_win.set_position(tauri::Position::Physical(tauri::PhysicalPosition::new(new_x, new_y)));
                 }
             }
@@ -661,12 +655,26 @@ pub fn sync_tray_window_bounds(
 }
 
 #[tauri::command]
+pub fn sync_tray_window_bounds(
+    app: AppHandle,
+    logical_width: f64,
+    logical_height: f64,
+) -> Result<(), String> {
+    snap_tray_window(app, logical_width, logical_height)
+}
+
+#[tauri::command]
 pub fn sync_tray_window_height(app: AppHandle, logical_height: f64) -> Result<(), String> {
-    sync_tray_window_bounds(app, 380.0, logical_height)
+    snap_tray_window(app, 380.0, logical_height)
 }
 
 #[tauri::command]
 pub fn set_tray_minimized(app: AppHandle, minimized: bool) -> Result<(), String> {
+    if minimized {
+        let _ = snap_tray_window(app.clone(), 180.0, 44.0);
+    } else {
+        let _ = snap_tray_window(app.clone(), 380.0, 480.0);
+    }
     if let Some(tray_win) = app.get_webview_window("tray") {
         let _ = tray_win.emit("set-expanded", !minimized);
     }

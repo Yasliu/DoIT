@@ -304,6 +304,15 @@ export const tauriApi = {
     }
   },
 
+  async snapTrayWindow(logicalWidth: number, logicalHeight: number): Promise<void> {
+    if (!isTauri()) return;
+    try {
+      await invoke("snap_tray_window", { logicalWidth, logicalHeight });
+    } catch (err) {
+      console.warn("snap_tray_window failed", err);
+    }
+  },
+
   async setTrayMinimized(minimized: boolean): Promise<void> {
     if (!isTauri()) return;
     try {
