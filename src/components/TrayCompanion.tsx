@@ -39,6 +39,7 @@ import { accentFor, cleanText, cx, relativeShort, uid } from "../lib/text";
 export function TrayCompanion() {
   const { notes, categories, patch, create, remove } = useWorkspace();
   const [isMinimized, setIsMinimized] = useState(false);
+  const [isClosing, setIsClosing] = useState(false);
   const [drawerOpen, setDrawerOpen] = useState(true);
   const [filter, setFilter] = useState("");
   const [selectedShelf, setSelectedShelf] = useState<string | null>(null);
@@ -472,27 +473,50 @@ export function TrayCompanion() {
 
   // ---- RENDER DESK TRAY WORKSPACE WITH 2D SPRING MORPHING ----
   return (
-    <div className="flex h-screen w-screen items-end justify-end p-0 m-0 overflow-hidden bg-transparent select-none">
+    <div
+      className="flex h-screen w-screen items-end justify-end p-0 m-0 overflow-hidden bg-transparent select-none"
+      style={{ background: "transparent", backgroundColor: "transparent" }}
+    >
       <motion.div
         ref={panelRef}
         animate={{
           width: isMinimized ? 180 : 380,
           height: isMinimized ? 44 : 480,
+          opacity: isClosing ? 0 : 1,
         }}
-        transition={{ type: "spring", bounce: 0, duration: 0.6 }}
-        onAnimationComplete={() => {
-          if (isMinimized) {
+        transition={{ type: "spring", bounce: 0, duration: 0.55 }}
+        onAnimationComplete={(definition: any) => {
+          if (isClosing) {
+            void getCurrentWindow().hide().then(() => {
+              setIsClosing(false);
+            });
+            return;
+          }
+          if (!isMinimized) return;
+          // Filter out child animations (which animate opacity/etc, not width: 180)
+          if (definition && typeof definition === "object" && "opacity" in definition && !("width" in definition)) {
+            return;
+          }
+          if (panelRef.current) {
+            const rect = panelRef.current.getBoundingClientRect();
+            // Confirm the spring physics calculations have settled down to target small bar metrics
+            if (rect.width <= 185 && rect.height <= 50) {
+              void tauriApi.snapTrayWindow(180, 44);
+            }
+          } else {
             void tauriApi.snapTrayWindow(180, 44);
           }
         }}
         onPaste={handlePaste}
         onContextMenu={handleContextMenu}
-        className="box-border flex flex-col overflow-hidden text-ink-1 rounded-2xl border border-white/10 select-none p-2.5 shadow-2xl scale-100 will-change-[width,height]"
+        className="box-border flex flex-col overflow-hidden text-ink-1 rounded-2xl border border-white/10 select-none p-2.5 shadow-2xl scale-100 will-change-[width,height,opacity]"
         style={{
           backgroundColor: "var(--theme-tray-bg)",
           backdropFilter: "var(--theme-tray-blur)",
           WebkitBackdropFilter: "var(--theme-tray-blur)",
-          boxShadow: "inset 0 0 0 1px var(--theme-tray-border), 0 40px 90px -30px rgba(0,0,0,0.95)",
+          boxShadow: isMinimized
+            ? "inset 0 0 0 1px var(--theme-tray-border), 0 10px 25px -5px rgba(0,0,0,0.5)"
+            : "inset 0 0 0 1px var(--theme-tray-border), 0 40px 90px -30px rgba(0,0,0,0.95)",
         }}
       >
         {/* 1. Fluid permanent top bar: Hold and drag to move, click to toggle minimize */}
@@ -553,7 +577,7 @@ export function TrayCompanion() {
               onPointerDown={(e) => e.stopPropagation()}
               onClick={(e) => {
                 e.stopPropagation();
-                void getCurrentWindow().hide();
+                setIsClosing(true);
               }}
               className="grid size-5 place-items-center rounded text-white/50 hover:bg-white/10 hover:text-white transition-colors cursor-pointer"
               title="Hide to System Tray (✕)"
@@ -566,7 +590,7 @@ export function TrayCompanion() {
 
         {/* Lower note collection container: smooth fade with 100% scale */}
         <AnimatePresence>
-          {!isMinimized && (
+          {!isMinimized && !isClosing && (
             <motion.div
               initial={{ opacity: 0 }}
               animate={{ opacity: 1 }}

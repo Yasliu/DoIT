@@ -220,3 +220,19 @@
   - Implemented `set_window_bounds_atomic` using native Win32 `SetWindowPos` (`SWP_NOZORDER | SWP_NOACTIVATE | SWP_NOOWNERZORDER`) in `src-tauri/src/commands.rs`.
   - Replaced disjoint two-step `set_size` and `set_position` sequences with single atomic OS window boundary updates, preventing 1-frame reposition tears when snapping to 180x44.
   - Synchronized Framer Motion exit animation (`duration: 0.15, ease: 'easeOut'`) for lower shelf and note contents so interior elements settle completely before the outer native window frame shrinks.
+
+
+### 20. Absolute Webview Transparency, Opening Flash Elimination & Closing Blink Lifecycle Synchronization (`index.html`, `src/styles/globals.css`, `src/main.tsx`, `src-tauri/src/lib.rs`, `src-tauri/src/main.rs`, `src/components/TrayCompanion.tsx`)
+- **Purged Opening Flash & Enforced Absolute Webview Transparency**:
+  - Enforced `background: transparent !important; background-color: transparent !important;` across `html`, `body`, and `#root` in `index.html` inline styles and `src/styles/globals.css`.
+  - Removed `<meta name="color-scheme" content="dark" />` from `index.html` to prevent Chromium/WebView2 from applying its default `#121212` canvas background prior to component rendering.
+  - Injected runtime zero-fill style assertions on `document.documentElement`, `document.body`, and `#root` inside `src/main.tsx`.
+  - Enforced `window.set_decorations(false)` and `window.set_shadow(false)` inside `.setup()` in `src-tauri/src/lib.rs` and coordinated via `src-tauri/src/main.rs`.
+  - Dynamically modulated `boxShadow` on the root motion container to prevent high-radius shadow blur clouds from bleeding outside the pill perimeter during expansion.
+- **Squashed Closing Blink via `onAnimationComplete` Timing Hooks**:
+  - Refactored frontend minimize and close routines: click handlers strictly manage reactive state (`isMinimized`, `isClosing`) and never prematurely invoke native window shrink or hide commands.
+  - Lower note collections cleanly drop opacity to 0 via `<AnimatePresence>` (`duration: 0.15, ease: 'easeOut'`) and unmount smoothly before outer panel spring completes.
+  - Bound `tauriApi.snapTrayWindow(180, 44)` strictly to Framer Motion's `<motion.div onAnimationComplete={(definition) => ...}>`:
+    * Filtered out bubbling child exit animation completions (such as `opacity: 0`).
+    * Verified that physical dimensions settled at target small bar metrics (`width <= 185px`, `height <= 50px`) prior to executing atomic Win32 `SetWindowPos` snap.
+  - Integrated `isClosing` lifecycle for hide action (✕) to animate container opacity to 0 smoothly before invoking `getCurrentWindow().hide()`, completely eradicating closing blink loops.

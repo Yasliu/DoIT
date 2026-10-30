@@ -106,8 +106,14 @@ pub fn run() {
             }
         })
         .setup(|app| {
+            // Force absolute transparency on window background wrapper layer
+            if let Some(tray_win) = app.get_webview_window("tray") {
+                let _ = tray_win.set_decorations(false);
+                let _ = tray_win.set_shadow(false);
+            }
             // Launch Window State Persistence Engine: Restore maximize state
             if let Some(main_win) = app.get_webview_window("main") {
+                let _ = main_win.set_decorations(false);
                 let storage = app.state::<StorageManager>();
                 if storage.get_is_maximized() {
                     let _ = main_win.maximize();

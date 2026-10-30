@@ -69,6 +69,8 @@
     scrollbar-width: none !important;
     -ms-overflow-style: none !important;
     zoom: 1 !important;
+    background: transparent !important;
+    background-color: transparent !important;
   }
   *, *::before, *::after {
     -webkit-tap-highlight-color: transparent !important;
@@ -130,16 +132,20 @@
   body,
   #root {
     height: 100%;
+    background: transparent !important;
+    background-color: transparent !important;
   }
 
   html {
-    background: transparent;
+    background: transparent !important;
+    background-color: transparent !important;
   }
 
   body {
     margin: 0;
     color: #f4f4f6;
-    background: transparent;
+    background: transparent !important;
+    background-color: transparent !important;
     font-family: "Instrument Sans", "Segoe UI Variable Text", "Segoe UI", system-ui, sans-serif;
     font-synthesis-weight: none;
     -webkit-font-smoothing: antialiased;
