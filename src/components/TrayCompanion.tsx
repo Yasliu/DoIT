@@ -75,6 +75,8 @@ export function TrayCompanion() {
 
   // Transition debouncing lock to eliminate click-through re-expansion loops
   const isTransitioning = useRef(false);
+  const visibilityLockRef = useRef<number>(0);
+  const [showSpawnIndicator, setShowSpawnIndicator] = useState(false);
 
   // Formatting popovers
   const [fontOpen, setFontOpen] = useState(false);
@@ -146,6 +148,22 @@ export function TrayCompanion() {
         document.documentElement.dataset.theme = s.theme_mode;
       }
     });
+  }, []);
+
+  // Listen for initial spawn position indicator signal
+  useEffect(() => {
+    let unlisten: (() => void) | null = null;
+    getCurrentWindow()
+      .listen("spawn-indicator", () => {
+        setShowSpawnIndicator(true);
+        window.setTimeout(() => setShowSpawnIndicator(false), 1400);
+      })
+      .then((fn) => {
+        unlisten = fn;
+      });
+    return () => {
+      if (unlisten) unlisten();
+    };
   }, []);
 
   // Global key navigation (Escape to minimize/step-back, Cmd/Ctrl+J to toggle)
@@ -380,6 +398,19 @@ export function TrayCompanion() {
     editActive({ content });
   };
 
+  const expandTray = () => {
+    if (Date.now() < visibilityLockRef.current) return;
+    visibilityLockRef.current = Date.now() + 400;
+    setExpanded(true);
+  };
+
+  const collapseTray = () => {
+    if (Date.now() < visibilityLockRef.current) return;
+    visibilityLockRef.current = Date.now() + 400;
+    setDrawerOpen(false);
+    setExpanded(false);
+  };
+
   // Pointer down handler for pill: click to expand, drag to move window anywhere on screen
   const pillDragRef = useRef({
     startX: 0,
@@ -389,6 +420,7 @@ export function TrayCompanion() {
 
   const handlePillPointerDown = (e: React.PointerEvent) => {
     if (e.button !== 0) return;
+    if (Date.now() < visibilityLockRef.current) return;
     const startX = e.screenX;
     const startY = e.screenY;
     pillDragRef.current = {
@@ -397,10 +429,14 @@ export function TrayCompanion() {
       moved: false,
     };
 
+    let isDragging = false;
+
     const onPointerMove = (ev: PointerEvent) => {
+      if (isDragging) return;
       const dx = ev.screenX - startX;
       const dy = ev.screenY - startY;
-      if (Math.hypot(dx, dy) > 8) {
+      if (Math.hypot(dx, dy) > 4) {
+        isDragging = true;
         pillDragRef.current.moved = true;
         window.removeEventListener("pointermove", onPointerMove);
         window.removeEventListener("pointerup", onPointerUp);
@@ -410,11 +446,14 @@ export function TrayCompanion() {
       }
     };
 
-    const onPointerUp = () => {
+    const onPointerUp = (upEv: PointerEvent) => {
       window.removeEventListener("pointermove", onPointerMove);
       window.removeEventListener("pointerup", onPointerUp);
       if (!pillDragRef.current.moved) {
-        setExpanded(true);
+        const dist = Math.hypot(upEv.screenX - startX, upEv.screenY - startY);
+        if (dist <= 4) {
+          expandTray();
+        }
       } else {
         void tauriApi.saveTrayPosition();
       }
@@ -467,31 +506,66 @@ export function TrayCompanion() {
     } catch {}
   };
 
-  // Top bar dragging and minimize handling for expanded tray
-  const topBarMoveRef = useRef({ startX: 0, startY: 0, moved: false });
+  // Top bar dragging and minimize handling for expanded tray: decoupled 4px threshold
   const handleTopBarPointerDown = (e: React.PointerEvent) => {
     if (e.button !== 0) return;
-    topBarMoveRef.current = { startX: e.screenX, startY: e.screenY, moved: false };
-    void tauriApi.beginDrag().then(() => {
-      void tauriApi.saveTrayPosition();
-    });
-  };
+    if (Date.now() < visibilityLockRef.current) return;
+    const startX = e.screenX;
+    const startY = e.screenY;
+    let isDragging = false;
 
-  const handleTopBarClick = () => {
-    setDrawerOpen(false);
-    setExpanded(false);
+    const onPointerMove = (moveEv: PointerEvent) => {
+      if (isDragging) return;
+      const dx = moveEv.screenX - startX;
+      const dy = moveEv.screenY - startY;
+      if (Math.hypot(dx, dy) > 4) {
+        isDragging = true;
+        window.removeEventListener("pointermove", onPointerMove);
+        window.removeEventListener("pointerup", onPointerUp);
+        void tauriApi.beginDrag().then(() => {
+          void tauriApi.saveTrayPosition();
+        });
+      }
+    };
+
+    const onPointerUp = (upEv: PointerEvent) => {
+      window.removeEventListener("pointermove", onPointerMove);
+      window.removeEventListener("pointerup", onPointerUp);
+      if (!isDragging) {
+        const dist = Math.hypot(upEv.screenX - startX, upEv.screenY - startY);
+        if (dist <= 4) {
+          collapseTray();
+        }
+      }
+    };
+
+    window.addEventListener("pointermove", onPointerMove);
+    window.addEventListener("pointerup", onPointerUp);
   };
 
   // ---- RENDER COLLAPSED PILL (ROUNDED RECTANGLE EDGES) ----
   if (!expanded) {
     return (
       <div className="flex h-full w-full items-center justify-center bg-transparent select-none p-2 relative">
+        {/* Soft fading radial spotlight ring (no hard border/edges) */}
+        {showSpawnIndicator && (
+          <div
+            className="pointer-events-none absolute inset-0 z-0 flex items-center justify-center"
+            style={{
+              animation: "radialCueFade 1.2s cubic-bezier(0.16, 1, 0.3, 1) forwards",
+            }}
+          >
+            <div
+              className="size-14 rounded-full [mask-image:radial-gradient(circle,black_20%,transparent_70%)]"
+              style={{
+                background: "radial-gradient(circle, rgba(255,255,255,0.3) 0%, rgba(255,255,255,0.08) 40%, transparent 70%)",
+              }}
+            />
+          </div>
+        )}
+
         <div
           onPointerDown={handlePillPointerDown}
-          onClick={() => {
-            if (pillDragRef.current.moved) return;
-            setExpanded(true);
-          }}
           onContextMenu={handleContextMenu}
           className={cx(
             "group/pill relative flex h-10 select-none items-center gap-2.5 rounded-xl pl-3 pr-2.5",
@@ -519,7 +593,7 @@ export function TrayCompanion() {
             onClick={(e) => {
               e.stopPropagation();
               handleCreate();
-              setExpanded(true);
+              expandTray();
             }}
             className="grid size-6 place-items-center rounded-lg text-white/50 transition-colors hover:bg-white/10 hover:text-white cursor-pointer ml-auto"
             title="New Note (⌘N)"
@@ -548,7 +622,6 @@ export function TrayCompanion() {
       {/* 1. Fluid unbordered top bar: Hold and drag to move, click to minimize */}
       <div
         onPointerDown={handleTopBarPointerDown}
-        onClick={handleTopBarClick}
         title="Tap to minimize · Hold and drag to move"
         className="flex h-7 shrink-0 items-center justify-between px-1 mb-2.5 select-none cursor-pointer group/topbar"
       >

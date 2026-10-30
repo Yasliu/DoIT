@@ -109,6 +109,7 @@ impl StorageManager {
                                 if let Some(ref f) = note.font_family {
                                     note.font_family = Some(crate::models::clean_yaml_scalar(f));
                                 }
+                                note.content.retain(|c| !(c.text.trim().eq_ignore_ascii_case("Line") && !c.is_todo));
                                 file_map.insert(note.id.clone(), path.clone());
                                 notes.push(note);
                             }

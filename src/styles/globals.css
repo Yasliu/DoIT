@@ -618,6 +618,21 @@
   }
 }
 
+@keyframes radialCueFade {
+  0% {
+    transform: scale(0.65);
+    opacity: 0;
+  }
+  30% {
+    transform: scale(1);
+    opacity: 1;
+  }
+  100% {
+    transform: scale(1.35);
+    opacity: 0;
+  }
+}
+
 @keyframes bubblePop {
   0% {
     opacity: 0;
