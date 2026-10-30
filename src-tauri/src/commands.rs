@@ -244,6 +244,13 @@ pub async fn pick_and_scan_folder(
 
 #[tauri::command]
 pub fn toggle_window_minimize(window: Window) -> Result<(), String> {
+    if window.label() == "main" {
+        if let Ok(is_max) = window.is_maximized() {
+            let app = window.app_handle();
+            let storage = app.state::<StorageManager>();
+            let _ = storage.set_is_maximized(is_max);
+        }
+    }
     window.minimize().map_err(|e| e.to_string())
 }
 
@@ -363,17 +370,55 @@ pub fn position_tray_on_monitor(
         let final_x = m_pos.x + expanded_offset.x;
         let final_y = m_pos.y + expanded_offset.y;
 
-        let _ = window.set_size(tauri::Size::Physical(tauri::PhysicalSize::new(expanded_w_phys as u32, expanded_h_phys as u32)));
-        let _ = window.set_position(tauri::Position::Physical(tauri::PhysicalPosition::new(final_x, final_y)));
+        set_window_bounds_atomic(window, final_x, final_y, expanded_w_phys as u32, expanded_h_phys as u32);
     } else {
         drop(mem);
 
         let final_x = m_pos.x + active_pill_offset.x;
         let final_y = m_pos.y + active_pill_offset.y;
 
-        let _ = window.set_size(tauri::Size::Physical(tauri::PhysicalSize::new(small_w_phys as u32, small_h_phys as u32)));
-        let _ = window.set_position(tauri::Position::Physical(tauri::PhysicalPosition::new(final_x, final_y)));
+        set_window_bounds_atomic(window, final_x, final_y, small_w_phys as u32, small_h_phys as u32);
     }
+}
+
+#[cfg(windows)]
+pub fn set_window_bounds_atomic(window: &tauri::WebviewWindow, x: i32, y: i32, w: u32, h: u32) {
+    if let Ok(hwnd) = window.hwnd() {
+        unsafe extern "system" {
+            fn SetWindowPos(
+                hwnd: *mut std::ffi::c_void,
+                hwnd_insert_after: *mut std::ffi::c_void,
+                x: i32,
+                y: i32,
+                cx: i32,
+                cy: i32,
+                flags: u32,
+            ) -> i32;
+        }
+        const SWP_NOZORDER: u32 = 0x0004;
+        const SWP_NOACTIVATE: u32 = 0x0010;
+        const SWP_NOOWNERZORDER: u32 = 0x0200;
+        unsafe {
+            SetWindowPos(
+                hwnd.0,
+                std::ptr::null_mut(),
+                x,
+                y,
+                w as i32,
+                h as i32,
+                SWP_NOZORDER | SWP_NOACTIVATE | SWP_NOOWNERZORDER,
+            );
+        }
+        return;
+    }
+    let _ = window.set_size(tauri::Size::Physical(tauri::PhysicalSize::new(w, h)));
+    let _ = window.set_position(tauri::Position::Physical(tauri::PhysicalPosition::new(x, y)));
+}
+
+#[cfg(not(windows))]
+pub fn set_window_bounds_atomic(window: &tauri::WebviewWindow, x: i32, y: i32, w: u32, h: u32) {
+    let _ = window.set_size(tauri::Size::Physical(tauri::PhysicalSize::new(w, h)));
+    let _ = window.set_position(tauri::Position::Physical(tauri::PhysicalPosition::new(x, y)));
 }
 
 pub fn position_tray_window(app: &AppHandle, window: &tauri::WebviewWindow, expanded: bool) {
@@ -409,6 +454,9 @@ pub fn open_tray_mode(app: AppHandle) -> Result<(), String> {
             size,
             monitor_name,
         });
+
+        let storage = app.state::<StorageManager>();
+        let _ = storage.set_is_maximized(is_maximized);
         mon
     } else {
         None
@@ -615,11 +663,9 @@ pub fn resize_tray_window(app: AppHandle, expanded: bool) -> Result<(), String> 
         lock_window_transition(350);
 
         if expanded {
-            let _ = tray_win.set_size(tauri::Size::Physical(tauri::PhysicalSize::new(expanded_w_phys, expanded_h_phys)));
-            let _ = tray_win.set_position(tauri::Position::Physical(target_pos));
+            set_window_bounds_atomic(&tray_win, target_pos.x, target_pos.y, expanded_w_phys, expanded_h_phys);
         } else {
-            let _ = tray_win.set_size(tauri::Size::Physical(tauri::PhysicalSize::new(small_w_phys, small_h_phys)));
-            let _ = tray_win.set_position(tauri::Position::Physical(target_pos));
+            set_window_bounds_atomic(&tray_win, target_pos.x, target_pos.y, small_w_phys, small_h_phys);
         }
     }
     Ok(())
@@ -645,8 +691,7 @@ pub fn snap_tray_window(
                     lock_window_transition(200);
                     let new_x = cur_pos.x + delta_x;
                     let new_y = cur_pos.y + delta_y;
-                    let _ = tray_win.set_size(tauri::Size::Physical(tauri::PhysicalSize::new(target_w_phys, target_h_phys)));
-                    let _ = tray_win.set_position(tauri::Position::Physical(tauri::PhysicalPosition::new(new_x, new_y)));
+                    set_window_bounds_atomic(&tray_win, new_x, new_y, target_w_phys, target_h_phys);
                 }
             }
         }
@@ -759,6 +804,12 @@ pub fn restart_app(app: AppHandle) {
 
 #[tauri::command]
 pub fn quit_app(app: AppHandle) {
+    if let Some(main_win) = app.get_webview_window("main") {
+        if let Ok(is_max) = main_win.is_maximized() {
+            let storage = app.state::<StorageManager>();
+            let _ = storage.set_is_maximized(is_max);
+        }
+    }
     app.exit(0);
 }
 

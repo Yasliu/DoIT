@@ -73,6 +73,8 @@ pub struct AppSettings {
     pub hotkey_open_file: String,
     #[serde(default = "default_theme_mode")]
     pub theme_mode: String,
+    #[serde(default)]
+    pub is_maximized: bool,
 }
 
 fn default_hotkey_open_file() -> String {
@@ -116,6 +118,7 @@ impl Default for AppSettings {
             hotkey_settings: "Ctrl+,".to_string(),
             hotkey_open_file: "Ctrl+O".to_string(),
             theme_mode: "glass".to_string(),
+            is_maximized: false,
         }
     }
 }

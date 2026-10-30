@@ -30,6 +30,20 @@ pub fn run() {
                 }
             }
 
+            if let tauri::WindowEvent::Resized(_) = event {
+                if label == "main" {
+                    if let Ok(is_min) = window.is_minimized() {
+                        if !is_min {
+                            if let Ok(is_max) = window.is_maximized() {
+                                let app = window.app_handle();
+                                let storage = app.state::<StorageManager>();
+                                let _ = storage.set_is_maximized(is_max);
+                            }
+                        }
+                    }
+                }
+            }
+
             if let tauri::WindowEvent::CloseRequested { api, .. } = event {
                 // Always prevent native close — we manage visibility ourselves
                 api.prevent_close();
@@ -50,6 +64,9 @@ pub fn run() {
                                 .ok()
                                 .flatten()
                                 .and_then(|m| m.name().cloned());
+
+                            let storage = app.state::<StorageManager>();
+                            let _ = storage.set_is_maximized(is_maximized);
 
                             *SAVED_MAIN_WINDOW_STATE.lock().unwrap() = Some(MainWindowState {
                                 is_maximized,
@@ -77,12 +94,25 @@ pub fn run() {
                     let _ = open_canvas_mode(app.clone());
                 }
                 "quit" => {
+                    if let Some(main_win) = app.get_webview_window("main") {
+                        if let Ok(is_max) = main_win.is_maximized() {
+                            let storage = app.state::<StorageManager>();
+                            let _ = storage.set_is_maximized(is_max);
+                        }
+                    }
                     app.exit(0);
                 }
                 _ => {}
             }
         })
         .setup(|app| {
+            // Launch Window State Persistence Engine: Restore maximize state
+            if let Some(main_win) = app.get_webview_window("main") {
+                let storage = app.state::<StorageManager>();
+                if storage.get_is_maximized() {
+                    let _ = main_win.maximize();
+                }
+            }
             // Native Windows taskbar notification tray icon
             let show_item = MenuItem::with_id(app, "show", "Open Canvas", true, None::<&str>)?;
             let tray_item = MenuItem::with_id(app, "tray", "Switch to Desk Tray", true, None::<&str>)?;

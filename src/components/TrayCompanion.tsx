@@ -501,7 +501,7 @@ export function TrayCompanion() {
           title="Tap to toggle minimize · Hold and drag to move"
           className="flex h-6 w-full shrink-0 items-center justify-between px-1 select-none cursor-pointer group/topbar scale-100 overflow-hidden"
         >
-          <div className="flex items-center gap-2 pointer-events-none min-w-0 overflow-hidden h-full">
+          <div className="flex items-center gap-2 pointer-events-none min-w-0 overflow-hidden h-full whitespace-nowrap">
             {activeNote && !isMinimized ? (
               <button
                 type="button"
@@ -510,11 +510,11 @@ export function TrayCompanion() {
                   e.stopPropagation();
                   handleBack();
                 }}
-                className="flex items-center gap-1 h-5 rounded px-1 -ml-1 text-[10px] font-mono text-white/60 hover:bg-white/10 hover:text-white transition-colors cursor-pointer pointer-events-auto shrink-0"
+                className="flex items-center gap-1 h-5 rounded px-1 -ml-1 text-[10px] font-mono text-white/60 hover:bg-white/10 hover:text-white transition-colors cursor-pointer pointer-events-auto shrink-0 whitespace-nowrap"
                 title="Back to notes list"
               >
-                <ArrowLeft size={11} />
-                <span>Back</span>
+                <ArrowLeft size={11} className="shrink-0" />
+                <span className="whitespace-nowrap overflow-hidden text-ellipsis truncate">Back</span>
               </button>
             ) : (
               <div className="flex items-center justify-center shrink-0 size-3.5">
@@ -522,7 +522,7 @@ export function TrayCompanion() {
               </div>
             )}
             <span
-              className="font-mono text-[9.5px] font-semibold uppercase tracking-[0.14em] text-white/70 group-hover/topbar:text-white/95 transition-colors truncate select-none leading-none flex items-center"
+              className="font-mono text-[9.5px] font-semibold uppercase tracking-[0.14em] text-white/70 group-hover/topbar:text-white/95 transition-colors whitespace-nowrap overflow-hidden text-ellipsis truncate select-none leading-none flex items-center"
             >
               {activeNote && !isMinimized ? "EDIT NOTE" : "DESK TRAY"}
             </span>
@@ -570,7 +570,7 @@ export function TrayCompanion() {
             <motion.div
               initial={{ opacity: 0 }}
               animate={{ opacity: 1 }}
-              exit={{ opacity: 0 }}
+              exit={{ opacity: 0, transition: { duration: 0.15, ease: "easeOut" } }}
               transition={{ duration: 0.2 }}
               className="pt-2 flex flex-1 flex-col overflow-hidden min-h-0 scale-100"
             >
@@ -936,20 +936,20 @@ export function TrayCompanion() {
           <button
             type="button"
             onClick={handleCreate}
-            className="flex h-11 w-full items-center gap-2.5 rounded-[14px] bg-white/[0.07] px-3.5 text-[13px] font-medium text-white/90 shadow-[inset_0_0_0_1px_rgba(255,255,255,0.08)] transition-all hover:bg-white/[0.12] active:scale-[0.99] scale-100 cursor-pointer"
+            className="flex h-11 w-full items-center gap-2.5 rounded-[14px] bg-white/[0.07] px-3.5 text-[13px] font-medium text-white/90 shadow-[inset_0_0_0_1px_rgba(255,255,255,0.08)] transition-all hover:bg-white/[0.12] active:scale-[0.99] scale-100 cursor-pointer whitespace-nowrap overflow-hidden text-ellipsis truncate"
           >
-            <span className="inline-flex">
-              <Plus size={15} strokeWidth={2} className="text-white/80" />
+            <span className="inline-flex shrink-0">
+              <Plus size={15} strokeWidth={2} className="text-white/80 shrink-0" />
             </span>
-            <span>New note</span>
-            <span className="ml-auto rounded-md bg-white/[0.06] px-1.5 py-0.5 font-mono text-[10px] text-white/40 border border-white/[0.08]">
+            <span className="whitespace-nowrap overflow-hidden text-ellipsis truncate">New note</span>
+            <span className="ml-auto shrink-0 whitespace-nowrap rounded-md bg-white/[0.06] px-1.5 py-0.5 font-mono text-[10px] text-white/40 border border-white/[0.08]">
               ⌘N
             </span>
           </button>
 
           {/* Pull up an old note input matching Screenshot 3 */}
           <div
-            className="relative flex items-center h-11 w-full rounded-[14px] bg-white/[0.035] px-3.5 shadow-[inset_0_0_0_1px_rgba(255,255,255,0.06)] transition-all focus-within:bg-white/[0.06] focus-within:shadow-[inset_0_0_0_1px_rgba(255,255,255,0.14)] scale-100"
+            className="relative flex items-center h-11 w-full rounded-[14px] bg-white/[0.035] px-3.5 shadow-[inset_0_0_0_1px_rgba(255,255,255,0.06)] transition-all focus-within:bg-white/[0.06] focus-within:shadow-[inset_0_0_0_1px_rgba(255,255,255,0.14)] scale-100 whitespace-nowrap overflow-hidden"
           >
             <Search size={14} className="text-white/35 mr-2.5 pointer-events-none shrink-0" />
             <input
@@ -957,13 +957,13 @@ export function TrayCompanion() {
               value={filter}
               onChange={(e) => setFilter(e.target.value)}
               placeholder="Pull up an old note"
-              className="flex-1 bg-transparent text-[13px] text-white/90 placeholder:text-white/30 outline-none min-w-0"
+              className="flex-1 bg-transparent text-[13px] text-white/90 placeholder:text-white/30 outline-none min-w-0 whitespace-nowrap overflow-hidden text-ellipsis truncate"
             />
             {filter ? (
               <button
                 type="button"
                 onClick={() => setFilter("")}
-                className="text-white/40 hover:text-white p-1"
+                className="text-white/40 hover:text-white p-1 shrink-0"
               >
                 <X size={12} />
               </button>
@@ -972,16 +972,16 @@ export function TrayCompanion() {
                 type="button"
                 onClick={() => setDrawerOpen((prev) => !prev)}
                 className={cx(
-                  "ml-auto flex items-center gap-1 rounded-md px-1.5 py-0.5 font-mono text-[9.5px] uppercase tracking-wider transition-colors border scale-100 cursor-pointer",
+                  "ml-auto flex items-center gap-1 rounded-md px-1.5 py-0.5 font-mono text-[9.5px] uppercase tracking-wider transition-colors border scale-100 cursor-pointer shrink-0 whitespace-nowrap",
                   drawerOpen || selectedShelf
                     ? "bg-white/15 text-white border-white/25"
                     : "bg-white/[0.04] text-white/40 border-white/[0.06] hover:text-white/70 hover:bg-white/[0.08]",
                 )}
                 title="Toggle Category Filter Drawer"
               >
-                <span>{selectedShelf ? selectedShelf : "FIND"}</span>
+                <span className="whitespace-nowrap overflow-hidden text-ellipsis truncate">{selectedShelf ? selectedShelf : "FIND"}</span>
                 <span
-                  className="inline-flex transition-transform duration-200"
+                  className="inline-flex transition-transform duration-200 shrink-0"
                   style={{ transform: drawerOpen ? "rotate(180deg)" : "rotate(0deg)" }}
                 >
                   <ChevronDown size={10} />
@@ -1015,7 +1015,7 @@ export function TrayCompanion() {
                       if (!dragScrollState.current.moved) setSelectedShelf(null);
                     }}
                     className={cx(
-                      "shrink-0 px-2.5 py-1 rounded-full text-[10.5px] font-mono uppercase tracking-wider transition-all cursor-pointer",
+                      "shrink-0 px-2.5 py-1 rounded-full text-[10.5px] font-mono uppercase tracking-wider transition-all cursor-pointer whitespace-nowrap overflow-hidden text-ellipsis truncate",
                       selectedShelf === null
                         ? "bg-white/20 text-white font-medium border border-white/25 shadow-sm"
                         : "bg-white/[0.04] text-white/50 hover:bg-white/[0.08] hover:text-white/80 border border-white/[0.06]",
@@ -1036,14 +1036,14 @@ export function TrayCompanion() {
                           }
                         }}
                         className={cx(
-                          "shrink-0 flex items-center gap-1.5 px-2.5 py-1 rounded-full text-[10.5px] font-mono uppercase tracking-wider transition-all cursor-pointer",
+                          "shrink-0 flex items-center gap-1.5 px-2.5 py-1 rounded-full text-[10.5px] font-mono uppercase tracking-wider transition-all cursor-pointer whitespace-nowrap overflow-hidden text-ellipsis truncate",
                           active
                             ? "bg-white/20 text-white font-medium border border-white/25 shadow-sm"
                             : "bg-white/[0.04] text-white/50 hover:bg-white/[0.08] hover:text-white/80 border border-white/[0.06]",
                         )}
                       >
-                        <span className="size-1.5 rounded-full" style={{ backgroundColor: accent }} />
-                        <span>{shelf}</span>
+                        <span className="size-1.5 rounded-full shrink-0" style={{ backgroundColor: accent }} />
+                        <span className="whitespace-nowrap overflow-hidden text-ellipsis truncate">{shelf}</span>
                       </button>
                     );
                   })}
@@ -1053,8 +1053,8 @@ export function TrayCompanion() {
           </AnimatePresence>
 
           {/* RECENT Label matching Screenshot 3 */}
-          <div className="pt-1.5 px-1 scale-100">
-            <span className="font-mono text-[9.5px] uppercase tracking-[0.16em] text-white/30">
+          <div className="pt-1.5 px-1 scale-100 whitespace-nowrap overflow-hidden">
+            <span className="font-mono text-[9.5px] uppercase tracking-[0.16em] text-white/30 whitespace-nowrap overflow-hidden text-ellipsis truncate">
               RECENT
             </span>
           </div>
@@ -1062,7 +1062,7 @@ export function TrayCompanion() {
           {/* Recent Notes List matching Screenshot 3 */}
           <div className="flex-1 overflow-y-auto space-y-0.5 scroll pr-0.5 scale-100">
             {filteredNotes.length === 0 ? (
-              <p className="py-6 text-center text-[11.5px] text-white/35">
+              <p className="py-6 text-center text-[11.5px] text-white/35 whitespace-nowrap overflow-hidden text-ellipsis truncate">
                 No matching notes found.
               </p>
             ) : (
@@ -1072,20 +1072,20 @@ export function TrayCompanion() {
                     key={note.id}
                     type="button"
                     onClick={() => openNoteById(note.id)}
-                    className="flex w-full items-center gap-3 rounded-[12px] px-2 py-2 text-left transition-colors hover:bg-white/[0.05] group scale-100 cursor-pointer"
+                    className="flex w-full items-center gap-3 rounded-[12px] px-2 py-2 text-left transition-colors hover:bg-white/[0.05] group scale-100 cursor-pointer whitespace-nowrap overflow-hidden"
                   >
                     <span
                       className="h-7 w-[2px] shrink-0 rounded-full bg-white/70 group-hover:bg-white transition-colors"
                     />
-                    <div className="min-w-0 flex-1">
-                      <span className="block truncate text-[13px] font-medium text-white/90">
+                    <div className="min-w-0 flex-1 whitespace-nowrap overflow-hidden text-ellipsis truncate">
+                      <span className="block text-[13px] font-medium text-white/90 whitespace-nowrap overflow-hidden text-ellipsis truncate">
                         {cleanText(note.title) || "Untitled"}
                       </span>
-                      <span className="block truncate font-mono text-[8.5px] uppercase tracking-[0.12em] text-white/35">
+                      <span className="block font-mono text-[8.5px] uppercase tracking-[0.12em] text-white/35 whitespace-nowrap overflow-hidden text-ellipsis truncate">
                         {cleanText(note.category)}
                       </span>
                     </div>
-                    <span className="shrink-0 font-mono text-[10px] tabular-nums text-white/35">
+                    <span className="shrink-0 font-mono text-[10px] tabular-nums text-white/35 whitespace-nowrap">
                       {relativeShort(note.last_edited)}
                     </span>
                   </button>
@@ -1095,27 +1095,27 @@ export function TrayCompanion() {
           </div>
 
           {/* Bottom Action Footer: Minimize to Pill and Open Canvas */}
-          <div className="pt-1.5 border-t border-white/[0.08] flex items-center justify-between px-2 scale-100">
+          <div className="pt-1.5 border-t border-white/[0.08] flex items-center justify-between px-2 scale-100 whitespace-nowrap overflow-hidden">
             <button
               type="button"
               onClick={() => {
                 toggleMinimize();
               }}
-              className="flex items-center gap-1.5 text-[11.5px] font-mono text-white/50 hover:text-white transition-colors cursor-pointer"
+              className="flex items-center gap-1.5 text-[11.5px] font-mono text-white/50 hover:text-white transition-colors cursor-pointer shrink-0 whitespace-nowrap"
               title="Minimize tray"
             >
-              <Minus size={12} strokeWidth={2.4} />
-              <span>Minimize</span>
+              <Minus size={12} strokeWidth={2.4} className="shrink-0" />
+              <span className="whitespace-nowrap overflow-hidden text-ellipsis truncate">Minimize</span>
             </button>
 
             <button
               type="button"
               onClick={() => void tauriApi.openCanvasMode()}
-              className="flex items-center gap-1 text-[11.5px] font-mono text-white/50 hover:text-white transition-colors cursor-pointer"
+              className="flex items-center gap-1 text-[11.5px] font-mono text-white/50 hover:text-white transition-colors cursor-pointer shrink-0 whitespace-nowrap"
               title="Maximize back to full canvas"
             >
-              <span>Canvas</span>
-              <ArrowUpRight size={12} strokeWidth={2} />
+              <span className="whitespace-nowrap overflow-hidden text-ellipsis truncate">Canvas</span>
+              <ArrowUpRight size={12} strokeWidth={2} className="shrink-0" />
             </button>
           </div>
         </motion.div>

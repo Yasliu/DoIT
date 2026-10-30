@@ -157,6 +157,26 @@ impl StorageManager {
         Ok((*lock).clone())
     }
 
+    pub fn get_is_maximized(&self) -> bool {
+        self.settings.read().map(|s| s.is_maximized).unwrap_or(false)
+    }
+
+    pub fn set_is_maximized(&self, is_maximized: bool) -> Result<(), String> {
+        let changed = {
+            let mut lock = self.settings.write().map_err(|e| e.to_string())?;
+            if lock.is_maximized != is_maximized {
+                lock.is_maximized = is_maximized;
+                true
+            } else {
+                false
+            }
+        };
+        if changed {
+            self.persist_settings()?;
+        }
+        Ok(())
+    }
+
     pub fn update_settings(&self, new_settings: AppSettings) -> Result<AppSettings, String> {
         let old_path = {
             let mut lock = self.settings.write().map_err(|e| e.to_string())?;
