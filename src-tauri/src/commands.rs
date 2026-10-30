@@ -308,10 +308,10 @@ pub fn position_tray_on_monitor(
     let m_pos = monitor.position(); // PhysicalPosition<i32> { x, y }
     let m_size = monitor.size();     // PhysicalSize<u32> { width, height }
 
-    let small_w_phys = (160.0 * scale_factor).round() as i32;
-    let small_h_phys = (64.0 * scale_factor).round() as i32;
+    let small_w_phys = (380.0 * scale_factor).round() as i32;
+    let small_h_phys = (52.0 * scale_factor).round() as i32;
     let expanded_w_phys = (380.0 * scale_factor).round() as i32;
-    let expanded_h_phys = (560.0 * scale_factor).round() as i32;
+    let expanded_h_phys = (520.0 * scale_factor).round() as i32;
 
     let margin_x = (24.0 * scale_factor).round() as i32;
     let margin_y = (72.0 * scale_factor).round() as i32;
@@ -647,6 +647,31 @@ pub fn sync_tray_window_height(app: AppHandle, logical_height: f64) -> Result<()
                 }
             }
         }
+    }
+    Ok(())
+}
+
+#[tauri::command]
+pub fn set_tray_minimized(app: AppHandle, minimized: bool) -> Result<(), String> {
+    if let Some(tray_win) = app.get_webview_window("tray") {
+        if let Ok(Some(monitor)) = tray_win.current_monitor() {
+            let scale = monitor.scale_factor();
+            let target_w_logical = 380.0;
+            let target_h_logical = if minimized { 52.0 } else { 520.0 };
+            let target_w_phys = (target_w_logical * scale).round() as u32;
+            let target_h_phys = (target_h_logical * scale).round() as u32;
+
+            if let (Ok(cur_size), Ok(cur_pos)) = (tray_win.outer_size(), tray_win.outer_position()) {
+                let delta_y = cur_size.height as i32 - target_h_phys as i32;
+                let new_y = cur_pos.y + delta_y;
+                lock_window_transition(250);
+                let _ = tray_win.set_size(tauri::Size::Physical(tauri::PhysicalSize::new(target_w_phys, target_h_phys)));
+                if delta_y != 0 {
+                    let _ = tray_win.set_position(tauri::Position::Physical(tauri::PhysicalPosition::new(cur_pos.x, new_y)));
+                }
+            }
+        }
+        let _ = tray_win.emit("set-expanded", !minimized);
     }
     Ok(())
 }

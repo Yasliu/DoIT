@@ -1,6 +1,6 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { getCurrentWindow } from "@tauri-apps/api/window";
-import { AnimatePresence, MotionConfig, motion } from "motion/react";
+import { AnimatePresence, motion } from "motion/react";
 import { Mark } from "./Mark";
 import {
   AlignLeft,
@@ -113,25 +113,11 @@ export function TrayCompanion() {
   const toggleMinimize = useCallback(() => {
     if (Date.now() < visibilityLockRef.current) return;
     visibilityLockRef.current = Date.now() + 350;
-    setIsMinimized((prev) => !prev);
-  }, []);
-
-  // Force native Tauri Rust window bounds to read real-time physical height changes of the webview DOM canvas continuously
-  useEffect(() => {
-    const node = panelRef.current;
-    if (!node) return;
-
-    const observer = new ResizeObserver((entries) => {
-      for (const entry of entries) {
-        const h = entry.borderBoxSize?.[0]?.blockSize ?? node.offsetHeight;
-        if (h > 0) {
-          void tauriApi.syncTrayWindowHeight(h);
-        }
-      }
+    setIsMinimized((prev) => {
+      const next = !prev;
+      void tauriApi.setTrayMinimized(next);
+      return next;
     });
-
-    observer.observe(node);
-    return () => observer.disconnect();
   }, []);
 
   // Synchronize with external Tauri expansion events
@@ -477,118 +463,110 @@ export function TrayCompanion() {
     window.addEventListener("pointerup", onPointerUp);
   };
 
-  // ---- RENDER DESK TRAY WORKSPACE WITH PERMANENT HEADER & SPRING BODY ----
+  // ---- RENDER DESK TRAY WORKSPACE WITH PERMANENT HEADER & EXPLICIT BOUNDS ----
   return (
-    <MotionConfig transition={{ type: "spring", bounce: 0, duration: 0.5 }}>
-      <motion.div
-        ref={panelRef}
-        layout
-        onPaste={handlePaste}
-        onContextMenu={handleContextMenu}
-        className="box-border flex h-auto max-h-full w-full flex-col overflow-hidden text-ink-1 rounded-2xl border border-white/10 select-none p-3 shadow-2xl"
-        style={{
-          backgroundColor: "var(--theme-tray-bg)",
-          backdropFilter: "var(--theme-tray-blur)",
-          WebkitBackdropFilter: "var(--theme-tray-blur)",
-          boxShadow: "inset 0 0 0 1px var(--theme-tray-border), 0 40px 90px -30px rgba(0,0,0,0.95)",
-        }}
+    <div
+      ref={panelRef}
+      onPaste={handlePaste}
+      onContextMenu={handleContextMenu}
+      className="box-border flex h-screen max-h-screen w-full flex-col overflow-hidden text-ink-1 rounded-2xl border border-white/10 select-none p-3 shadow-2xl scale-100"
+      style={{
+        backgroundColor: "var(--theme-tray-bg)",
+        backdropFilter: "var(--theme-tray-blur)",
+        WebkitBackdropFilter: "var(--theme-tray-blur)",
+        boxShadow: "inset 0 0 0 1px var(--theme-tray-border), 0 40px 90px -30px rgba(0,0,0,0.95)",
+      }}
+    >
+      {/* 1. Fluid permanent top bar: Hold and drag to move, click to toggle minimize */}
+      <div
+        onPointerDown={handleTopBarPointerDown}
+        title="Tap to toggle minimize · Hold and drag to move"
+        className="flex h-7 shrink-0 items-center justify-between px-1 mb-2.5 select-none cursor-pointer group/topbar scale-100"
       >
-        {/* 1. Fluid permanent top bar: Hold and drag to move, click to toggle minimize */}
-        <motion.div
-          layout
-          onPointerDown={handleTopBarPointerDown}
-          title="Tap to toggle minimize · Hold and drag to move"
-          className="flex h-7 shrink-0 items-center justify-between px-1 mb-2.5 select-none cursor-pointer group/topbar"
-        >
-          <div className="flex flex-1 items-center gap-2 py-1 pointer-events-none">
-            {activeNote ? (
-              <button
-                type="button"
-                onPointerDown={(e) => e.stopPropagation()}
-                onClick={(e) => {
-                  e.stopPropagation();
-                  handleBack();
-                }}
-                className="flex items-center gap-1 h-6 rounded-md px-1.5 -ml-1 text-[11px] font-mono text-white/60 hover:bg-white/10 hover:text-white transition-colors cursor-pointer pointer-events-auto"
-                title="Back to notes list"
-              >
-                <ArrowLeft size={12} />
-                <span>Back</span>
-              </button>
-            ) : (
-              <Mark size={14} className="shrink-0" />
-            )}
-            <span
-              className="font-mono text-[9.5px] font-semibold uppercase tracking-[0.16em] text-white/50 group-hover/topbar:text-white/80 transition-colors"
-            >
-              {activeNote ? "EDIT NOTE" : "DESK TRAY"}
-            </span>
-          </div>
-
-          <div
-            className="flex items-center gap-1 shrink-0 z-20"
-            onPointerDown={(e) => e.stopPropagation()}
-            onClick={(e) => e.stopPropagation()}
-          >
-            <button
-              type="button"
-              onPointerDown={(e) => e.stopPropagation()}
-              onClick={() => void tauriApi.openCanvasMode()}
-              className="grid size-6 place-items-center rounded-md text-white/50 hover:bg-white/10 hover:text-white transition-colors cursor-pointer"
-              title="Open Canvas"
-              aria-label="Open Canvas"
-            >
-              <ArrowUpRight size={13} strokeWidth={1.8} />
-            </button>
+        <div className="flex flex-1 items-center gap-2 py-1 pointer-events-none">
+          {activeNote ? (
             <button
               type="button"
               onPointerDown={(e) => e.stopPropagation()}
               onClick={(e) => {
                 e.stopPropagation();
-                toggleMinimize();
+                handleBack();
               }}
-              className="grid size-6 place-items-center rounded-md text-white/65 hover:bg-white/15 hover:text-white transition-colors cursor-pointer"
-              title={isMinimized ? "Restore Tray (—)" : "Minimize Tray (—)"}
-              aria-label={isMinimized ? "Restore Tray" : "Minimize Tray"}
+              className="flex items-center gap-1 h-6 rounded-md px-1.5 -ml-1 text-[11px] font-mono text-white/60 hover:bg-white/10 hover:text-white transition-colors cursor-pointer pointer-events-auto"
+              title="Back to notes list"
             >
-              <Minus size={13} strokeWidth={2.4} />
+              <ArrowLeft size={12} />
+              <span>Back</span>
             </button>
-            <button
-              type="button"
-              onPointerDown={(e) => e.stopPropagation()}
-              onClick={() => {
-                setIsMinimized(true);
-                window.setTimeout(() => {
-                  void getCurrentWindow().hide();
-                }, 150);
-              }}
-              className="grid size-6 place-items-center rounded-md text-white/50 hover:bg-white/10 hover:text-white transition-colors cursor-pointer"
-              title="Hide to System Tray (✕)"
-              aria-label="Hide to System Tray"
-            >
-              <X size={13} strokeWidth={1.8} />
-            </button>
-          </div>
-        </motion.div>
+          ) : (
+            <Mark size={14} className="shrink-0" />
+          )}
+          <span
+            className="font-mono text-[9.5px] font-semibold uppercase tracking-[0.16em] text-white/50 group-hover/topbar:text-white/80 transition-colors"
+          >
+            {activeNote ? "EDIT NOTE" : "DESK TRAY"}
+          </span>
+        </div>
 
-        {/* Collapsible content block using exact golden template spring configuration */}
-        <motion.div
-          layout
-          initial={{ opacity: 1, height: "auto" }}
-          animate={{ height: isMinimized ? 0 : "auto", opacity: isMinimized ? 0 : 1 }}
-          transition={{ type: "spring", bounce: 0, duration: 0.5 }}
-          className="overflow-hidden flex flex-col flex-1"
+        <div
+          className="flex items-center gap-1 shrink-0 z-20"
+          onPointerDown={(e) => e.stopPropagation()}
+          onClick={(e) => e.stopPropagation()}
         >
+          <button
+            type="button"
+            onPointerDown={(e) => e.stopPropagation()}
+            onClick={(e) => {
+              e.stopPropagation();
+              void tauriApi.openCanvasMode();
+            }}
+            className="grid size-6 place-items-center rounded-md text-white/50 hover:bg-white/10 hover:text-white transition-colors cursor-pointer"
+            title="Open Canvas"
+            aria-label="Open Canvas"
+          >
+            <ArrowUpRight size={13} strokeWidth={1.8} />
+          </button>
+          <button
+            type="button"
+            onPointerDown={(e) => e.stopPropagation()}
+            onClick={(e) => {
+              e.stopPropagation();
+              toggleMinimize();
+            }}
+            className="grid size-6 place-items-center rounded-md text-white/65 hover:bg-white/15 hover:text-white transition-colors cursor-pointer"
+            title={isMinimized ? "Restore Tray (—)" : "Minimize Tray (—)"}
+            aria-label={isMinimized ? "Restore Tray" : "Minimize Tray"}
+          >
+            <Minus size={13} strokeWidth={2.4} />
+          </button>
+          <button
+            type="button"
+            onPointerDown={(e) => e.stopPropagation()}
+            onClick={(e) => {
+              e.stopPropagation();
+              void getCurrentWindow().hide();
+            }}
+            className="grid size-6 place-items-center rounded-md text-white/50 hover:bg-white/10 hover:text-white transition-colors cursor-pointer"
+            title="Hide to System Tray (✕)"
+            aria-label="Hide to System Tray"
+          >
+            <X size={13} strokeWidth={1.8} />
+          </button>
+        </div>
+      </div>
+
+      {/* Lower note collection container: strictly 100% literal rendering size */}
+      {!isMinimized && (
+        <div className="flex flex-1 flex-col overflow-hidden min-h-0 scale-100">
           <AnimatePresence mode="wait" initial={false}>
             {activeNote ? (
           /* ---- IN-TRAY PROPER NOTE EDITOR ---- */
           <motion.div
             key={`editor-${activeNote.id}`}
-            layout
-            initial={{ opacity: 0, height: 0 }}
-            animate={{ opacity: 1, height: "auto" }}
-            exit={{ opacity: 0, height: 0 }}
-            className="flex flex-1 flex-col overflow-hidden px-1"
+            initial={{ opacity: 0 }}
+            animate={{ opacity: 1 }}
+            exit={{ opacity: 0 }}
+            className="flex flex-1 flex-col overflow-hidden px-1 scale-100"
           >
             {/* Note Toolbar: Type, Bold, Italic, Tasks/Text Mode, Image, Delete */}
             <div className="flex items-center justify-between gap-1 pb-2 border-b border-white/[0.07]">
@@ -933,36 +911,29 @@ export function TrayCompanion() {
         /* ---- DESK TRAY MAIN MENU (SCREENSHOT 3: CLEAN, UNCLUTTERED, OPEN PROFILE) ---- */
         <motion.div
           key="main-menu"
-          layout
-          initial={{ opacity: 0, height: 0 }}
-          animate={{ opacity: 1, height: "auto" }}
-          exit={{ opacity: 0, height: 0 }}
-          className="flex flex-1 flex-col overflow-hidden px-1 space-y-2"
+          initial={{ opacity: 0 }}
+          animate={{ opacity: 1 }}
+          exit={{ opacity: 0 }}
+          className="flex flex-1 flex-col overflow-hidden px-1 space-y-2 scale-100"
         >
           {/* + New note button matching Screenshot 3 */}
-          <motion.button
+          <button
             type="button"
-            layout
-            animate={{ scale: drawerOpen ? 0.98 : 1 }}
             onClick={handleCreate}
-            className="flex h-11 w-full items-center gap-2.5 rounded-[14px] bg-white/[0.07] px-3.5 text-[13px] font-medium text-white/90 shadow-[inset_0_0_0_1px_rgba(255,255,255,0.08)] transition-all hover:bg-white/[0.12] active:scale-[0.99]"
+            className="flex h-11 w-full items-center gap-2.5 rounded-[14px] bg-white/[0.07] px-3.5 text-[13px] font-medium text-white/90 shadow-[inset_0_0_0_1px_rgba(255,255,255,0.08)] transition-all hover:bg-white/[0.12] active:scale-[0.99] scale-100 cursor-pointer"
           >
-            <motion.span
-              animate={{ rotate: drawerOpen ? 90 : 0 }}
-              className="inline-flex"
-            >
+            <span className="inline-flex">
               <Plus size={15} strokeWidth={2} className="text-white/80" />
-            </motion.span>
+            </span>
             <span>New note</span>
             <span className="ml-auto rounded-md bg-white/[0.06] px-1.5 py-0.5 font-mono text-[10px] text-white/40 border border-white/[0.08]">
               ⌘N
             </span>
-          </motion.button>
+          </button>
 
           {/* Pull up an old note input matching Screenshot 3 */}
-          <motion.div
-            layout
-            className="relative flex items-center h-11 w-full rounded-[14px] bg-white/[0.035] px-3.5 shadow-[inset_0_0_0_1px_rgba(255,255,255,0.06)] transition-all focus-within:bg-white/[0.06] focus-within:shadow-[inset_0_0_0_1px_rgba(255,255,255,0.14)]"
+          <div
+            className="relative flex items-center h-11 w-full rounded-[14px] bg-white/[0.035] px-3.5 shadow-[inset_0_0_0_1px_rgba(255,255,255,0.06)] transition-all focus-within:bg-white/[0.06] focus-within:shadow-[inset_0_0_0_1px_rgba(255,255,255,0.14)] scale-100"
           >
             <Search size={14} className="text-white/35 mr-2.5 pointer-events-none shrink-0" />
             <input
@@ -981,13 +952,11 @@ export function TrayCompanion() {
                 <X size={12} />
               </button>
             ) : (
-              <motion.button
+              <button
                 type="button"
-                layout
-                animate={{ scale: drawerOpen ? 0.8 : 1 }}
                 onClick={() => setDrawerOpen((prev) => !prev)}
                 className={cx(
-                  "ml-auto flex items-center gap-1 rounded-md px-1.5 py-0.5 font-mono text-[9.5px] uppercase tracking-wider transition-colors border",
+                  "ml-auto flex items-center gap-1 rounded-md px-1.5 py-0.5 font-mono text-[9.5px] uppercase tracking-wider transition-colors border scale-100 cursor-pointer",
                   drawerOpen || selectedShelf
                     ? "bg-white/15 text-white border-white/25"
                     : "bg-white/[0.04] text-white/40 border-white/[0.06] hover:text-white/70 hover:bg-white/[0.08]",
@@ -995,26 +964,25 @@ export function TrayCompanion() {
                 title="Toggle Category Filter Drawer"
               >
                 <span>{selectedShelf ? selectedShelf : "FIND"}</span>
-                <motion.span
-                  className="inline-flex"
-                  animate={{ rotate: drawerOpen ? 180 : 0 }}
+                <span
+                  className="inline-flex transition-transform duration-200"
+                  style={{ transform: drawerOpen ? "rotate(180deg)" : "rotate(0deg)" }}
                 >
                   <ChevronDown size={10} />
-                </motion.span>
-              </motion.button>
+                </span>
+              </button>
             )}
-          </motion.div>
+          </div>
 
-          {/* Category Filter Drawer Container (Framer Motion height mapping) */}
+          {/* Category Filter Drawer Container */}
           <AnimatePresence initial={false}>
             {drawerOpen && (
               <motion.div
                 key="category-drawer-content"
-                layout
                 initial={{ opacity: 0, height: 0 }}
                 animate={{ opacity: 1, height: "auto" }}
                 exit={{ opacity: 0, height: 0 }}
-                className="overflow-hidden py-1"
+                className="overflow-hidden py-1 scale-100"
               >
                 <div
                   ref={grabScrollRef}
@@ -1031,7 +999,7 @@ export function TrayCompanion() {
                       if (!dragScrollState.current.moved) setSelectedShelf(null);
                     }}
                     className={cx(
-                      "shrink-0 px-2.5 py-1 rounded-full text-[10.5px] font-mono uppercase tracking-wider transition-all",
+                      "shrink-0 px-2.5 py-1 rounded-full text-[10.5px] font-mono uppercase tracking-wider transition-all cursor-pointer",
                       selectedShelf === null
                         ? "bg-white/20 text-white font-medium border border-white/25 shadow-sm"
                         : "bg-white/[0.04] text-white/50 hover:bg-white/[0.08] hover:text-white/80 border border-white/[0.06]",
@@ -1052,7 +1020,7 @@ export function TrayCompanion() {
                           }
                         }}
                         className={cx(
-                          "shrink-0 flex items-center gap-1.5 px-2.5 py-1 rounded-full text-[10.5px] font-mono uppercase tracking-wider transition-all",
+                          "shrink-0 flex items-center gap-1.5 px-2.5 py-1 rounded-full text-[10.5px] font-mono uppercase tracking-wider transition-all cursor-pointer",
                           active
                             ? "bg-white/20 text-white font-medium border border-white/25 shadow-sm"
                             : "bg-white/[0.04] text-white/50 hover:bg-white/[0.08] hover:text-white/80 border border-white/[0.06]",
@@ -1069,14 +1037,14 @@ export function TrayCompanion() {
           </AnimatePresence>
 
           {/* RECENT Label matching Screenshot 3 */}
-          <motion.div layout className="pt-1.5 px-1">
+          <div className="pt-1.5 px-1 scale-100">
             <span className="font-mono text-[9.5px] uppercase tracking-[0.16em] text-white/30">
               RECENT
             </span>
-          </motion.div>
+          </div>
 
           {/* Recent Notes List matching Screenshot 3 */}
-          <motion.div layout className="flex-1 overflow-y-auto space-y-0.5 scroll pr-0.5">
+          <div className="flex-1 overflow-y-auto space-y-0.5 scroll pr-0.5 scale-100">
             {filteredNotes.length === 0 ? (
               <p className="py-6 text-center text-[11.5px] text-white/35">
                 No matching notes found.
@@ -1084,12 +1052,11 @@ export function TrayCompanion() {
             ) : (
               filteredNotes.slice(0, 5).map((note) => {
                 return (
-                  <motion.button
+                  <button
                     key={note.id}
-                    layout
                     type="button"
                     onClick={() => openNoteById(note.id)}
-                    className="flex w-full items-center gap-3 rounded-[12px] px-2 py-2 text-left transition-colors hover:bg-white/[0.05] group"
+                    className="flex w-full items-center gap-3 rounded-[12px] px-2 py-2 text-left transition-colors hover:bg-white/[0.05] group scale-100 cursor-pointer"
                   >
                     <span
                       className="h-7 w-[2px] shrink-0 rounded-full bg-white/70 group-hover:bg-white transition-colors"
@@ -1105,17 +1072,16 @@ export function TrayCompanion() {
                     <span className="shrink-0 font-mono text-[10px] tabular-nums text-white/35">
                       {relativeShort(note.last_edited)}
                     </span>
-                  </motion.button>
+                  </button>
                 );
               })
             )}
-          </motion.div>
+          </div>
 
           {/* Bottom Action Footer: Minimize to Pill and Open Canvas */}
-          <motion.div layout className="pt-1.5 border-t border-white/[0.08] flex items-center justify-between px-2">
-            <motion.button
+          <div className="pt-1.5 border-t border-white/[0.08] flex items-center justify-between px-2 scale-100">
+            <button
               type="button"
-              layout
               onClick={() => {
                 toggleMinimize();
               }}
@@ -1124,23 +1090,23 @@ export function TrayCompanion() {
             >
               <Minus size={12} strokeWidth={2.4} />
               <span>Minimize</span>
-            </motion.button>
+            </button>
 
-            <motion.button
+            <button
               type="button"
-              layout
-              onClick={() => tauriApi.openCanvasMode()}
+              onClick={() => void tauriApi.openCanvasMode()}
               className="flex items-center gap-1 text-[11.5px] font-mono text-white/50 hover:text-white transition-colors cursor-pointer"
               title="Maximize back to full canvas"
             >
               <span>Canvas</span>
               <ArrowUpRight size={12} strokeWidth={2} />
-            </motion.button>
-          </motion.div>
+            </button>
+          </div>
         </motion.div>
       )}
       </AnimatePresence>
-      </motion.div>
+      </div>
+      )}
 
       {/* Lightbox Preview Modal with Full Interactive Zoom */}
       {previewImage && (
@@ -1243,7 +1209,6 @@ export function TrayCompanion() {
           </div>
         </div>
       )}
-      </motion.div>
-    </MotionConfig>
+    </div>
   );
 }

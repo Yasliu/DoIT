@@ -295,6 +295,15 @@ export const tauriApi = {
     }
   },
 
+  async setTrayMinimized(minimized: boolean): Promise<void> {
+    if (!isTauri()) return;
+    try {
+      await invoke("set_tray_minimized", { minimized });
+    } catch (err) {
+      console.warn("set_tray_minimized failed", err);
+    }
+  },
+
   async setMiniMode(mini: boolean): Promise<void> {
     if (!isTauri()) return;
     try {
