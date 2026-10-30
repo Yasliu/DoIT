@@ -1,5 +1,8 @@
 import React from "react";
 
+/**
+ * Renders inline markdown bold and italic formatting without raw asterisks.
+ */
 export function renderFormattedText(text: string): React.ReactNode {
   if (!text) return text;
   const tokenRegex = /(\*\*\*[^*]+?\*\*\*|\*\*[^*]+?\*\*|\*[^*]+?\*)/g;
@@ -33,72 +36,139 @@ export function renderFormattedText(text: string): React.ReactNode {
 }
 
 /**
- * Applies markdown wrapping (e.g. ** for bold, * for italic) to the currently focused input or textarea.
- * If text is selected, wraps or unwraps it.
- * If no text is selected, inserts prefix+suffix and places cursor in the middle so subsequent typing is formatted.
+ * Converts Markdown text (with **bold** and *italic*) into HTML for a contenteditable rich editor.
  */
-export function applyWrapToActiveElement(prefix: string, suffix: string = prefix): boolean {
-  let el = document.activeElement as HTMLInputElement | HTMLTextAreaElement | null;
-  if (!el || (el.tagName !== "INPUT" && el.tagName !== "TEXTAREA")) {
-    // If focus was lost due to clicking toolbar button, query the visible note textarea or active input
-    el = document.querySelector('textarea:not([disabled]), .line-input:focus, .line-input') as HTMLInputElement | HTMLTextAreaElement | null;
+export function markdownToHtml(md: string): string {
+  if (!md) return "<div><br></div>";
+  const lines = md.split("\n");
+  const htmlLines = lines.map((line) => {
+    if (!line) return "<div><br></div>";
+    let formatted = line
+      .replace(/&/g, "&amp;")
+      .replace(/</g, "&lt;")
+      .replace(/>/g, "&gt;");
+
+    // Replace bold+italic ***text*** -> <strong><em>text</em></strong>
+    formatted = formatted.replace(/\*\*\*([^*]+?)\*\*\*/g, "<strong><em>$1</em></strong>");
+    // Replace bold **text** -> <strong>text</strong>
+    formatted = formatted.replace(/\*\*([^*]+?)\*\*/g, "<strong>$1</strong>");
+    // Replace italic *text* -> <em>text</em>
+    formatted = formatted.replace(/(?<!\*)\*([^*]+?)\*(?!\*)/g, "<em>$1</em>");
+
+    return `<div>${formatted}</div>`;
+  });
+
+  return htmlLines.join("");
+}
+
+/**
+ * Converts rich contenteditable DOM back to clean Markdown without losing formatting.
+ */
+export function htmlToMarkdown(container: HTMLElement): string {
+  function processNode(node: Node): string {
+    if (node.nodeType === Node.TEXT_NODE) {
+      return node.textContent || "";
+    }
+    if (node.nodeType !== Node.ELEMENT_NODE) {
+      return "";
+    }
+
+    const el = node as HTMLElement;
+    const tag = el.tagName.toUpperCase();
+
+    if (tag === "BR") {
+      return "\n";
+    }
+
+    let inner = "";
+    for (const child of Array.from(el.childNodes)) {
+      inner += processNode(child);
+    }
+
+    const isBold =
+      tag === "STRONG" ||
+      tag === "B" ||
+      el.style.fontWeight === "bold" ||
+      parseInt(el.style.fontWeight, 10) >= 600;
+
+    const isItalic =
+      tag === "EM" ||
+      tag === "I" ||
+      el.style.fontStyle === "italic";
+
+    if (isBold && isItalic) {
+      const trimmed = inner.trim();
+      if (trimmed) {
+        const lead = inner.match(/^\s*/)?.[0] || "";
+        const trail = inner.match(/\s*$/)?.[0] || "";
+        return `${lead}***${trimmed}***${trail}`;
+      }
+    } else if (isBold) {
+      const trimmed = inner.trim();
+      if (trimmed) {
+        const lead = inner.match(/^\s*/)?.[0] || "";
+        const trail = inner.match(/\s*$/)?.[0] || "";
+        return `${lead}**${trimmed}**${trail}`;
+      }
+    } else if (isItalic) {
+      const trimmed = inner.trim();
+      if (trimmed) {
+        const lead = inner.match(/^\s*/)?.[0] || "";
+        const trail = inner.match(/\s*$/)?.[0] || "";
+        return `${lead}*${trimmed}*${trail}`;
+      }
+    }
+
+    if (tag === "DIV" || tag === "P") {
+      return inner + "\n";
+    }
+
+    return inner;
   }
-  if (!el || (el.tagName !== "INPUT" && el.tagName !== "TEXTAREA")) {
+
+  let result = "";
+  for (const child of Array.from(container.childNodes)) {
+    result += processNode(child);
+  }
+
+  // Normalize newlines
+  const normalized = result.replace(/\r\n/g, "\n");
+  // Remove single trailing newline added by last div
+  return normalized.endsWith("\n") ? normalized.slice(0, -1) : normalized;
+}
+
+/**
+ * Toggles bold in the active contenteditable editor or fallback input.
+ */
+export function toggleRichBold(): void {
+  document.execCommand("bold", false);
+}
+
+/**
+ * Toggles italic in the active contenteditable editor or fallback input.
+ */
+export function toggleRichItalic(): void {
+  document.execCommand("italic", false);
+}
+
+/**
+ * Queries whether bold is active at the current selection / caret position.
+ */
+export function isRichBoldActive(): boolean {
+  try {
+    return document.queryCommandState("bold");
+  } catch {
     return false;
   }
+}
 
-  const start = el.selectionStart ?? 0;
-  const end = el.selectionEnd ?? 0;
-  const val = el.value;
-  const selected = val.substring(start, end);
-  const before = val.substring(0, start);
-  const after = val.substring(end);
-
-  const prefixLen = prefix.length;
-  const suffixLen = suffix.length;
-
-  // Check if selected text is already wrapped
-  if (
-    selected.startsWith(prefix) &&
-    selected.endsWith(suffix) &&
-    selected.length >= prefixLen + suffixLen
-  ) {
-    const unwrapped = selected.substring(prefixLen, selected.length - suffixLen);
-    const nextVal = before + unwrapped + after;
-    el.value = nextVal;
-    el.dispatchEvent(new Event("input", { bubbles: true }));
-    el.setSelectionRange(start, start + unwrapped.length);
-    el.focus();
-    return true;
+/**
+ * Queries whether italic is active at the current selection / caret position.
+ */
+export function isRichItalicActive(): boolean {
+  try {
+    return document.queryCommandState("italic");
+  } catch {
+    return false;
   }
-
-  // Check if text immediately surrounding selection is wrapped
-  if (
-    start >= prefixLen &&
-    end + suffixLen <= val.length &&
-    val.substring(start - prefixLen, start) === prefix &&
-    val.substring(end, end + suffixLen) === suffix
-  ) {
-    const nextVal = val.substring(0, start - prefixLen) + selected + val.substring(end + suffixLen);
-    el.value = nextVal;
-    el.dispatchEvent(new Event("input", { bubbles: true }));
-    el.setSelectionRange(start - prefixLen, end - prefixLen);
-    el.focus();
-    return true;
-  }
-
-  // Wrap or insert
-  const wrapped = prefix + selected + suffix;
-  const nextVal = before + wrapped + after;
-  el.value = nextVal;
-  el.dispatchEvent(new Event("input", { bubbles: true }));
-
-  if (start === end) {
-    // Cursor placed in the middle so typing starts inside bold/italic
-    el.setSelectionRange(start + prefixLen, start + prefixLen);
-  } else {
-    el.setSelectionRange(start, start + wrapped.length);
-  }
-  el.focus();
-  return true;
 }

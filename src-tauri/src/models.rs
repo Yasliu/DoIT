@@ -83,19 +83,26 @@ fn default_theme_mode() -> String {
     "glass".to_string()
 }
 
+pub fn default_note_storage_path() -> String {
+    if let Some(profile) = std::env::var_os("USERPROFILE") {
+        let mut p = std::path::PathBuf::from(profile);
+        p.push("Documents");
+        p.push("DoIT");
+        p.to_string_lossy().to_string()
+    } else if let Some(app_data) = std::env::var_os("APPDATA") {
+        let mut p = std::path::PathBuf::from(app_data);
+        p.push("DoIT");
+        p.push("notes");
+        p.to_string_lossy().to_string()
+    } else {
+        "./doit_notes".to_string()
+    }
+}
+
 impl Default for AppSettings {
     fn default() -> Self {
-        let default_path = if let Some(app_data) = std::env::var_os("APPDATA") {
-            let mut p = std::path::PathBuf::from(app_data);
-            p.push("DoIT");
-            p.push("notes");
-            p.to_string_lossy().to_string()
-        } else {
-            "./doit_notes".to_string()
-        };
-
         Self {
-            storage_path: default_path,
+            storage_path: default_note_storage_path(),
             hotkey_new_note: "Ctrl+N".to_string(),
             hotkey_toggle_tray: "Ctrl+J".to_string(),
             hotkey_search: "Ctrl+F".to_string(),
@@ -134,21 +141,24 @@ pub fn clean_yaml_scalar(s: &str) -> String {
     for _ in 0..10 {
         let prev = val;
         val = val.trim();
+        while val.starts_with('\\') {
+            val = &val[1..];
+        }
+        while val.ends_with('\\') {
+            val = &val[..val.len() - 1];
+        }
+        val = val.trim();
         if (val.starts_with('"') && val.ends_with('"') && val.len() >= 2)
             || (val.starts_with('\'') && val.ends_with('\'') && val.len() >= 2)
         {
             val = &val[1..val.len() - 1];
-        }
-        val = val.trim();
-        if val.starts_with("\\\"") && val.ends_with("\\\"") && val.len() >= 4 {
-            val = &val[2..val.len() - 2];
         }
         val = val.trim_matches(|c| c == '"' || c == '\'' || c == '\\');
         if val == prev {
             break;
         }
     }
-    val.replace("\\\"", "\"").replace("\\\\", "\\").trim_matches(|c| c == '"' || c == '\'').to_string()
+    val.replace("\\\"", "").replace("\\\\", "").trim_matches(|c| c == '"' || c == '\'' || c == '\\').to_string()
 }
 pub fn sanitize_filename(name: &str) -> String {
     let cleaned_name = clean_yaml_scalar(name);
@@ -176,13 +186,13 @@ pub fn compute_markdown_filename(
     timestamp: i64,
     repeated_num: usize,
 ) -> String {
-    let cat_clean = sanitize_filename(if category.trim().is_empty() { "Architecture" } else { category.trim() });
+    let cat_clean = sanitize_filename(if category.trim().is_empty() { "Uncategorized" } else { category.trim() });
     let title_clean = sanitize_filename(if title.trim().is_empty() { "Untitled" } else { title.trim() });
     let date_str = format_date(timestamp);
     format!("{cat_clean} - {title_clean} - {date_str} - {repeated_num}.md")
 }
 
-pub const MAX_FILE_SIZE_BYTES: u64 = 2 * 1024 * 1024; // 2 MB
+pub const MAX_FILE_SIZE_BYTES: u64 = 30 * 1024 * 1024; // 30 MB
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct ScanSummary {
@@ -215,7 +225,8 @@ impl NoteItem {
         md.push_str(&format!("last_edited: {}\n", self.last_edited));
         md.push_str(&format!("repeated_num: {}\n", repeated_num));
         if let Some(ref font) = self.font_family {
-            md.push_str(&format!("font_family: \"{}\"\n", font));
+            let font_clean = clean_yaml_scalar(font);
+            md.push_str(&format!("font_family: \"{}\"\n", font_clean));
         }
         if let Some(bold) = self.is_bold {
             md.push_str(&format!("is_bold: {}\n", bold));
@@ -263,15 +274,13 @@ impl NoteItem {
 
         let mut frontmatter_map: std::collections::HashMap<String, String> = std::collections::HashMap::new();
         let mut closed = false;
-        let mut scanned_chars = first_line.len() + 1;
         let mut line_count = 1usize;
 
-        // Bounded scanning: maximum 20 lines or 1000 characters for frontmatter
+        // Bounded scanning: maximum 60 lines for frontmatter
         for line in lines.by_ref() {
             line_count += 1;
-            scanned_chars += line.len() + 1;
-            if line_count > 20 || scanned_chars > 1000 {
-                return Err("Invalid DoIT note: Frontmatter header exceeds boundary limit (maximum 20 lines or 1000 characters without closing '---').".to_string());
+            if line_count > 60 {
+                return Err("Invalid DoIT note: Frontmatter header exceeds boundary limit (maximum 60 lines without closing '---').".to_string());
             }
 
             let trimmed = line.trim();
@@ -435,7 +444,7 @@ impl NoteItem {
                     completed: false,
                 });
             } else {
-                if note_type == "checkbox" && trimmed.is_empty() {
+                if trimmed.is_empty() {
                     continue;
                 }
                 let is_todo = note_type == "checkbox";
@@ -483,7 +492,7 @@ impl NoteItem {
     fn parse_legacy_doit_markdown(content: &str, fallback_id: &str) -> Option<Self> {
         let mut id = fallback_id.to_string();
         let mut title = "Untitled".to_string();
-        let mut category = "Architecture".to_string();
+        let mut category = "Uncategorized".to_string();
         let mut last_edited = 0i64;
         let mut font_family = Some("Instrument Sans".to_string());
         let mut is_bold = Some(false);
@@ -565,6 +574,9 @@ impl NoteItem {
                     completed: false,
                 });
             } else {
+                if trimmed.is_empty() {
+                    continue;
+                }
                 content_items.push(ContentItem {
                     id: format!("item_{idx}"),
                     text: line.to_string(),
@@ -690,9 +702,9 @@ Hello world from standard markdown
 
     #[test]
     fn test_strict_validation_boundary_limits() {
-        // Exceeds 20 lines before closing delimiter
+        // Exceeds 60 lines before closing delimiter
         let mut excessive_lines = String::from("---\n");
-        for i in 0..25 {
+        for i in 0..65 {
             excessive_lines.push_str(&format!("field_{i}: value\n"));
         }
         excessive_lines.push_str("---\nbody\n");

@@ -89,9 +89,10 @@ export function NoteTile({
       </span>
 
       {(() => {
-        const images = (note.media_urls && note.media_urls.length > 0)
+        const rawImages = (note.media_urls && note.media_urls.length > 0)
           ? note.media_urls
           : (note.media_url ? [note.media_url] : []);
+        const images = rawImages.filter((img) => img && typeof img === "string" && img.trim().length > 0);
         if (images.length === 0) return null;
 
         if (images.length === 1) {

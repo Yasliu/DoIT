@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useRef, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { getCurrentWindow } from "@tauri-apps/api/window";
 import { Mark } from "./Mark";
 import {
@@ -26,6 +26,14 @@ import {
   tauriApi,
 } from "../api/tauriBridge";
 import { useWorkspace } from "../hooks/useWorkspace";
+import {
+  htmlToMarkdown,
+  isRichBoldActive,
+  isRichItalicActive,
+  markdownToHtml,
+  toggleRichBold,
+  toggleRichItalic,
+} from "../lib/format";
 import { accentFor, cleanText, cx, relativeShort, uid } from "../lib/text";
 
 export function TrayCompanion() {
@@ -74,9 +82,22 @@ export function TrayCompanion() {
   const [fontOpen, setFontOpen] = useState(false);
   const [shelfOpen, setShelfOpen] = useState(false);
   const [previewImage, setPreviewImage] = useState<string | null>(null);
+  const [zoomLevel, setZoomLevel] = useState<number>(1);
+  const [showSpawnIndicator, setShowSpawnIndicator] = useState<boolean>(false);
   const fileInputRef = useRef<HTMLInputElement | null>(null);
   const grabScrollRef = useRef<HTMLDivElement | null>(null);
   const dragScrollState = useRef({ isDown: false, startX: 0, scrollLeft: 0, moved: false });
+
+  // Rich text formatting state
+  const editorRef = useRef<HTMLDivElement | null>(null);
+  const [isBoldActive, setIsBoldActive] = useState<boolean>(false);
+  const [isItalicActive, setIsItalicActive] = useState<boolean>(false);
+  const lastActiveNoteIdRef = useRef<string | null>(null);
+
+  const updateActiveFormatting = () => {
+    setIsBoldActive(isRichBoldActive());
+    setIsItalicActive(isRichItalicActive());
+  };
 
   const activeNote = useMemo(
     () => notes.find((n) => n.id === activeNoteId) ?? null,
@@ -98,6 +119,8 @@ export function TrayCompanion() {
   // Synchronize with external Tauri expansion events (e.g. from open_tray_mode or window manager)
   useEffect(() => {
     let unlistenFn: (() => void) | null = null;
+    let unlistenIndicator: (() => void) | null = null;
+
     getCurrentWindow()
       .listen<boolean>("set-expanded", (event) => {
         setExpanded((prev) => {
@@ -112,8 +135,18 @@ export function TrayCompanion() {
         unlistenFn = unlisten;
       });
 
+    getCurrentWindow()
+      .listen("spawn-indicator", () => {
+        setShowSpawnIndicator(true);
+        window.setTimeout(() => setShowSpawnIndicator(false), 2400);
+      })
+      .then((unlisten) => {
+        unlistenIndicator = unlisten;
+      });
+
     return () => {
       if (unlistenFn) unlistenFn();
+      if (unlistenIndicator) unlistenIndicator();
     };
   }, []);
 
@@ -168,7 +201,7 @@ export function TrayCompanion() {
   }, [notes, selectedShelf, filter]);
 
   const handleCreate = () => {
-    const newNote = create(selectedShelf ?? "Architecture", false);
+    const newNote = create(selectedShelf ?? "Uncategorized", false);
     openNoteById(newNote.id);
   };
 
@@ -252,15 +285,34 @@ export function TrayCompanion() {
     });
   };
 
-  // Convert between text area text and ContentItem[]
-  const fullText = useMemo(() => {
-    if (!activeNote) return "";
-    return activeNote.content.map((c) => c.text).join("\n");
+  // Synchronize HTML into contenteditable when opening or switching notes
+  const initEditor = useCallback((node: HTMLDivElement | null) => {
+    editorRef.current = node;
+    if (node && activeNote && lastActiveNoteIdRef.current !== activeNote.id) {
+      lastActiveNoteIdRef.current = activeNote.id;
+      const md = activeNote.content.map((c) => c.text).join("\n");
+      node.innerHTML = markdownToHtml(md);
+    }
   }, [activeNote]);
 
-  const handleTextChange = (text: string) => {
-    if (!activeNote) return;
-    const lines = text.split("\n");
+  useEffect(() => {
+    if (!activeNote) {
+      lastActiveNoteIdRef.current = null;
+      return;
+    }
+    if (lastActiveNoteIdRef.current !== activeNote.id) {
+      lastActiveNoteIdRef.current = activeNote.id;
+      if (editorRef.current) {
+        const md = activeNote.content.map((c) => c.text).join("\n");
+        editorRef.current.innerHTML = markdownToHtml(md);
+      }
+    }
+  }, [activeNote]);
+
+  const handleEditorInput = () => {
+    if (!editorRef.current || !activeNote) return;
+    const md = htmlToMarkdown(editorRef.current);
+    const lines = md.split("\n");
     const content: ContentItem[] = lines.map((line, idx) => ({
       id: activeNote.content[idx]?.id ?? uid("line"),
       text: line,
@@ -268,6 +320,7 @@ export function TrayCompanion() {
       completed: false,
     }));
     editActive({ content });
+    updateActiveFormatting();
   };
 
   const isTasksMode = useMemo(() => {
@@ -328,14 +381,59 @@ export function TrayCompanion() {
     window.addEventListener("pointerup", onPointerUp);
   };
 
-  // ---- RENDER COLLAPSED PILL (CLEAN HORIZONTAL DESIGN) ----
+  // Top bar dragging & minimization handler for expanded tray
+  const topBarDragRef = useRef({
+    isDown: false,
+    startX: 0,
+    startY: 0,
+    moved: false,
+  });
+
+  const handleTopBarPointerDown = (e: React.PointerEvent) => {
+    if (e.button !== 0 || isTransitioning.current) return;
+    topBarDragRef.current = {
+      isDown: true,
+      startX: e.screenX,
+      startY: e.screenY,
+      moved: false,
+    };
+
+    const onPointerMove = (ev: PointerEvent) => {
+      if (!topBarDragRef.current.isDown) return;
+      const dx = ev.screenX - topBarDragRef.current.startX;
+      const dy = ev.screenY - topBarDragRef.current.startY;
+      if (Math.hypot(dx, dy) > 4) {
+        topBarDragRef.current.moved = true;
+        window.removeEventListener("pointermove", onPointerMove);
+        window.removeEventListener("pointerup", onPointerUp);
+        void tauriApi.startDrag().then(() => {
+          void tauriApi.saveTrayPosition();
+        });
+      }
+    };
+
+    const onPointerUp = () => {
+      window.removeEventListener("pointermove", onPointerMove);
+      window.removeEventListener("pointerup", onPointerUp);
+      if (topBarDragRef.current.isDown && !topBarDragRef.current.moved && !isTransitioning.current) {
+        setDrawerOpen(false);
+        setExpanded(false);
+      }
+      topBarDragRef.current.isDown = false;
+    };
+
+    window.addEventListener("pointermove", onPointerMove);
+    window.addEventListener("pointerup", onPointerUp);
+  };
+
+  // ---- RENDER COLLAPSED PILL (ROUNDED RECTANGLE EDGES) ----
   if (!expanded) {
     return (
-      <div className="flex h-full w-full items-center justify-center bg-transparent select-none p-2">
+      <div className="flex h-full w-full items-center justify-center bg-transparent select-none p-2 relative">
         <div
           onPointerDown={handlePillPointerDown}
           className={cx(
-            "group/pill flex h-10 select-none items-center gap-2.5 rounded-full pl-3 pr-2.5",
+            "group/pill relative flex h-10 select-none items-center gap-2.5 rounded-[14px] pl-3 pr-2.5",
             "cursor-pointer hover:border-white/40 transition-all shadow-2xl",
           )}
           style={{
@@ -347,6 +445,14 @@ export function TrayCompanion() {
           }}
           title="Click to open · Hold and drag to move"
         >
+          {/* Visual spawn indicator (pulse radar ripple) */}
+          {showSpawnIndicator && (
+            <>
+              <div className="absolute -inset-1.5 rounded-[18px] border-2 border-white/60 animate-ping pointer-events-none opacity-80" />
+              <div className="absolute -inset-1 rounded-[16px] shadow-[0_0_25px_rgba(255,255,255,0.7)] border border-white/80 animate-pulse pointer-events-none" />
+            </>
+          )}
+
           {/* Logo icon instead of circle dot */}
           <Mark size={16} className="pointer-events-none shrink-0" />
 
@@ -363,7 +469,7 @@ export function TrayCompanion() {
               handleCreate();
               setExpanded(true);
             }}
-            className="grid size-6 place-items-center rounded-full text-white/50 transition-colors hover:bg-white/10 hover:text-white cursor-pointer ml-auto"
+            className="grid size-6 place-items-center rounded-lg text-white/50 transition-colors hover:bg-white/10 hover:text-white cursor-pointer ml-auto"
             title="New Note (⌘N)"
             aria-label="New Note"
           >
@@ -386,25 +492,22 @@ export function TrayCompanion() {
         boxShadow: "inset 0 0 0 1px var(--theme-tray-border), 0 40px 90px -30px rgba(0,0,0,0.95)",
       }}
     >
-      {/* 1. Fluid unbordered top bar: Clicking top bar minimizes back to pill without closing active note */}
+      {/* 1. Fluid unbordered top bar: Hold and drag to move, click to minimize */}
       <div
-        onClick={() => {
-          if (isTransitioning.current) return;
-          setDrawerOpen(false);
-          setExpanded(false);
-        }}
-        title="Tap top bar to minimize"
+        onPointerDown={handleTopBarPointerDown}
+        title="Hold top to move · Tap to minimize"
         className="flex h-7 shrink-0 items-center justify-between px-1 mb-2.5 select-none cursor-pointer group/topbar"
       >
-        <div className="flex flex-1 items-center gap-2 py-1">
+        <div className="flex flex-1 items-center gap-2 py-1 pointer-events-none">
           {activeNote ? (
             <button
               type="button"
+              onPointerDown={(e) => e.stopPropagation()}
               onClick={(e) => {
                 e.stopPropagation();
                 handleBack();
               }}
-              className="flex items-center gap-1 h-6 rounded-md px-1.5 -ml-1 text-[11px] font-mono text-white/60 hover:bg-white/10 hover:text-white transition-colors cursor-pointer"
+              className="flex items-center gap-1 h-6 rounded-md px-1.5 -ml-1 text-[11px] font-mono text-white/60 hover:bg-white/10 hover:text-white transition-colors cursor-pointer pointer-events-auto"
               title="Back to notes list"
             >
               <ArrowLeft size={12} />
@@ -420,10 +523,12 @@ export function TrayCompanion() {
 
         <div
           className="flex items-center gap-1 shrink-0 z-20"
+          onPointerDown={(e) => e.stopPropagation()}
           onClick={(e) => e.stopPropagation()}
         >
           <button
             type="button"
+            onPointerDown={(e) => e.stopPropagation()}
             onClick={() => void tauriApi.openCanvasMode()}
             className="grid size-6 place-items-center rounded-md text-white/40 hover:bg-white/10 hover:text-white transition-colors cursor-pointer"
             title="Open Canvas"
@@ -433,6 +538,7 @@ export function TrayCompanion() {
           </button>
           <button
             type="button"
+            onPointerDown={(e) => e.stopPropagation()}
             onClick={() => {
               if (isTransitioning.current) return;
               setDrawerOpen(false);
@@ -446,6 +552,7 @@ export function TrayCompanion() {
           </button>
           <button
             type="button"
+            onPointerDown={(e) => e.stopPropagation()}
             onClick={() => {
               setDrawerOpen(false);
               setExpanded(false);
@@ -551,11 +658,12 @@ export function TrayCompanion() {
                 type="button"
                 onMouseDown={(e) => e.preventDefault()}
                 onClick={() => {
-                  const nextBold = !activeNote.is_bold;
-                  editActive({ is_bold: nextBold });
+                  toggleRichBold();
+                  setIsBoldActive(isRichBoldActive());
+                  handleEditorInput();
                 }}
-                className={cx("icon-btn !size-6 cursor-pointer", activeNote.is_bold && "!bg-white/20 !text-white")}
-                title="Toggle Bold"
+                className={cx("icon-btn !size-6 cursor-pointer", isBoldActive && "!bg-white/20 !text-white")}
+                title="Toggle Bold (Ctrl+B)"
               >
                 <Bold size={11.5} strokeWidth={2.4} />
               </button>
@@ -563,11 +671,12 @@ export function TrayCompanion() {
                 type="button"
                 onMouseDown={(e) => e.preventDefault()}
                 onClick={() => {
-                  const nextItalic = !activeNote.is_italic;
-                  editActive({ is_italic: nextItalic });
+                  toggleRichItalic();
+                  setIsItalicActive(isRichItalicActive());
+                  handleEditorInput();
                 }}
-                className={cx("icon-btn !size-6 cursor-pointer", activeNote.is_italic && "!bg-white/20 !text-white")}
-                title="Toggle Italic"
+                className={cx("icon-btn !size-6 cursor-pointer", isItalicActive && "!bg-white/20 !text-white")}
+                title="Toggle Italic (Ctrl+I)"
               >
                 <Italic size={11.5} strokeWidth={2.4} />
               </button>
@@ -634,16 +743,16 @@ export function TrayCompanion() {
             className="w-full mt-2.5 bg-transparent text-[16px] font-semibold text-ink-1 outline-none placeholder:text-ink-4/60"
             style={{
               fontFamily: fontStack(activeNote.font_family),
-              fontWeight: activeNote.is_bold ? 700 : 560,
-              fontStyle: activeNote.is_italic ? "italic" : "normal",
+              fontWeight: 560,
             }}
           />
 
           {/* Media preview if present */}
           {(() => {
-            const images = (activeNote.media_urls && activeNote.media_urls.length > 0)
+            const rawImages = (activeNote.media_urls && activeNote.media_urls.length > 0)
               ? activeNote.media_urls
               : (activeNote.media_url ? [activeNote.media_url] : []);
+            const images = rawImages.filter((img) => img && typeof img === "string" && img.trim().length > 0);
             if (images.length === 0) return null;
             return (
               <div className="mt-2">
@@ -651,15 +760,21 @@ export function TrayCompanion() {
                   {images.map((imgUrl, idx) => (
                     <div
                       key={`tray-img-${idx}`}
-                      onClick={() => setPreviewImage(imgUrl)}
-                      className="relative group aspect-video rounded-lg overflow-hidden bg-black/40 border border-white/10 flex items-center justify-center cursor-pointer hover:border-white/30 transition-all"
-                      title="Click to preview full image"
+                      onClick={() => {
+                        setPreviewImage(imgUrl);
+                        setZoomLevel(1);
+                      }}
+                      className="relative group aspect-video rounded-lg overflow-hidden bg-black/50 border border-white/10 flex items-center justify-center cursor-pointer hover:border-white/30 transition-all"
+                      title="Click to zoom & inspect full image"
                     >
                       <img
                         src={imgUrl}
                         alt=""
-                        className="w-full h-full object-cover rounded opacity-95 transition-transform duration-200 group-hover:scale-105"
-                        onError={(e) => (e.currentTarget.style.display = "none")}
+                        className="w-full h-full object-contain rounded opacity-95 transition-transform duration-200 group-hover:scale-105"
+                        onError={(e) => {
+                          const parent = e.currentTarget.parentElement;
+                          if (parent) parent.style.display = "none";
+                        }}
                       />
                       <button
                         type="button"
@@ -682,79 +797,74 @@ export function TrayCompanion() {
           {/* Editor: Basic Note freeform writing vs Tasks mode */}
           <div className="flex-1 min-h-0 mt-2 overflow-y-auto scroll">
             {!isTasksMode ? (
-              <textarea
-                value={fullText}
+              <div
+                ref={initEditor}
+                contentEditable
+                suppressContentEditableWarning
+                onInput={handleEditorInput}
                 onKeyDown={(e) => {
                   const meta = e.ctrlKey || e.metaKey;
                   if (meta && e.key.toLowerCase() === "b") {
                     e.preventDefault();
-                    editActive({ is_bold: !activeNote.is_bold });
-                  } else if (meta && e.key.toLowerCase() === "i") {
+                    toggleRichBold();
+                    setIsBoldActive(isRichBoldActive());
+                    handleEditorInput();
+                    return;
+                  }
+                  if (meta && e.key.toLowerCase() === "i") {
                     e.preventDefault();
-                    editActive({ is_italic: !activeNote.is_italic });
-                  } else if (e.key === "Enter") {
-                    const textarea = e.currentTarget;
-                    const val = textarea.value;
-                    const selStart = textarea.selectionStart;
-                    const selEnd = textarea.selectionEnd;
-
-                    const lineStart = val.lastIndexOf("\n", selStart - 1) + 1;
-                    const currentLine = val.substring(lineStart, selStart);
-                    const match = currentLine.match(/^(\s*[-*•]\s+)/);
-
-                    if (match) {
-                      const bulletPrefix = match[1];
-                      const lineContent = currentLine.substring(bulletPrefix.length).trim();
-
-                      if (lineContent === "") {
-                        e.preventDefault();
-                        const nextVal = val.substring(0, lineStart) + val.substring(selEnd);
-                        handleTextChange(nextVal);
-                        requestAnimationFrame(() => {
-                          textarea.value = nextVal;
-                          textarea.setSelectionRange(lineStart, lineStart);
-                        });
-                      } else {
-                        e.preventDefault();
-                        const insertion = "\n" + bulletPrefix;
-                        const nextVal = val.substring(0, selStart) + insertion + val.substring(selEnd);
-                        const nextPos = selStart + insertion.length;
-                        handleTextChange(nextVal);
-                        requestAnimationFrame(() => {
-                          textarea.value = nextVal;
-                          textarea.setSelectionRange(nextPos, nextPos);
-                        });
+                    toggleRichItalic();
+                    setIsItalicActive(isRichItalicActive());
+                    handleEditorInput();
+                    return;
+                  }
+                  if (e.key === "Enter") {
+                    const sel = window.getSelection();
+                    if (sel && sel.rangeCount > 0) {
+                      const range = sel.getRangeAt(0);
+                      const textBefore = range.startContainer.textContent || "";
+                      const offset = range.startOffset;
+                      const lineBefore = textBefore.substring(0, offset);
+                      const match = lineBefore.match(/^(\s*[-*•]\s+)/);
+                      if (match) {
+                        const bullet = match[1];
+                        const textAfter = lineBefore.substring(bullet.length).trim();
+                        if (textAfter === "") {
+                          e.preventDefault();
+                          range.startContainer.textContent = "";
+                          handleEditorInput();
+                          return;
+                        } else {
+                          e.preventDefault();
+                          document.execCommand("insertParagraph", false);
+                          document.execCommand("insertText", false, bullet);
+                          handleEditorInput();
+                          return;
+                        }
                       }
                     }
-                  } else if (e.key === "Backspace") {
-                    const textarea = e.currentTarget;
-                    const val = textarea.value;
-                    const selStart = textarea.selectionStart;
-                    const selEnd = textarea.selectionEnd;
-
-                    if (selStart === selEnd) {
-                      const lineStart = val.lastIndexOf("\n", selStart - 1) + 1;
-                      const currentLine = val.substring(lineStart, selStart);
-                      const match = currentLine.match(/^(\s*[-*•]\s+)$/);
-                      if (match) {
-                        e.preventDefault();
-                        const nextVal = val.substring(0, lineStart) + val.substring(selEnd);
-                        handleTextChange(nextVal);
-                        requestAnimationFrame(() => {
-                          textarea.value = nextVal;
-                          textarea.setSelectionRange(lineStart, lineStart);
-                        });
+                  }
+                  if (e.key === "Backspace") {
+                    const sel = window.getSelection();
+                    if (sel && sel.rangeCount > 0) {
+                      const range = sel.getRangeAt(0);
+                      if (range.collapsed) {
+                        const text = range.startContainer.textContent || "";
+                        if (text.match(/^(\s*[-*•]\s*)$/)) {
+                          e.preventDefault();
+                          range.startContainer.textContent = "";
+                          handleEditorInput();
+                          return;
+                        }
                       }
                     }
                   }
                 }}
-                onChange={(e) => handleTextChange(e.target.value)}
-                placeholder="Start writing..."
-                className="w-full h-full min-h-[180px] resize-none bg-transparent text-[12.5px] leading-relaxed text-ink-2 outline-none placeholder:text-ink-4/50 scroll"
+                onKeyUp={updateActiveFormatting}
+                onMouseUp={updateActiveFormatting}
+                className="w-full h-full min-h-[180px] bg-transparent text-[12.5px] leading-relaxed text-ink-2 outline-none scroll select-text"
                 style={{
                   fontFamily: fontStack(activeNote.font_family),
-                  fontWeight: activeNote.is_bold ? 650 : 420,
-                  fontStyle: activeNote.is_italic ? "italic" : "normal",
                 }}
               />
             ) : (
@@ -802,8 +912,6 @@ export function TrayCompanion() {
                       )}
                       style={{
                         fontFamily: fontStack(activeNote.font_family),
-                        fontWeight: activeNote.is_bold ? 620 : 420,
-                        fontStyle: activeNote.is_italic ? "italic" : "normal",
                       }}
                     />
                   </div>
@@ -990,26 +1098,86 @@ export function TrayCompanion() {
         </div>
       )}
 
-      {/* Lightbox Preview Modal */}
+      {/* Lightbox Preview Modal with Full Interactive Zoom */}
       {previewImage && (
         <div
-          onClick={() => setPreviewImage(null)}
-          className="fixed inset-0 z-[100] flex items-center justify-center bg-black/85 backdrop-blur-md p-4 cursor-zoom-out"
+          onClick={() => {
+            setPreviewImage(null);
+            setZoomLevel(1);
+          }}
+          className="fixed inset-0 z-[100] flex flex-col items-center justify-center bg-black/90 backdrop-blur-md p-2 select-none"
         >
-          <div className="relative max-w-[90vw] max-h-[85vh] flex items-center justify-center" onClick={(e) => e.stopPropagation()}>
+          {/* Zoom & Action Controls Bar */}
+          <div
+            className="flex items-center gap-2 mb-2 z-20 bg-black/80 px-3 py-1.5 rounded-full border border-white/20 shadow-xl"
+            onClick={(e) => e.stopPropagation()}
+          >
+            <button
+              type="button"
+              onClick={() => setZoomLevel((z) => Math.max(0.5, Number((z - 0.25).toFixed(2))))}
+              className="grid size-6 place-items-center rounded text-white/70 hover:text-white hover:bg-white/10 text-[14px] font-bold cursor-pointer"
+              title="Zoom out"
+            >
+              -
+            </button>
+            <span className="font-mono text-[10px] text-white/90 min-w-[36px] text-center font-semibold">
+              {Math.round(zoomLevel * 100)}%
+            </span>
+            <button
+              type="button"
+              onClick={() => setZoomLevel((z) => Math.min(4, Number((z + 0.25).toFixed(2))))}
+              className="grid size-6 place-items-center rounded text-white/70 hover:text-white hover:bg-white/10 text-[14px] font-bold cursor-pointer"
+              title="Zoom in"
+            >
+              +
+            </button>
+            <button
+              type="button"
+              onClick={() => setZoomLevel(1)}
+              className="ml-1 text-[9.5px] font-mono uppercase px-1.5 py-0.5 rounded bg-white/10 hover:bg-white/20 text-white/90 cursor-pointer"
+              title="Reset Zoom (100%)"
+            >
+              1:1
+            </button>
+            <span className="mx-0.5 h-3 w-px bg-white/20" />
+            <button
+              type="button"
+              onClick={() => {
+                setPreviewImage(null);
+                setZoomLevel(1);
+              }}
+              className="grid size-6 place-items-center rounded-full text-white/70 hover:text-white hover:bg-white/10 cursor-pointer"
+              title="Close preview"
+            >
+              <X size={13} strokeWidth={2.4} />
+            </button>
+          </div>
+
+          {/* Interactive Zoomable Viewport */}
+          <div
+            className="relative flex-1 w-full overflow-auto flex items-center justify-center p-2 cursor-grab active:cursor-grabbing scroll no-scrollbar"
+            onClick={(e) => e.stopPropagation()}
+            onWheel={(e) => {
+              e.preventDefault();
+              if (e.deltaY < 0) {
+                setZoomLevel((z) => Math.min(4, Number((z + 0.2).toFixed(2))));
+              } else {
+                setZoomLevel((z) => Math.max(0.5, Number((z - 0.2).toFixed(2))));
+              }
+            }}
+          >
             <img
               src={previewImage}
               alt="Preview"
-              className="max-w-[90vw] max-h-[82vh] object-contain rounded-xl border border-white/15 shadow-2xl"
+              style={{
+                transform: `scale(${zoomLevel})`,
+                transformOrigin: "center center",
+                transition: "transform 0.12s ease-out",
+              }}
+              onClick={() => setZoomLevel((z) => (z === 1 ? 2 : 1))}
+              className="max-w-[90vw] max-h-[75vh] object-contain rounded-xl border border-white/20 shadow-2xl cursor-pointer"
+              title="Click to toggle 2x zoom · Scroll to zoom freely"
             />
-            <button
-              type="button"
-              onClick={() => setPreviewImage(null)}
-              className="absolute -top-2.5 -right-2.5 grid size-7 place-items-center rounded-full bg-black/90 text-white hover:bg-black border border-white/20 shadow-lg cursor-pointer"
-              title="Close preview"
-            >
-              <X size={14} strokeWidth={2.4} />
-            </button>
           </div>
         </div>
       )}

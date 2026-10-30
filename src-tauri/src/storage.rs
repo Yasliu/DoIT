@@ -96,7 +96,11 @@ impl StorageManager {
                         let mut content = String::new();
                         if f.read_to_string(&mut content).is_ok() {
                             let filename = path.file_stem().and_then(|s| s.to_str()).unwrap_or("note");
-                            if let Some(note) = NoteItem::from_markdown(&content, filename) {
+                            if let Some(mut note) = NoteItem::from_markdown(&content, filename) {
+                                // Eliminate all pre-made categories across versions/updates
+                                if note.category.eq_ignore_ascii_case("Architecture") || note.category.eq_ignore_ascii_case("Ideas") {
+                                    note.category = "Uncategorized".to_string();
+                                }
                                 file_map.insert(note.id.clone(), path.clone());
                                 notes.push(note);
                             }
@@ -324,7 +328,7 @@ impl StorageManager {
     pub fn update_category(&self, id: &str, new_category: &str) -> Result<NoteItem, String> {
         let mut lock = self.data.write().map_err(|e| e.to_string())?;
         let cat_clean = if new_category.trim().is_empty() {
-            "Architecture".to_string()
+            "Uncategorized".to_string()
         } else {
             new_category.trim().to_string()
         };

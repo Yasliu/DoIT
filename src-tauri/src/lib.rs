@@ -23,11 +23,6 @@ pub fn run() {
         .plugin(tauri_plugin_updater::Builder::new().build())
         .on_window_event(|window, event| {
             let label = window.label().to_string();
-            if label == "tray" {
-                if let tauri::WindowEvent::Moved(pos) = event {
-                    *commands::TRAY_WINDOW_CUSTOM_POSITION.lock().unwrap() = Some(*pos);
-                }
-            }
 
             if let tauri::WindowEvent::CloseRequested { api, .. } = event {
                 // Always prevent native close — we manage visibility ourselves
@@ -91,12 +86,6 @@ pub fn run() {
             }
         })
         .setup(|app| {
-            // Pre-position the tray companion off-screen before first use
-            if let Some(tray_win) = app.get_webview_window("tray") {
-                let app_handle = app.handle().clone();
-                position_tray_window(&app_handle, &tray_win, false);
-            }
-
             // Native Windows taskbar notification tray icon
             let show_item = MenuItem::with_id(app, "show", "Open Canvas", true, None::<&str>)?;
             let tray_item = MenuItem::with_id(app, "tray", "Switch to Desk Tray", true, None::<&str>)?;
@@ -157,6 +146,7 @@ pub fn run() {
             delete_category,
             toggle_category_collapse,
             get_settings,
+            get_default_storage_path,
             update_settings,
             select_storage_directory,
             export_data,

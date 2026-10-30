@@ -135,6 +135,17 @@ export const tauriApi = {
     return readLocal<CategoryInfo[]>(CATS_KEY, DEFAULT_CATEGORIES);
   },
 
+  async getDefaultStoragePath(): Promise<string> {
+    if (isTauri()) {
+      try {
+        return await invoke<string>("get_default_storage_path");
+      } catch (err) {
+        console.warn("get_default_storage_path failed", err);
+      }
+    }
+    return "Documents/DoIT";
+  },
+
   async getSettings(): Promise<AppSettings> {
     if (isTauri()) {
       try {

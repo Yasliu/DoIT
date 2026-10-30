@@ -1,4 +1,4 @@
-import { useEffect, useLayoutEffect, useRef, useState } from "react";
+import { useCallback, useEffect, useLayoutEffect, useRef, useState } from "react";
 import {
   AlignLeft,
   Bold,
@@ -15,6 +15,14 @@ import {
 } from "lucide-react";
 import type { ContentItem, NoteItem } from "../api/tauriBridge";
 import { NOTE_FONTS, fontStack } from "../api/tauriBridge";
+import {
+  htmlToMarkdown,
+  isRichBoldActive,
+  isRichItalicActive,
+  markdownToHtml,
+  toggleRichBold,
+  toggleRichItalic,
+} from "../lib/format";
 import { springTo } from "../lib/spring";
 import { accentFor, cleanText, cx, fullStamp, uid } from "../lib/text";
 
@@ -97,6 +105,50 @@ export function NoteSheet({
   const titleRef = useRef<HTMLInputElement | null>(null);
   const closeRef = useRef<() => void>(() => {});
   const closeCancel = useRef<() => void>(() => {});
+
+  // Rich text formatting state
+  const editorRef = useRef<HTMLDivElement | null>(null);
+  const [isBoldActive, setIsBoldActive] = useState(false);
+  const [isItalicActive, setIsItalicActive] = useState(false);
+  const lastNoteIdRef = useRef<string | null>(null);
+
+  const updateActiveFormatting = () => {
+    setIsBoldActive(isRichBoldActive());
+    setIsItalicActive(isRichItalicActive());
+  };
+
+  const initEditor = useCallback((node: HTMLDivElement | null) => {
+    editorRef.current = node;
+    if (node && lastNoteIdRef.current !== draft.id) {
+      lastNoteIdRef.current = draft.id;
+      const md = draft.content.map((c) => c.text).join("\n");
+      node.innerHTML = markdownToHtml(md);
+    }
+  }, [draft.id, draft.content]);
+
+  useEffect(() => {
+    if (lastNoteIdRef.current !== draft.id) {
+      lastNoteIdRef.current = draft.id;
+      if (editorRef.current) {
+        const md = draft.content.map((c) => c.text).join("\n");
+        editorRef.current.innerHTML = markdownToHtml(md);
+      }
+    }
+  }, [draft.id, draft.content]);
+
+  const handleEditorInput = () => {
+    if (!editorRef.current) return;
+    const md = htmlToMarkdown(editorRef.current);
+    const lines = md.split("\n");
+    const content = lines.map((line, idx) => ({
+      id: draft.content[idx]?.id ?? uid("line"),
+      text: line,
+      is_todo: false,
+      completed: false,
+    }));
+    commit({ ...draftRef.current, content, last_edited: Date.now() });
+    updateActiveFormatting();
+  };
 
   const appendImages = (newUrls: string[]) => {
     const existing = (draftRef.current.media_urls && draftRef.current.media_urls.length > 0)
@@ -289,7 +341,23 @@ export function NoteSheet({
     if (closing.current) return;
     closing.current = true;
     window.clearTimeout(saveTimer.current);
-    commitRef.current(draftRef.current);
+
+    // Prune excessive empty items before persisting
+    const cur = draftRef.current;
+    let prunedContent = cur.content;
+    if (prunedContent.length > 1) {
+      prunedContent = prunedContent.filter(
+        (c, i) =>
+          c.text.trim().length > 0 ||
+          (i === prunedContent.length - 1 && prunedContent.some((other) => other.text.trim().length > 0)),
+      );
+      if (prunedContent.length === 0) {
+        prunedContent = [{ id: uid("line"), text: "", is_todo: cur.content[0]?.is_todo ?? false, completed: false }];
+      }
+    }
+    const cleanFinal = { ...cur, content: prunedContent };
+    draftRef.current = cleanFinal;
+    commitRef.current(cleanFinal);
 
     if (scrim.current) scrim.current.style.pointerEvents = "none";
     if (frame.current) frame.current.style.pointerEvents = "none";
@@ -508,13 +576,14 @@ export function NoteSheet({
               type="button"
               onMouseDown={(e) => e.preventDefault()}
               onClick={() => {
-                const nextBold = !draft.is_bold;
-                edit({ is_bold: nextBold });
+                toggleRichBold();
+                updateActiveFormatting();
+                handleEditorInput();
               }}
-              aria-label="Toggle Bold for note"
-              title="Bold note text"
-              data-active={draft.is_bold || undefined}
-              className={cx("icon-btn !size-7 cursor-pointer", draft.is_bold && "!bg-white/20 !text-white")}
+              aria-label="Toggle Bold"
+              title="Bold text (Ctrl+B)"
+              data-active={isBoldActive || undefined}
+              className={cx("icon-btn !size-7 cursor-pointer", isBoldActive && "!bg-white/20 !text-white")}
             >
               <Bold size={12.5} strokeWidth={2.4} />
             </button>
@@ -522,13 +591,14 @@ export function NoteSheet({
               type="button"
               onMouseDown={(e) => e.preventDefault()}
               onClick={() => {
-                const nextItalic = !draft.is_italic;
-                edit({ is_italic: nextItalic });
+                toggleRichItalic();
+                updateActiveFormatting();
+                handleEditorInput();
               }}
-              aria-label="Toggle Italic for note"
-              title="Italic note text"
-              data-active={draft.is_italic || undefined}
-              className={cx("icon-btn !size-7 cursor-pointer", draft.is_italic && "!bg-white/20 !text-white")}
+              aria-label="Toggle Italic"
+              title="Italic text (Ctrl+I)"
+              data-active={isItalicActive || undefined}
+              className={cx("icon-btn !size-7 cursor-pointer", isItalicActive && "!bg-white/20 !text-white")}
             >
               <Italic size={12.5} strokeWidth={2.4} />
             </button>
@@ -606,15 +676,15 @@ export function NoteSheet({
               className="w-full bg-transparent text-[27px] leading-[1.18] tracking-[-0.032em] text-ink-1 outline-none placeholder:text-ink-4/70"
               style={{
                 fontFamily: fontStack(draft.font_family),
-                fontWeight: draft.is_bold ? 700 : 560,
-                fontStyle: draft.is_italic ? "italic" : "normal",
+                fontWeight: 560,
               }}
             />
 
             {(() => {
-              const images = (draft.media_urls && draft.media_urls.length > 0)
+              const rawImages = (draft.media_urls && draft.media_urls.length > 0)
                 ? draft.media_urls
                 : (draft.media_url ? [draft.media_url] : []);
+              const images = rawImages.filter((img) => img && typeof img === "string" && img.trim().length > 0);
               if (images.length === 0) return null;
               return (
                 <div className="mt-4">
@@ -631,7 +701,8 @@ export function NoteSheet({
                           alt=""
                           className="w-full h-full object-cover transition-transform duration-200 group-hover:scale-105"
                           onError={(event) => {
-                            event.currentTarget.style.display = "none";
+                            const parent = event.currentTarget.parentElement;
+                            if (parent) parent.style.display = "none";
                           }}
                         />
                         <button
@@ -658,115 +729,74 @@ export function NoteSheet({
             {!isAllTodos ? (
               /* Basic Note (Point 4): Freeform multi-line text writing without lists or checkboxes */
               <div className="min-h-[220px]">
-                <textarea
-                  value={body.map((item) => item.text).join("\n")}
+                <div
+                  ref={initEditor}
+                  contentEditable
+                  suppressContentEditableWarning
+                  onInput={handleEditorInput}
                   onKeyDown={(e) => {
                     const meta = e.ctrlKey || e.metaKey;
                     if (meta && e.key.toLowerCase() === "b") {
                       e.preventDefault();
-                      edit({ is_bold: !draft.is_bold });
-                    } else if (meta && e.key.toLowerCase() === "i") {
+                      toggleRichBold();
+                      updateActiveFormatting();
+                      handleEditorInput();
+                      return;
+                    }
+                    if (meta && e.key.toLowerCase() === "i") {
                       e.preventDefault();
-                      edit({ is_italic: !draft.is_italic });
-                    } else if (e.key === "Enter") {
-                      // Smart Bullet Continuation Feature
-                      const textarea = e.currentTarget;
-                      const val = textarea.value;
-                      const selStart = textarea.selectionStart;
-                      const selEnd = textarea.selectionEnd;
-
-                      // Find start of current line
-                      const lineStart = val.lastIndexOf("\n", selStart - 1) + 1;
-                      const currentLine = val.substring(lineStart, selStart);
-
-                      // Match bullet prefix (e.g., "- ", "* ", "• ")
-                      const match = currentLine.match(/^(\s*[-*•]\s+)/);
-                      if (match) {
-                        const bulletPrefix = match[1];
-                        const lineContent = currentLine.substring(bulletPrefix.length).trim();
-
-                        if (lineContent === "") {
-                          // If current line only contains the bullet and Enter is pressed, remove the bullet
-                          e.preventDefault();
-                          const nextVal = val.substring(0, lineStart) + val.substring(selEnd);
-                          const lines = nextVal.split("\n");
-                          const content = lines.map((line, idx) => ({
-                            id: body[idx]?.id ?? uid("line"),
-                            text: line,
-                            is_todo: false,
-                            completed: false,
-                          }));
-                          commit({ ...draftRef.current, content, last_edited: Date.now() });
-                          requestAnimationFrame(() => {
-                            textarea.value = nextVal;
-                            textarea.setSelectionRange(lineStart, lineStart);
-                          });
-                        } else {
-                          // Insert newline followed by the same bullet prefix
-                          e.preventDefault();
-                          const insertion = "\n" + bulletPrefix;
-                          const nextVal = val.substring(0, selStart) + insertion + val.substring(selEnd);
-                          const nextPos = selStart + insertion.length;
-                          const lines = nextVal.split("\n");
-                          const content = lines.map((line, idx) => ({
-                            id: body[idx]?.id ?? uid("line"),
-                            text: line,
-                            is_todo: false,
-                            completed: false,
-                          }));
-                          commit({ ...draftRef.current, content, last_edited: Date.now() });
-                          requestAnimationFrame(() => {
-                            textarea.value = nextVal;
-                            textarea.setSelectionRange(nextPos, nextPos);
-                          });
+                      toggleRichItalic();
+                      updateActiveFormatting();
+                      handleEditorInput();
+                      return;
+                    }
+                    if (e.key === "Enter") {
+                      const sel = window.getSelection();
+                      if (sel && sel.rangeCount > 0) {
+                        const range = sel.getRangeAt(0);
+                        const textBefore = range.startContainer.textContent || "";
+                        const offset = range.startOffset;
+                        const lineBefore = textBefore.substring(0, offset);
+                        const match = lineBefore.match(/^(\s*[-*•]\s+)/);
+                        if (match) {
+                          const bullet = match[1];
+                          const textAfter = lineBefore.substring(bullet.length).trim();
+                          if (textAfter === "") {
+                            e.preventDefault();
+                            range.startContainer.textContent = "";
+                            handleEditorInput();
+                            return;
+                          } else {
+                            e.preventDefault();
+                            document.execCommand("insertParagraph", false);
+                            document.execCommand("insertText", false, bullet);
+                            handleEditorInput();
+                            return;
+                          }
                         }
                       }
-                    } else if (e.key === "Backspace") {
-                      // If backspacing directly at empty bullet prefix, remove prefix cleanly
-                      const textarea = e.currentTarget;
-                      const val = textarea.value;
-                      const selStart = textarea.selectionStart;
-                      const selEnd = textarea.selectionEnd;
-
-                      if (selStart === selEnd) {
-                        const lineStart = val.lastIndexOf("\n", selStart - 1) + 1;
-                        const currentLine = val.substring(lineStart, selStart);
-                        const match = currentLine.match(/^(\s*[-*•]\s+)$/);
-                        if (match) {
-                          e.preventDefault();
-                          const nextVal = val.substring(0, lineStart) + val.substring(selEnd);
-                          const lines = nextVal.split("\n");
-                          const content = lines.map((line, idx) => ({
-                            id: body[idx]?.id ?? uid("line"),
-                            text: line,
-                            is_todo: false,
-                            completed: false,
-                          }));
-                          commit({ ...draftRef.current, content, last_edited: Date.now() });
-                          requestAnimationFrame(() => {
-                            textarea.value = nextVal;
-                            textarea.setSelectionRange(lineStart, lineStart);
-                          });
+                    }
+                    if (e.key === "Backspace") {
+                      const sel = window.getSelection();
+                      if (sel && sel.rangeCount > 0) {
+                        const range = sel.getRangeAt(0);
+                        if (range.collapsed) {
+                          const text = range.startContainer.textContent || "";
+                          if (text.match(/^(\s*[-*•]\s*)$/)) {
+                            e.preventDefault();
+                            range.startContainer.textContent = "";
+                            handleEditorInput();
+                            return;
+                          }
                         }
                       }
                     }
                   }}
-                  onChange={(e) => {
-                    const lines = e.target.value.split("\n");
-                    const content = lines.map((line, idx) => ({
-                      id: body[idx]?.id ?? uid("line"),
-                      text: line,
-                      is_todo: false,
-                      completed: false,
-                    }));
-                    commit({ ...draftRef.current, content, last_edited: Date.now() });
-                  }}
-                  placeholder="Start typing your note... (Plain text mode without checkboxes or lists)"
-                  className="w-full min-h-[300px] resize-none bg-transparent text-[15.5px] leading-relaxed text-ink-2 outline-none placeholder:text-ink-4/45 scroll"
+                  onKeyUp={updateActiveFormatting}
+                  onMouseUp={updateActiveFormatting}
+                  className="w-full min-h-[300px] bg-transparent text-[15.5px] leading-relaxed text-ink-2 outline-none scroll select-text"
                   style={{
                     fontFamily: fontStack(draft.font_family),
-                    fontWeight: draft.is_bold ? 650 : 420,
-                    fontStyle: draft.is_italic ? "italic" : "normal",
                   }}
                 />
               </div>
@@ -815,7 +845,7 @@ export function NoteSheet({
                             removeLine(item.id, index);
                           }
                         }}
-                        placeholder={item.is_todo ? "Task" : "Line"}
+                        placeholder={item.is_todo ? "Task" : index === 0 ? "Write something..." : ""}
                         aria-label="Note line"
                         className={cx(
                           "line-input",
@@ -823,8 +853,6 @@ export function NoteSheet({
                         )}
                         style={{
                           fontFamily: fontStack(draft.font_family),
-                          fontWeight: draft.is_bold ? 620 : 420,
-                          fontStyle: draft.is_italic ? "italic" : "normal",
                         }}
                       />
 
