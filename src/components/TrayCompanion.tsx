@@ -395,7 +395,11 @@ export function TrayCompanion() {
   const toggleMode = () => {
     if (!activeNote) return;
     const nextIsTodo = !isTasksMode;
-    const content = activeNote.content.map((c) => ({ ...c, is_todo: nextIsTodo }));
+    const content = activeNote.content.map((c) => ({
+      ...c,
+      is_todo: nextIsTodo,
+      text: c.text.replace(/^\s*[-*•]\s+/, ""),
+    }));
     editActive({ content });
   };
 
@@ -857,8 +861,9 @@ export function TrayCompanion() {
           {/* Title Input */}
           <input
             type="text"
-            value={cleanText(activeNote.title)}
+            value={activeNote.title ?? ""}
             onChange={(e) => editActive({ title: e.target.value })}
+            onKeyDown={(e) => e.stopPropagation()}
             placeholder="Untitled"
             className="w-full mt-2.5 bg-transparent text-[16px] font-semibold text-ink-1 outline-none placeholder:text-ink-4/60"
             style={{
@@ -946,54 +951,77 @@ export function TrayCompanion() {
                 }}
               />
             ) : (
-              <div className="space-y-1.5">
-                {activeNote.content.map((item, index) => (
-                  <div key={item.id} className="flex items-center gap-2 group">
-                    <button
-                      type="button"
-                      onClick={() => {
-                        const content = activeNote.content.map((c) =>
-                          c.id === item.id ? { ...c, completed: !c.completed } : c,
-                        );
-                        editActive({ content });
-                      }}
-                      className={cx("shrink-0", item.is_todo ? "check" : "size-3 rounded-full bg-white/20")}
-                    >
-                      {item.is_todo && item.completed && <Check size={8} strokeWidth={3} />}
-                    </button>
-                    <input
-                      type="text"
-                      value={item.text}
-                      onChange={(e) => {
-                        const content = activeNote.content.map((c) =>
-                          c.id === item.id ? { ...c, text: e.target.value } : c,
-                        );
-                        editActive({ content });
-                      }}
-                      onKeyDown={(e) => {
-                        if (e.key === "Enter") {
-                          e.preventDefault();
-                          const updated = [...activeNote.content];
-                          updated.splice(index + 1, 0, {
-                            id: uid("line"),
-                            text: "",
-                            is_todo: true,
-                            completed: false,
-                          });
+              <div className="space-y-1">
+                {activeNote.content.map((item, index) => {
+                  const cleanItemText = item.text.replace(/^\s*[-*•]\s+/, "");
+                  return (
+                    <div key={item.id} className="flex items-center gap-3 w-full py-1 group">
+                      <button
+                        type="button"
+                        onClick={() => {
+                          const content = activeNote.content.map((c) =>
+                            c.id === item.id ? { ...c, completed: !c.completed } : c,
+                          );
+                          editActive({ content });
+                        }}
+                        className={cx(
+                          "border rounded-md w-4 h-4 bg-transparent cursor-pointer check-indicator-layer flex items-center justify-center shrink-0 transition-all duration-200 outline-none select-none",
+                          item.completed
+                            ? "border-white bg-white text-black"
+                            : "border-white/20 hover:border-white/50 text-transparent",
+                        )}
+                      >
+                        <Check size={11} strokeWidth={3.5} className={cx(item.completed ? "opacity-100" : "opacity-0")} />
+                      </button>
+                      <input
+                        type="text"
+                        value={cleanItemText}
+                        onChange={(e) => {
+                          const content = activeNote.content.map((c) =>
+                            c.id === item.id ? { ...c, text: e.target.value.replace(/^\s*[-*•]\s+/, "") } : c,
+                          );
+                          editActive({ content });
+                        }}
+                        onKeyDown={(e) => {
+                          if (e.key === "Enter") {
+                            e.preventDefault();
+                            const updated = [...activeNote.content];
+                            updated.splice(index + 1, 0, {
+                              id: uid("line"),
+                              text: "",
+                              is_todo: true,
+                              completed: false,
+                            });
+                            editActive({ content: updated });
+                          }
+                          if (e.key === "Backspace" && cleanItemText === "" && activeNote.content.length > 1) {
+                            e.preventDefault();
+                            const updated = activeNote.content.filter((c) => c.id !== item.id);
+                            editActive({ content: updated });
+                          }
+                        }}
+                        placeholder="Task item..."
+                        className={cx(
+                          "flex-1 bg-transparent text-[12.5px] outline-none transition-all duration-150",
+                          item.completed ? "line-through text-ink-4 opacity-50" : "text-ink-1 opacity-90",
+                        )}
+                        style={{
+                          fontFamily: fontStack(activeNote.font_family),
+                        }}
+                      />
+                      <button
+                        type="button"
+                        onClick={() => {
+                          const updated = activeNote.content.filter((c) => c.id !== item.id);
                           editActive({ content: updated });
-                        }
-                      }}
-                      placeholder="Task item..."
-                      className={cx(
-                        "flex-1 bg-transparent text-[12px] text-ink-2 outline-none",
-                        item.completed && "line-through text-ink-4",
-                      )}
-                      style={{
-                        fontFamily: fontStack(activeNote.font_family),
-                      }}
-                    />
-                  </div>
-                ))}
+                        }}
+                        className="grid size-4 shrink-0 place-items-center rounded text-white/30 opacity-0 group-hover:opacity-100 hover:text-white"
+                      >
+                        <X size={10} strokeWidth={2} />
+                      </button>
+                    </div>
+                  );
+                })}
                 <button
                   type="button"
                   onClick={() => {

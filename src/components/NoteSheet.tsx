@@ -278,7 +278,11 @@ export function NoteSheet({
   const isAllTodos = draft.content.some((c) => c.is_todo);
   const toggleContentMode = () => {
     const nextIsTodo = !isAllTodos;
-    const content = draftRef.current.content.map((c) => ({ ...c, is_todo: nextIsTodo }));
+    const content = draftRef.current.content.map((c) => ({
+      ...c,
+      is_todo: nextIsTodo,
+      text: c.text.replace(/^\s*[-*•]\s+/, ""),
+    }));
     commit({ ...draftRef.current, content, last_edited: Date.now() }, true);
   };
 
@@ -715,8 +719,9 @@ export function NoteSheet({
           <div className="mx-auto w-full max-w-[760px] pb-8 pt-2">
             <input
               ref={titleRef}
-              value={cleanText(draft.title)}
+              value={draft.title ?? ""}
               onChange={(event) => edit({ title: event.target.value })}
+              onKeyDown={(e) => e.stopPropagation()}
               placeholder="Untitled"
               aria-label="Note title"
               className="w-full bg-transparent text-[27px] leading-[1.18] tracking-[-0.032em] text-ink-1 outline-none placeholder:text-ink-4/70"
@@ -807,70 +812,68 @@ export function NoteSheet({
             ) : (
               /* Checklist / Tasks Mode */
               <>
-                <div className="space-y-[2px]">
-                  {body.map((item, index) => (
-                    <div
-                      key={item.id}
-                      className="group/line -mx-2 flex items-start gap-2.5 rounded-[8px] px-2 py-[3px] transition-colors hover:bg-white/[0.025]"
-                    >
-                      <button
-                        type="button"
-                        onClick={() => patchLine(item.id, { completed: !item.completed })}
-                        onContextMenu={(event) => {
-                          event.preventDefault();
-                          patchLine(item.id, { is_todo: !item.is_todo });
-                        }}
-                        data-done={item.is_todo && item.completed ? true : undefined}
-                        aria-label={item.is_todo ? "Toggle task" : "Convert to task"}
-                        title={item.is_todo ? "Right-click for a plain line" : "Right-click for a checkbox"}
-                        className={cx("mt-[5px] shrink-0", item.is_todo ? "check" : "grid size-4 place-items-center")}
+                <div className="space-y-1">
+                  {body.map((item, index) => {
+                    const cleanItemText = item.text.replace(/^\s*[-*•]\s+/, "");
+                    return (
+                      <div
+                        key={item.id}
+                        className="flex items-center gap-3 w-full py-1 group rounded-[8px] px-2 transition-colors hover:bg-white/[0.025]"
                       >
-                        {item.is_todo ? (
-                          <Check size={10} strokeWidth={3} />
-                        ) : (
-                          <span className="size-[3px] rounded-full bg-white/30 transition-colors group-hover/line:bg-white/55" />
-                        )}
-                      </button>
+                        <button
+                          type="button"
+                          onClick={() => patchLine(item.id, { completed: !item.completed })}
+                          aria-label={item.completed ? "Mark incomplete" : "Mark complete"}
+                          className={cx(
+                            "border rounded-md w-4 h-4 bg-transparent cursor-pointer check-indicator-layer flex items-center justify-center shrink-0 transition-all duration-200 outline-none select-none",
+                            item.completed
+                              ? "border-white bg-white text-black"
+                              : "border-white/20 hover:border-white/50 text-transparent",
+                          )}
+                        >
+                          <Check size={11} strokeWidth={3.5} className={cx(item.completed ? "opacity-100" : "opacity-0")} />
+                        </button>
 
-                      <input
-                        ref={(node) => {
-                          if (node) lineRefs.current.set(item.id, node);
-                          else lineRefs.current.delete(item.id);
-                        }}
-                        onFocus={() => setFocusLine(item.id)}
-                        value={item.text}
-                        onChange={(event) => patchLine(item.id, { text: event.target.value })}
-                        onKeyDown={(event) => {
-                          if (event.key === "Enter") {
-                            event.preventDefault();
-                            addLine(index);
-                          }
-                          if (event.key === "Backspace" && item.text === "" && body.length > 1) {
-                            event.preventDefault();
-                            removeLine(item.id, index);
-                          }
-                        }}
-                        placeholder={item.is_todo ? "Task" : index === 0 ? "Write something..." : ""}
-                        aria-label="Note line"
-                        className={cx(
-                          "line-input",
-                          item.is_todo && item.completed && "text-ink-4 line-through",
-                        )}
-                        style={{
-                          fontFamily: fontStack(draft.font_family),
-                        }}
-                      />
+                        <input
+                          ref={(node) => {
+                            if (node) lineRefs.current.set(item.id, node);
+                            else lineRefs.current.delete(item.id);
+                          }}
+                          onFocus={() => setFocusLine(item.id)}
+                          value={cleanItemText}
+                          onChange={(event) => patchLine(item.id, { text: event.target.value.replace(/^\s*[-*•]\s+/, "") })}
+                          onKeyDown={(event) => {
+                            if (event.key === "Enter") {
+                              event.preventDefault();
+                              addLine(index);
+                            }
+                            if (event.key === "Backspace" && cleanItemText === "" && body.length > 1) {
+                              event.preventDefault();
+                              removeLine(item.id, index);
+                            }
+                          }}
+                          placeholder={index === 0 ? "Task description..." : "Task item..."}
+                          aria-label="Note task line"
+                          className={cx(
+                            "line-input flex-1 bg-transparent text-[14.5px] leading-relaxed outline-none transition-all duration-150",
+                            item.completed ? "line-through text-ink-4 opacity-50" : "text-ink-1 opacity-90",
+                          )}
+                          style={{
+                            fontFamily: fontStack(draft.font_family),
+                          }}
+                        />
 
-                      <button
-                        type="button"
-                        onClick={() => removeLine(item.id, index)}
-                        aria-label="Remove line"
-                        className="mt-[5px] grid size-4 shrink-0 place-items-center rounded text-ink-4 opacity-0 transition-opacity hover:text-ink-1 focus-visible:opacity-100 group-hover/line:opacity-100"
-                      >
-                        <X size={10} strokeWidth={2} />
-                      </button>
-                    </div>
-                  ))}
+                        <button
+                          type="button"
+                          onClick={() => removeLine(item.id, index)}
+                          aria-label="Remove line"
+                          className="grid size-4 shrink-0 place-items-center rounded text-ink-4 opacity-0 transition-opacity hover:text-ink-1 focus-visible:opacity-100 group-hover:opacity-100"
+                        >
+                          <X size={10} strokeWidth={2} />
+                        </button>
+                      </div>
+                    );
+                  })}
                 </div>
 
                 <button
