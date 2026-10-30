@@ -679,6 +679,12 @@
   animation: drawerSlideUp 400ms cubic-bezier(0.16, 1, 0.3, 1) both;
 }
 
+/* Fluid hardware-accelerated drawer sliding motion */
+.drawer-spring-motion {
+  transition: transform 300ms cubic-bezier(0.16, 1, 0.3, 1), opacity 300ms cubic-bezier(0.16, 1, 0.3, 1);
+  will-change: transform, opacity;
+}
+
 @media (prefers-reduced-motion: reduce) {
   *,
   *::before,

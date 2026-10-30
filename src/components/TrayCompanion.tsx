@@ -38,11 +38,13 @@ import { accentFor, cleanText, cx, relativeShort, uid } from "../lib/text";
 export function TrayCompanion() {
   const { notes, categories, patch, create, remove } = useWorkspace();
   const [expanded, setExpanded] = useState(false);
+  const [panelVisible, setPanelVisible] = useState(false);
   const [drawerOpen, setDrawerOpen] = useState(true);
   const [filter, setFilter] = useState("");
   const [selectedShelf, setSelectedShelf] = useState<string | null>(null);
   const [activeNoteId, setActiveNoteId] = useState<string | null>(null);
   const [historyStack, setHistoryStack] = useState<string[]>([]);
+  const collapseTimerRef = useRef<number | null>(null);
 
   // Navigation helpers with proper history stack
   const openNoteById = (id: string) => {
@@ -109,14 +111,46 @@ export function TrayCompanion() {
 
   const shelves = useMemo(() => categories.map((c) => c.name), [categories]);
 
+  const expandTray = useCallback(() => {
+    if (Date.now() < visibilityLockRef.current) return;
+    visibilityLockRef.current = Date.now() + 350;
+    if (collapseTimerRef.current) {
+      window.clearTimeout(collapseTimerRef.current);
+      collapseTimerRef.current = null;
+    }
+    setExpanded(true);
+  }, []);
+
+  const collapseTray = useCallback(() => {
+    if (Date.now() < visibilityLockRef.current) return;
+    visibilityLockRef.current = Date.now() + 350;
+    setPanelVisible(false);
+    if (collapseTimerRef.current) window.clearTimeout(collapseTimerRef.current);
+    collapseTimerRef.current = window.setTimeout(() => {
+      setExpanded(false);
+    }, 300);
+  }, []);
+
   // Synchronize window size with expanded state
   useEffect(() => {
     isTransitioning.current = true;
     void tauriApi.resizeTrayWindow(expanded);
     const timer = window.setTimeout(() => {
       isTransitioning.current = false;
-    }, 320);
+    }, 350);
     return () => window.clearTimeout(timer);
+  }, [expanded]);
+
+  // Fluid drawer slide-in / slide-out animation synchronization
+  useEffect(() => {
+    if (expanded) {
+      const raf = requestAnimationFrame(() => {
+        setPanelVisible(true);
+      });
+      return () => cancelAnimationFrame(raf);
+    } else {
+      setPanelVisible(false);
+    }
   }, [expanded]);
 
   // Synchronize with external Tauri expansion events (e.g. from open_tray_mode or window manager)
@@ -125,13 +159,11 @@ export function TrayCompanion() {
 
     getCurrentWindow()
       .listen<boolean>("set-expanded", (event) => {
-        setExpanded((prev) => {
-          if (prev === event.payload) return prev;
-          if (!event.payload) {
-            setDrawerOpen(false);
-          }
-          return event.payload;
-        });
+        if (event.payload) {
+          expandTray();
+        } else {
+          collapseTray();
+        }
       })
       .then((unlisten) => {
         unlistenFn = unlisten;
@@ -140,7 +172,7 @@ export function TrayCompanion() {
     return () => {
       if (unlistenFn) unlistenFn();
     };
-  }, []);
+  }, [expandTray, collapseTray]);
 
   // Load theme mode for tray window
   useEffect(() => {
@@ -172,24 +204,28 @@ export function TrayCompanion() {
     const handleKeyDown = (e: KeyboardEvent) => {
       if (e.key === "Escape") {
         e.preventDefault();
-        if (drawerOpen) {
-          setDrawerOpen(false);
-        } else if (expanded && !isTransitioning.current) {
-          isTransitioning.current = true;
-          setExpanded(false);
+        if (previewImage) {
+          setPreviewImage(null);
+        } else if (activeNoteId) {
+          handleBack();
+        } else if (expanded) {
+          collapseTray();
         }
       }
       const meta = e.ctrlKey || e.metaKey;
       if (meta && e.key.toLowerCase() === "j" && !isTransitioning.current) {
         e.preventDefault();
-        isTransitioning.current = true;
-        setExpanded((prev) => !prev);
+        if (expanded) {
+          collapseTray();
+        } else {
+          expandTray();
+        }
       }
     };
 
     window.addEventListener("keydown", handleKeyDown);
     return () => window.removeEventListener("keydown", handleKeyDown);
-  }, [expanded, activeNoteId, drawerOpen]);
+  }, [expanded, activeNoteId, previewImage, expandTray, collapseTray]);
 
   const filteredNotes = useMemo(() => {
     let list = [...notes].sort((a, b) => b.last_edited - a.last_edited);
@@ -403,19 +439,6 @@ export function TrayCompanion() {
     editActive({ content });
   };
 
-  const expandTray = () => {
-    if (Date.now() < visibilityLockRef.current) return;
-    visibilityLockRef.current = Date.now() + 400;
-    setExpanded(true);
-  };
-
-  const collapseTray = () => {
-    if (Date.now() < visibilityLockRef.current) return;
-    visibilityLockRef.current = Date.now() + 400;
-    setDrawerOpen(false);
-    setExpanded(false);
-  };
-
   // Pointer down handler for pill: click to expand, drag to move window anywhere on screen
   const pillDragRef = useRef({
     startX: 0,
@@ -616,7 +639,13 @@ export function TrayCompanion() {
     <div
       onPaste={handlePaste}
       onContextMenu={handleContextMenu}
-      className="box-border flex h-full w-full max-h-full max-w-full flex-col overflow-hidden text-ink-1 rounded-2xl border border-white/10 select-none p-3 animate-drawer-open"
+      className={cx(
+        "box-border flex h-full w-full max-h-full max-w-full flex-col overflow-hidden text-ink-1 rounded-2xl border border-white/10 select-none p-3",
+        "drawer-spring-motion transform",
+        panelVisible
+          ? "translate-x-0 opacity-100"
+          : "translate-x-full opacity-0 pointer-events-none",
+      )}
       style={{
         backgroundColor: "var(--theme-tray-bg)",
         backdropFilter: "var(--theme-tray-blur)",
@@ -673,8 +702,7 @@ export function TrayCompanion() {
             onPointerDown={(e) => e.stopPropagation()}
             onClick={(e) => {
               e.stopPropagation();
-              setDrawerOpen(false);
-              setExpanded(false);
+              collapseTray();
             }}
             className="grid size-6 place-items-center rounded-md text-white/65 hover:bg-white/15 hover:text-white transition-colors cursor-pointer"
             title="Minimize to Pill (—)"
@@ -686,9 +714,10 @@ export function TrayCompanion() {
             type="button"
             onPointerDown={(e) => e.stopPropagation()}
             onClick={() => {
-              setDrawerOpen(false);
-              setExpanded(false);
-              void getCurrentWindow().hide();
+              collapseTray();
+              window.setTimeout(() => {
+                void getCurrentWindow().hide();
+              }, 300);
             }}
             className="grid size-6 place-items-center rounded-md text-white/50 hover:bg-white/10 hover:text-white transition-colors cursor-pointer"
             title="Hide to System Tray (✕)"
@@ -1195,8 +1224,7 @@ export function TrayCompanion() {
             <button
               type="button"
               onClick={() => {
-                setDrawerOpen(false);
-                setExpanded(false);
+                collapseTray();
               }}
               className="flex items-center gap-1.5 text-[11.5px] font-mono text-white/50 hover:text-white transition-colors cursor-pointer"
               title="Minimize tray to small floating pill"

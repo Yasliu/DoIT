@@ -62,8 +62,10 @@ export function Sidebar({
         <Mark size={32} className="shrink-0" />
         <div
           className={cx(
-            "flex flex-col min-w-0 ml-3 overflow-hidden whitespace-nowrap transition-all duration-300 ease-out",
-            open ? "opacity-100 translate-x-0 w-auto" : "opacity-0 -translate-x-3 w-0 pointer-events-none",
+            "flex flex-col min-w-0 overflow-hidden whitespace-nowrap transition-all duration-300 ease-out",
+            open
+              ? "max-w-[180px] opacity-100 translate-x-0 ml-3"
+              : "max-w-0 opacity-0 -translate-x-3 ml-0 overflow-hidden pointer-events-none",
           )}
         >
           <div className="truncate text-[13px] font-semibold tracking-[-0.015em] text-ink-1">
@@ -81,7 +83,9 @@ export function Sidebar({
         <div
           className={cx(
             "flex items-center gap-1.5 w-full transition-all duration-300 ease-out",
-            open ? "opacity-100 translate-x-0 pointer-events-auto" : "opacity-0 -translate-x-3 pointer-events-none",
+            open
+              ? "max-w-[200px] opacity-100 translate-x-0 pointer-events-auto"
+              : "max-w-0 opacity-0 -translate-x-3 overflow-hidden pointer-events-none",
           )}
         >
           <button
@@ -129,8 +133,10 @@ export function Sidebar({
         {/* Shelves Header */}
         <div
           className={cx(
-            "micro mb-2 flex items-center justify-between px-2 whitespace-nowrap transition-all duration-300 ease-out",
-            open ? "opacity-100 max-h-6" : "opacity-0 max-h-0 overflow-hidden pointer-events-none",
+            "micro mb-2 flex items-center justify-between whitespace-nowrap transition-all duration-300 ease-out",
+            open
+              ? "max-w-[200px] opacity-100 max-h-6 px-2"
+              : "max-w-0 opacity-0 max-h-0 px-0 overflow-hidden pointer-events-none",
           )}
         >
           <span>Shelves</span>
@@ -221,30 +227,28 @@ export function Sidebar({
                 </span>
               ) : (
                 <span
-                  className={cx(
-                    "shrink-0 rounded-full transition-all duration-300 ease-out",
-                    open ? "size-[6px]" : "size-5 font-mono text-[10.5px] uppercase flex items-center justify-center font-medium",
-                  )}
+                  className="shrink-0 size-2 rounded-full transition-all duration-300 ease-out pointer-events-none"
                   style={{
-                    backgroundColor: open ? item.accent : "transparent",
-                    color: open ? undefined : (isActive ? "#ffffff" : item.accent),
+                    backgroundColor: item.accent,
+                    transform: isActive ? "scale(1.3)" : "scale(1)",
+                    boxShadow: isActive ? `0 0 8px ${item.accent}80` : "none",
                   }}
-                >
-                  {!open && item.initial}
-                </span>
+                />
               )}
 
               {/* Sliding and fading label + count */}
               <div
                 className={cx(
-                  "flex flex-1 items-center justify-between min-w-0 ml-2.5 overflow-hidden whitespace-nowrap transition-all duration-300 ease-out",
-                  open ? "opacity-100 translate-x-0 w-auto" : "opacity-0 -translate-x-3 w-0 pointer-events-none",
+                  "flex flex-1 items-center justify-between min-w-0 overflow-hidden whitespace-nowrap transition-all duration-300 ease-out",
+                  open
+                    ? "max-w-[180px] opacity-100 translate-x-0 ml-2.5"
+                    : "max-w-0 opacity-0 -translate-x-3 ml-0 overflow-hidden pointer-events-none",
                 )}
               >
                 <span className="truncate text-[12.5px]">{item.label}</span>
                 <span
                   className={cx(
-                    "font-mono text-[10px] tabular-nums text-ink-4 shrink-0",
+                    "font-mono text-[10px] tabular-nums text-ink-4 shrink-0 ml-1.5",
                     item.key && item.key.toLowerCase() !== "uncategorized" && onDeleteCategory && "group-hover/row:hidden",
                   )}
                 >
@@ -256,7 +260,7 @@ export function Sidebar({
                       e.stopPropagation();
                       onDeleteCategory(item.key!);
                     }}
-                    className="hidden size-5 place-items-center rounded text-ink-4 hover:text-red-400 group-hover/row:grid shrink-0"
+                    className="hidden size-5 place-items-center rounded text-ink-4 hover:text-red-400 group-hover/row:grid shrink-0 ml-1"
                     title={`Delete ${item.label} category`}
                   >
                     <Trash2 size={11} />
@@ -287,8 +291,10 @@ export function Sidebar({
             <Settings size={14} strokeWidth={1.8} className="shrink-0" />
             <span
               className={cx(
-                "ml-2.5 text-left truncate transition-all duration-300 ease-out",
-                open ? "opacity-100 translate-x-0 w-auto" : "opacity-0 -translate-x-3 w-0 pointer-events-none",
+                "text-left truncate transition-all duration-300 ease-out",
+                open
+                  ? "max-w-[150px] opacity-100 translate-x-0 ml-2.5"
+                  : "max-w-0 opacity-0 -translate-x-3 ml-0 overflow-hidden pointer-events-none",
               )}
             >
               Settings
@@ -311,8 +317,10 @@ export function Sidebar({
             )}
             <span
               className={cx(
-                "ml-2.5 text-left truncate transition-all duration-300 ease-out",
-                open ? "opacity-100 translate-x-0 w-auto" : "opacity-0 -translate-x-3 w-0 pointer-events-none",
+                "text-left truncate transition-all duration-300 ease-out",
+                open
+                  ? "max-w-[150px] opacity-100 translate-x-0 ml-2.5"
+                  : "max-w-0 opacity-0 -translate-x-3 ml-0 overflow-hidden pointer-events-none",
               )}
             >
               Collapse
