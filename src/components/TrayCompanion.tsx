@@ -1,5 +1,6 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { getCurrentWindow } from "@tauri-apps/api/window";
+import { AnimatePresence, MotionConfig, motion } from "motion/react";
 import { Mark } from "./Mark";
 import {
   AlignLeft,
@@ -574,165 +575,188 @@ export function TrayCompanion() {
   // ---- RENDER COLLAPSED PILL (ROUNDED RECTANGLE EDGES) ----
   if (!expanded) {
     return (
-      <div className="flex h-full w-full items-center justify-center bg-transparent select-none p-2 relative">
-        {/* Soft fading radial spotlight ring (no hard border/edges) */}
-        {showSpawnIndicator && (
-          <div
-            className="pointer-events-none absolute inset-0 z-0 flex items-center justify-center"
-            style={{
-              animation: "radialCueFade 1.2s cubic-bezier(0.16, 1, 0.3, 1) forwards",
-            }}
-          >
+      <MotionConfig transition={{ type: "spring", bounce: 0, duration: 0.6 }}>
+        <div className="flex h-full w-full items-center justify-center bg-transparent select-none p-2 relative">
+          {/* Soft fading radial spotlight ring (no hard border/edges) */}
+          {showSpawnIndicator && (
             <div
-              className="size-14 rounded-full [mask-image:radial-gradient(circle,black_20%,transparent_70%)]"
+              className="pointer-events-none absolute inset-0 z-0 flex items-center justify-center"
               style={{
-                background: "radial-gradient(circle, rgba(255,255,255,0.3) 0%, rgba(255,255,255,0.08) 40%, transparent 70%)",
+                animation: "radialCueFade 1.2s cubic-bezier(0.16, 1, 0.3, 1) forwards",
               }}
-            />
-          </div>
-        )}
-
-        <div
-          onPointerDown={handlePillPointerDown}
-          onContextMenu={handleContextMenu}
-          className={cx(
-            "group/pill relative flex h-10 select-none items-center gap-2.5 rounded-xl pl-3 pr-2.5",
-            "cursor-pointer transition-all shadow-2xl border border-white/10 hover:border-white/30 outline-none focus:outline-none focus:ring-0",
+            >
+              <div
+                className="size-14 rounded-full [mask-image:radial-gradient(circle,black_20%,transparent_70%)]"
+                style={{
+                  background: "radial-gradient(circle, rgba(255,255,255,0.3) 0%, rgba(255,255,255,0.08) 40%, transparent 70%)",
+                }}
+              />
+            </div>
           )}
-          style={{
-            backgroundColor: "var(--theme-pill-bg, rgba(18, 19, 22, 0.9))",
-            backdropFilter: "blur(20px)",
-            WebkitBackdropFilter: "blur(20px)",
-            boxShadow:
-              "inset 0 1px 0 rgba(255,255,255,0.12), 0 16px 40px -12px rgba(0,0,0,0.95)",
-          }}
-          title="Click to open · Hold and drag to move · Right-click for options"
-        >
-          {/* Logo icon */}
-          <Mark size={16} className="pointer-events-none shrink-0" />
 
-          <span className="text-[13px] font-medium tracking-[0.01em] text-white/90 pointer-events-none">
-            Tray
-          </span>
-
-          <button
-            type="button"
-            onPointerDown={(e) => e.stopPropagation()}
-            onClick={(e) => {
-              e.stopPropagation();
-              handleCreate();
-              expandTray();
+          <motion.div
+            layout
+            onPointerDown={handlePillPointerDown}
+            onContextMenu={handleContextMenu}
+            className={cx(
+              "group/pill relative flex h-10 select-none items-center gap-2.5 rounded-xl pl-3 pr-2.5",
+              "cursor-pointer transition-all shadow-2xl border border-white/10 hover:border-white/30 outline-none focus:outline-none focus:ring-0",
+            )}
+            style={{
+              backgroundColor: "var(--theme-pill-bg, rgba(18, 19, 22, 0.9))",
+              backdropFilter: "blur(20px)",
+              WebkitBackdropFilter: "blur(20px)",
+              boxShadow:
+                "inset 0 1px 0 rgba(255,255,255,0.12), 0 16px 40px -12px rgba(0,0,0,0.95)",
             }}
-            className="grid size-6 place-items-center rounded-lg text-white/50 transition-colors hover:bg-white/10 hover:text-white cursor-pointer ml-auto outline-none focus:outline-none focus:ring-0 border-none ring-0"
-            title="New Note (⌘N)"
-            aria-label="New Note"
+            title="Click to open · Hold and drag to move · Right-click for options"
           >
-            <Plus size={14} strokeWidth={2.2} />
-          </button>
+            {/* Logo icon */}
+            <Mark size={16} className="pointer-events-none shrink-0" />
+
+            <span className="text-[13px] font-medium tracking-[0.01em] text-white/90 pointer-events-none">
+              Tray
+            </span>
+
+            <motion.button
+              type="button"
+              layout
+              animate={{ scale: expanded ? 0.8 : 1 }}
+              onPointerDown={(e) => e.stopPropagation()}
+              onClick={(e) => {
+                e.stopPropagation();
+                handleCreate();
+                expandTray();
+              }}
+              className="grid size-6 place-items-center rounded-lg text-white/50 transition-colors hover:bg-white/10 hover:text-white cursor-pointer ml-auto outline-none focus:outline-none focus:ring-0 border-none ring-0"
+              title="New Note (⌘N)"
+              aria-label="New Note"
+            >
+              <Plus size={14} strokeWidth={2.2} />
+            </motion.button>
+          </motion.div>
         </div>
-      </div>
+      </MotionConfig>
     );
   }
 
   // ---- RENDER EXPANDED DESK TRAY (IMAGE 3) OR IN-TRAY NOTE EDITOR ----
   return (
-    <div
-      onPaste={handlePaste}
-      onContextMenu={handleContextMenu}
-      className={cx(
-        "box-border flex h-full w-full max-h-full max-w-full flex-col overflow-hidden text-ink-1 rounded-2xl border border-white/10 select-none p-3",
-        "drawer-spring-motion transform",
-        panelVisible
-          ? "translate-x-0 opacity-100"
-          : "translate-x-full opacity-0 pointer-events-none",
-      )}
-      style={{
-        backgroundColor: "var(--theme-tray-bg)",
-        backdropFilter: "var(--theme-tray-blur)",
-        WebkitBackdropFilter: "var(--theme-tray-blur)",
-        boxShadow: "inset 0 0 0 1px var(--theme-tray-border), 0 40px 90px -30px rgba(0,0,0,0.95)",
-      }}
-    >
-      {/* 1. Fluid unbordered top bar: Hold and drag to move, click to minimize */}
-      <div
-        onPointerDown={handleTopBarPointerDown}
-        title="Tap to minimize · Hold and drag to move"
-        className="flex h-7 shrink-0 items-center justify-between px-1 mb-2.5 select-none cursor-pointer group/topbar"
+    <MotionConfig transition={{ type: "spring", bounce: 0, duration: 0.6 }}>
+      <motion.div
+        layout
+        onPaste={handlePaste}
+        onContextMenu={handleContextMenu}
+        className={cx(
+          "box-border flex h-full w-full max-h-full max-w-full flex-col overflow-hidden text-ink-1 rounded-2xl border border-white/10 select-none p-3",
+          "drawer-spring-motion transform",
+          panelVisible
+            ? "translate-x-0 opacity-100"
+            : "translate-x-full opacity-0 pointer-events-none",
+        )}
+        style={{
+          backgroundColor: "var(--theme-tray-bg)",
+          backdropFilter: "var(--theme-tray-blur)",
+          WebkitBackdropFilter: "var(--theme-tray-blur)",
+          boxShadow: "inset 0 0 0 1px var(--theme-tray-border), 0 40px 90px -30px rgba(0,0,0,0.95)",
+        }}
       >
-        <div className="flex flex-1 items-center gap-2 py-1 pointer-events-none">
-          {activeNote ? (
-            <button
+        {/* 1. Fluid unbordered top bar: Hold and drag to move, click to minimize */}
+        <motion.div
+          layout
+          onPointerDown={handleTopBarPointerDown}
+          title="Tap to minimize · Hold and drag to move"
+          className="flex h-7 shrink-0 items-center justify-between px-1 mb-2.5 select-none cursor-pointer group/topbar"
+        >
+          <div className="flex flex-1 items-center gap-2 py-1 pointer-events-none">
+            {activeNote ? (
+              <motion.button
+                type="button"
+                layout
+                onPointerDown={(e) => e.stopPropagation()}
+                onClick={(e) => {
+                  e.stopPropagation();
+                  handleBack();
+                }}
+                className="flex items-center gap-1 h-6 rounded-md px-1.5 -ml-1 text-[11px] font-mono text-white/60 hover:bg-white/10 hover:text-white transition-colors cursor-pointer pointer-events-auto"
+                title="Back to notes list"
+              >
+                <ArrowLeft size={12} />
+                <span>Back</span>
+              </motion.button>
+            ) : (
+              <Mark size={14} className="shrink-0" />
+            )}
+            <motion.span
+              layout
+              className="font-mono text-[9.5px] font-semibold uppercase tracking-[0.16em] text-white/50 group-hover/topbar:text-white/80 transition-colors"
+            >
+              {activeNote ? "EDIT NOTE" : "DESK TRAY"}
+            </motion.span>
+          </div>
+
+          <div
+            className="flex items-center gap-1 shrink-0 z-20"
+            onPointerDown={(e) => e.stopPropagation()}
+            onClick={(e) => e.stopPropagation()}
+          >
+            <motion.button
               type="button"
+              layout
+              onPointerDown={(e) => e.stopPropagation()}
+              onClick={() => void tauriApi.openCanvasMode()}
+              className="grid size-6 place-items-center rounded-md text-white/50 hover:bg-white/10 hover:text-white transition-colors cursor-pointer"
+              title="Open Canvas"
+              aria-label="Open Canvas"
+            >
+              <ArrowUpRight size={13} strokeWidth={1.8} />
+            </motion.button>
+            <motion.button
+              type="button"
+              layout
               onPointerDown={(e) => e.stopPropagation()}
               onClick={(e) => {
                 e.stopPropagation();
-                handleBack();
+                collapseTray();
               }}
-              className="flex items-center gap-1 h-6 rounded-md px-1.5 -ml-1 text-[11px] font-mono text-white/60 hover:bg-white/10 hover:text-white transition-colors cursor-pointer pointer-events-auto"
-              title="Back to notes list"
+              className="grid size-6 place-items-center rounded-md text-white/65 hover:bg-white/15 hover:text-white transition-colors cursor-pointer"
+              title="Minimize to Pill (—)"
+              aria-label="Minimize to Pill"
             >
-              <ArrowLeft size={12} />
-              <span>Back</span>
-            </button>
-          ) : (
-            <Mark size={14} className="shrink-0" />
-          )}
-          <span className="font-mono text-[9.5px] font-semibold uppercase tracking-[0.16em] text-white/50 group-hover/topbar:text-white/80 transition-colors">
-            {activeNote ? "EDIT NOTE" : "DESK TRAY"}
-          </span>
-        </div>
+              <Minus size={13} strokeWidth={2.4} />
+            </motion.button>
+            <motion.button
+              type="button"
+              layout
+              onPointerDown={(e) => e.stopPropagation()}
+              onClick={() => {
+                collapseTray();
+                window.setTimeout(() => {
+                  void getCurrentWindow().hide();
+                }, 300);
+              }}
+              className="grid size-6 place-items-center rounded-md text-white/50 hover:bg-white/10 hover:text-white transition-colors cursor-pointer"
+              title="Hide to System Tray (✕)"
+              aria-label="Hide to System Tray"
+            >
+              <X size={13} strokeWidth={1.8} />
+            </motion.button>
+          </div>
+        </motion.div>
 
-        <div
-          className="flex items-center gap-1 shrink-0 z-20"
-          onPointerDown={(e) => e.stopPropagation()}
-          onClick={(e) => e.stopPropagation()}
-        >
-          <button
-            type="button"
-            onPointerDown={(e) => e.stopPropagation()}
-            onClick={() => void tauriApi.openCanvasMode()}
-            className="grid size-6 place-items-center rounded-md text-white/50 hover:bg-white/10 hover:text-white transition-colors cursor-pointer"
-            title="Open Canvas"
-            aria-label="Open Canvas"
+      <AnimatePresence mode="wait" initial={false}>
+        {activeNote ? (
+          /* ---- IN-TRAY PROPER NOTE EDITOR ---- */
+          <motion.div
+            key={`editor-${activeNote.id}`}
+            layout
+            initial={{ opacity: 0, height: 0 }}
+            animate={{ opacity: 1, height: "auto" }}
+            exit={{ opacity: 0, height: 0 }}
+            className="flex flex-1 flex-col overflow-hidden px-1"
           >
-            <ArrowUpRight size={13} strokeWidth={1.8} />
-          </button>
-          <button
-            type="button"
-            onPointerDown={(e) => e.stopPropagation()}
-            onClick={(e) => {
-              e.stopPropagation();
-              collapseTray();
-            }}
-            className="grid size-6 place-items-center rounded-md text-white/65 hover:bg-white/15 hover:text-white transition-colors cursor-pointer"
-            title="Minimize to Pill (—)"
-            aria-label="Minimize to Pill"
-          >
-            <Minus size={13} strokeWidth={2.4} />
-          </button>
-          <button
-            type="button"
-            onPointerDown={(e) => e.stopPropagation()}
-            onClick={() => {
-              collapseTray();
-              window.setTimeout(() => {
-                void getCurrentWindow().hide();
-              }, 300);
-            }}
-            className="grid size-6 place-items-center rounded-md text-white/50 hover:bg-white/10 hover:text-white transition-colors cursor-pointer"
-            title="Hide to System Tray (✕)"
-            aria-label="Hide to System Tray"
-          >
-            <X size={13} strokeWidth={1.8} />
-          </button>
-        </div>
-      </div>
-
-      {activeNote ? (
-        /* ---- IN-TRAY PROPER NOTE EDITOR ---- */
-        <div className="flex flex-1 flex-col overflow-hidden px-1">
-          {/* Note Toolbar: Type, Bold, Italic, Tasks/Text Mode, Image, Delete */}
-          <div className="flex items-center justify-between gap-1 pb-2 border-b border-white/[0.07]">
+            {/* Note Toolbar: Type, Bold, Italic, Tasks/Text Mode, Image, Delete */}
+            <div className="flex items-center justify-between gap-1 pb-2 border-b border-white/[0.07]">
             {/* Shelf/Category selector */}
             <div className="relative">
               <button
@@ -1069,25 +1093,42 @@ export function TrayCompanion() {
               </div>
             )}
           </div>
-        </div>
+        </motion.div>
       ) : (
         /* ---- DESK TRAY MAIN MENU (SCREENSHOT 3: CLEAN, UNCLUTTERED, OPEN PROFILE) ---- */
-        <div className="flex flex-1 flex-col overflow-hidden px-1 space-y-2">
+        <motion.div
+          key="main-menu"
+          layout
+          initial={{ opacity: 0, height: 0 }}
+          animate={{ opacity: 1, height: "auto" }}
+          exit={{ opacity: 0, height: 0 }}
+          className="flex flex-1 flex-col overflow-hidden px-1 space-y-2"
+        >
           {/* + New note button matching Screenshot 3 */}
-          <button
+          <motion.button
             type="button"
+            layout
+            animate={{ scale: drawerOpen ? 0.98 : 1 }}
             onClick={handleCreate}
             className="flex h-11 w-full items-center gap-2.5 rounded-[14px] bg-white/[0.07] px-3.5 text-[13px] font-medium text-white/90 shadow-[inset_0_0_0_1px_rgba(255,255,255,0.08)] transition-all hover:bg-white/[0.12] active:scale-[0.99]"
           >
-            <Plus size={15} strokeWidth={2} className="text-white/80" />
+            <motion.span
+              animate={{ rotate: drawerOpen ? 90 : 0 }}
+              className="inline-flex"
+            >
+              <Plus size={15} strokeWidth={2} className="text-white/80" />
+            </motion.span>
             <span>New note</span>
             <span className="ml-auto rounded-md bg-white/[0.06] px-1.5 py-0.5 font-mono text-[10px] text-white/40 border border-white/[0.08]">
               ⌘N
             </span>
-          </button>
+          </motion.button>
 
           {/* Pull up an old note input matching Screenshot 3 */}
-          <div className="relative flex items-center h-11 w-full rounded-[14px] bg-white/[0.035] px-3.5 shadow-[inset_0_0_0_1px_rgba(255,255,255,0.06)] transition-all focus-within:bg-white/[0.06] focus-within:shadow-[inset_0_0_0_1px_rgba(255,255,255,0.14)]">
+          <motion.div
+            layout
+            className="relative flex items-center h-11 w-full rounded-[14px] bg-white/[0.035] px-3.5 shadow-[inset_0_0_0_1px_rgba(255,255,255,0.06)] transition-all focus-within:bg-white/[0.06] focus-within:shadow-[inset_0_0_0_1px_rgba(255,255,255,0.14)]"
+          >
             <Search size={14} className="text-white/35 mr-2.5 pointer-events-none shrink-0" />
             <input
               type="text"
@@ -1105,8 +1146,10 @@ export function TrayCompanion() {
                 <X size={12} />
               </button>
             ) : (
-              <button
+              <motion.button
                 type="button"
+                layout
+                animate={{ scale: drawerOpen ? 0.8 : 1 }}
                 onClick={() => setDrawerOpen((prev) => !prev)}
                 className={cx(
                   "ml-auto flex items-center gap-1 rounded-md px-1.5 py-0.5 font-mono text-[9.5px] uppercase tracking-wider transition-colors border",
@@ -1117,75 +1160,88 @@ export function TrayCompanion() {
                 title="Toggle Category Filter Drawer"
               >
                 <span>{selectedShelf ? selectedShelf : "FIND"}</span>
-                <ChevronDown
-                  size={10}
-                  className={cx("transition-transform duration-200", drawerOpen && "rotate-180")}
-                />
-              </button>
+                <motion.span
+                  className="inline-flex"
+                  animate={{ rotate: drawerOpen ? 180 : 0 }}
+                >
+                  <ChevronDown size={10} />
+                </motion.span>
+              </motion.button>
             )}
-          </div>
+          </motion.div>
 
-          {/* Category Filter Drawer Container (Always visible, smoothly scrollable, clean) */}
-          <div className="py-1">
-            <div
-              ref={grabScrollRef}
-              onPointerDown={onPointerDownGrab}
-              onPointerMove={onPointerMoveGrab}
-              onPointerUp={onPointerUpGrab}
-              onPointerLeave={onPointerUpGrab}
-              className="flex items-center gap-1.5 overflow-x-auto scrollbar-none no-scrollbar cursor-grab active:cursor-grabbing select-none"
-              style={{ scrollbarWidth: "none", msOverflowStyle: "none" }}
-            >
-              <button
-                type="button"
-                onClick={() => {
-                  if (!dragScrollState.current.moved) setSelectedShelf(null);
-                }}
-                className={cx(
-                  "shrink-0 px-2.5 py-1 rounded-full text-[10.5px] font-mono uppercase tracking-wider transition-all",
-                  selectedShelf === null
-                    ? "bg-white/20 text-white font-medium border border-white/25 shadow-sm"
-                    : "bg-white/[0.04] text-white/50 hover:bg-white/[0.08] hover:text-white/80 border border-white/[0.06]",
-                )}
+          {/* Category Filter Drawer Container (Framer Motion height mapping) */}
+          <AnimatePresence initial={false}>
+            {drawerOpen && (
+              <motion.div
+                key="category-drawer-content"
+                layout
+                initial={{ opacity: 0, height: 0 }}
+                animate={{ opacity: 1, height: "auto" }}
+                exit={{ opacity: 0, height: 0 }}
+                className="overflow-hidden py-1"
               >
-                All
-              </button>
-              {shelves.map((shelf) => {
-                const accent = accentFor(shelf, shelves);
-                const active = selectedShelf?.toLowerCase() === shelf.toLowerCase();
-                return (
+                <div
+                  ref={grabScrollRef}
+                  onPointerDown={onPointerDownGrab}
+                  onPointerMove={onPointerMoveGrab}
+                  onPointerUp={onPointerUpGrab}
+                  onPointerLeave={onPointerUpGrab}
+                  className="flex items-center gap-1.5 overflow-x-auto scrollbar-none no-scrollbar cursor-grab active:cursor-grabbing select-none"
+                  style={{ scrollbarWidth: "none", msOverflowStyle: "none" }}
+                >
                   <button
-                    key={shelf}
                     type="button"
                     onClick={() => {
-                      if (!dragScrollState.current.moved) {
-                        setSelectedShelf(active ? null : shelf);
-                      }
+                      if (!dragScrollState.current.moved) setSelectedShelf(null);
                     }}
                     className={cx(
-                      "shrink-0 flex items-center gap-1.5 px-2.5 py-1 rounded-full text-[10.5px] font-mono uppercase tracking-wider transition-all",
-                      active
+                      "shrink-0 px-2.5 py-1 rounded-full text-[10.5px] font-mono uppercase tracking-wider transition-all",
+                      selectedShelf === null
                         ? "bg-white/20 text-white font-medium border border-white/25 shadow-sm"
                         : "bg-white/[0.04] text-white/50 hover:bg-white/[0.08] hover:text-white/80 border border-white/[0.06]",
                     )}
                   >
-                    <span className="size-1.5 rounded-full" style={{ backgroundColor: accent }} />
-                    <span>{shelf}</span>
+                    All
                   </button>
-                );
-              })}
-            </div>
-          </div>
+                  {shelves.map((shelf) => {
+                    const accent = accentFor(shelf, shelves);
+                    const active = selectedShelf?.toLowerCase() === shelf.toLowerCase();
+                    return (
+                      <button
+                        key={shelf}
+                        type="button"
+                        onClick={() => {
+                          if (!dragScrollState.current.moved) {
+                            setSelectedShelf(active ? null : shelf);
+                          }
+                        }}
+                        className={cx(
+                          "shrink-0 flex items-center gap-1.5 px-2.5 py-1 rounded-full text-[10.5px] font-mono uppercase tracking-wider transition-all",
+                          active
+                            ? "bg-white/20 text-white font-medium border border-white/25 shadow-sm"
+                            : "bg-white/[0.04] text-white/50 hover:bg-white/[0.08] hover:text-white/80 border border-white/[0.06]",
+                        )}
+                      >
+                        <span className="size-1.5 rounded-full" style={{ backgroundColor: accent }} />
+                        <span>{shelf}</span>
+                      </button>
+                    );
+                  })}
+                </div>
+              </motion.div>
+            )}
+          </AnimatePresence>
 
           {/* RECENT Label matching Screenshot 3 */}
-          <div className="pt-1.5 px-1">
+          <motion.div layout className="pt-1.5 px-1">
             <span className="font-mono text-[9.5px] uppercase tracking-[0.16em] text-white/30">
               RECENT
             </span>
-          </div>
+          </motion.div>
 
           {/* Recent Notes List matching Screenshot 3 */}
-          <div className="flex-1 overflow-y-auto space-y-0.5 scroll pr-0.5">
+          <motion.div layout className="flex-1 overflow-y-auto space-y-0.5 scroll pr-0.5">
             {filteredNotes.length === 0 ? (
               <p className="py-6 text-center text-[11.5px] text-white/35">
                 No matching notes found.
@@ -1193,8 +1249,9 @@ export function TrayCompanion() {
             ) : (
               filteredNotes.slice(0, 5).map((note) => {
                 return (
-                  <button
+                  <motion.button
                     key={note.id}
+                    layout
                     type="button"
                     onClick={() => openNoteById(note.id)}
                     className="flex w-full items-center gap-3 rounded-[12px] px-2 py-2 text-left transition-colors hover:bg-white/[0.05] group"
@@ -1213,16 +1270,17 @@ export function TrayCompanion() {
                     <span className="shrink-0 font-mono text-[10px] tabular-nums text-white/35">
                       {relativeShort(note.last_edited)}
                     </span>
-                  </button>
+                  </motion.button>
                 );
               })
             )}
-          </div>
+          </motion.div>
 
           {/* Bottom Action Footer: Minimize to Pill and Open Canvas */}
-          <div className="pt-1.5 border-t border-white/[0.08] flex items-center justify-between px-2">
-            <button
+          <motion.div layout className="pt-1.5 border-t border-white/[0.08] flex items-center justify-between px-2">
+            <motion.button
               type="button"
+              layout
               onClick={() => {
                 collapseTray();
               }}
@@ -1231,20 +1289,22 @@ export function TrayCompanion() {
             >
               <Minus size={12} strokeWidth={2.4} />
               <span>Minimize</span>
-            </button>
+            </motion.button>
 
-            <button
+            <motion.button
               type="button"
+              layout
               onClick={() => tauriApi.openCanvasMode()}
               className="flex items-center gap-1 text-[11.5px] font-mono text-white/50 hover:text-white transition-colors cursor-pointer"
               title="Maximize back to full canvas"
             >
               <span>Canvas</span>
               <ArrowUpRight size={12} strokeWidth={2} />
-            </button>
-          </div>
-        </div>
+            </motion.button>
+          </motion.div>
+        </motion.div>
       )}
+      </AnimatePresence>
 
       {/* Lightbox Preview Modal with Full Interactive Zoom */}
       {previewImage && (
@@ -1347,6 +1407,7 @@ export function TrayCompanion() {
           </div>
         </div>
       )}
-    </div>
+      </motion.div>
+    </MotionConfig>
   );
 }
