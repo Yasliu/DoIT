@@ -17,7 +17,8 @@ import {
   Square,
 } from "lucide-react";
 import { AppSettings, DEFAULT_SETTINGS, tauriApi } from "../api/tauriBridge";
-import { applyShortcutSettings, comboFromEvent, DEFAULT_MD_SHORTCUTS } from "../lib/shortcuts";
+import { applyShortcutSettings, DEFAULT_MD_SHORTCUTS } from "../lib/shortcuts";
+import { ShortcutField } from "./ShortcutField";
 import { cx } from "../lib/text";
 
 interface SettingsPanelProps {
@@ -33,6 +34,7 @@ const MD_SHORTCUT_ROWS = [
   { key: "hotkey_bold", label: "Bold", hint: "Wrap selection in **bold**", def: DEFAULT_MD_SHORTCUTS.bold },
   { key: "hotkey_italic", label: "Italic", hint: "Wrap selection in *italic*", def: DEFAULT_MD_SHORTCUTS.italic },
   { key: "hotkey_table", label: "Insert Table", hint: "Drop a markdown table at the cursor", def: DEFAULT_MD_SHORTCUTS.table },
+  { key: "hotkey_task", label: "Task Checkbox", hint: "Turn the line into a - [ ] task (or type [] and a space)", def: DEFAULT_MD_SHORTCUTS.task },
   { key: "hotkey_table_col", label: "Table: Add Column", hint: "Inside a table cell: new column on every row", def: DEFAULT_MD_SHORTCUTS.tableCol },
   { key: "hotkey_table_row", label: "Table: Add Row", hint: "Inside a table cell: new row at the bottom", def: DEFAULT_MD_SHORTCUTS.tableRow },
 ] as const;
@@ -527,33 +529,24 @@ export function SettingsPanel({ onBack, onStoragePathChanged, onThemeChanged }: 
                   <div className="text-[12.5px] font-medium text-ink-2">{row.label}</div>
                   <div className="text-[10.5px] text-ink-4">{row.hint}</div>
                 </div>
-                <input
-                  type="text"
-                  readOnly
+                <ShortcutField
                   value={(settings[row.key] as string | undefined) || row.def}
-                  onKeyDown={(e) => {
-                    if (e.key === "Tab") return;
-                    e.preventDefault();
-                    if (e.key === "Backspace" || e.key === "Delete") {
-                      setSettings({ ...settings, [row.key]: row.def });
-                      return;
-                    }
-                    const combo = comboFromEvent(e);
-                    if (combo && combo.includes("+")) setSettings({ ...settings, [row.key]: combo });
-                  }}
-                  title="Click, then press the new key combination"
-                  className="w-24 h-7 cursor-pointer text-center rounded-lg bg-black/40 border border-white/15 text-[11.5px] font-mono text-white outline-none focus:border-white/40"
+                  def={row.def}
+                  onChange={(combo) => setSettings({ ...settings, [row.key]: combo })}
                 />
               </div>
             ))}
           </div>
 
           <div className="mt-3 rounded-xl border border-white/[0.06] bg-white/[0.02] p-3 text-[11px] leading-relaxed text-ink-4">
-            <span className="font-mono uppercase tracking-[0.1em] text-ink-3">Table keys (fixed)</span>
-            <br />
-            Tab / Shift+Tab move between cells - Tab in the last header cell adds a column - Tab in the last cell adds a
-            row - Enter moves down a row - right-click a table for Add Column / Add Row / Delete Column / Delete Row.
-          </div>
+            <div className="mb-1.5 font-mono uppercase tracking-[0.1em] text-ink-3">Table keys (fixed)</div>
+            <ul className="space-y-1">
+              <li>Tab / Shift+Tab: move between cells</li>
+              <li>Tab in the last header cell: add a column</li>
+              <li>Tab in the last cell: add a row</li>
+              <li>Enter: move down a row</li>
+              <li>Right-click a table: Add Column / Add Row / Delete Column / Delete Row</li>
+            </ul>          </div>
         </section>
       </div>
     </div>

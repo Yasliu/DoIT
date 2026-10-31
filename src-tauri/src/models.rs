@@ -96,6 +96,8 @@ pub struct AppSettings {
     pub hotkey_table_col: String,
     #[serde(default = "default_hotkey_table_row")]
     pub hotkey_table_row: String,
+    #[serde(default = "default_hotkey_task")]
+    pub hotkey_task: String,
     #[serde(default = "default_theme_mode")]
     pub theme_mode: String,
     #[serde(default)]
@@ -130,6 +132,9 @@ fn default_hotkey_table_col() -> String {
 }
 fn default_hotkey_table_row() -> String {
     "Ctrl+Alt+ArrowDown".to_string()
+}
+fn default_hotkey_task() -> String {
+    "Ctrl+L".to_string()
 }
 
 fn default_theme_mode() -> String {
@@ -176,6 +181,7 @@ impl Default for AppSettings {
             hotkey_table: default_hotkey_table(),
             hotkey_table_col: default_hotkey_table_col(),
             hotkey_table_row: default_hotkey_table_row(),
+            hotkey_task: default_hotkey_task(),
             theme_mode: "glass".to_string(),
             is_maximized: false,
         }

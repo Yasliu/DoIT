@@ -65,6 +65,7 @@ export interface AppSettings {
   hotkey_table?: string;
   hotkey_table_col?: string;
   hotkey_table_row?: string;
+  hotkey_task?: string;
   theme_mode?: "glass" | "monochrome";
 }
 
@@ -83,6 +84,7 @@ export const DEFAULT_SETTINGS: AppSettings = {
   hotkey_table: "Ctrl+T",
   hotkey_table_col: "Ctrl+Alt+ArrowRight",
   hotkey_table_row: "Ctrl+Alt+ArrowDown",
+  hotkey_task: "Ctrl+L",
   theme_mode: "glass",
 };
 
