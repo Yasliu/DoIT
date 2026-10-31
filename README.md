@@ -10,7 +10,7 @@ A local-first, minimal task environment structured precisely into an organic, as
 
 - **Zero Cloud, Absolute Ownership:** Every note, list, and task is stored natively on your machine as standard human-readable Markdown text files. No accounts, no database lock-ins, and no tracking.
 - **System Tray Native:** Folds down seamlessly into your Windows notification tray to stay entirely out of your way until called. 
-- **High-Performance Blueprint:** Built natively with Tauri and Rust on an optimized memory architecture that clocks a flat idling speed of just 11.5 MB RAM.
+- **High-Performance Blueprint:** Built natively with Tauri and Rust on an optimized memory architecture that clocks a flat idling speed of under 20 MB RAM.
 - **Asymmetric Canvas:** Rejects standard list structures for an editorial bento tile workspace that matches content density dynamically.
 
 ---
