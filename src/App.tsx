@@ -4,6 +4,7 @@ import type { NoteItem } from "./api/tauriBridge";
 import { tauriApi } from "./api/tauriBridge";
 import { BentoCanvas } from "./components/BentoCanvas";
 import { ContextMenu } from "./components/ContextMenu";
+import { CategoryMenu } from "./components/CategoryMenu";
 import { NoteSheet } from "./components/NoteSheet";
 import { SettingsPanel } from "./components/SettingsPanel";
 import { Sidebar } from "./components/Sidebar";
@@ -35,7 +36,7 @@ function readCollapsed(): Record<string, boolean> {
 
 export default function App() {
   const workspace = useWorkspace();
-  const { notes, shelves, state, create, patch, remove, restore, moveCategory, deleteCategory, createCategory, reorderNote } = workspace;
+  const { notes, shelves, state, create, patch, remove, restore, moveCategory, deleteCategory, createCategory, renameCategory, reorderNote } = workspace;
 
   const canvasRef = useRef<HTMLElement | null>(null);
   const deletedRef = useRef<NoteItem[]>([]);
@@ -43,6 +44,7 @@ export default function App() {
   const [active, setActive] = useState<string | null>(null);
   const [openNote, setOpenNote] = useState<OpenNote | null>(null);
   const [contextMenu, setContextMenu] = useState<{ x: number; y: number; note: NoteItem } | null>(null);
+  const [categoryMenu, setCategoryMenu] = useState<{ x: number; y: number; shelf: string } | null>(null);
   const [isSettings, setIsSettings] = useState(false);
   const [mini] = useState(false);
   const [railOpen, setRailOpen] = useState(true);
@@ -285,6 +287,7 @@ export default function App() {
           onOpenSettings={() => setIsSettings((v) => !v)}
           isSettings={isSettings}
           onDeleteCategory={(cat) => void deleteCategory(cat)}
+          onCategoryContextMenu={(event, shelf) => setCategoryMenu({ x: event.clientX, y: event.clientY, shelf })}
         />
       )}
 
@@ -339,6 +342,7 @@ export default function App() {
                 onToggleItem={toggleItem}
                 onMoveCategory={(id, shelf) => void moveCategory(id, shelf)}
                 onDeleteCategory={(cat) => void deleteCategory(cat)}
+                onCategoryContextMenu={(event, shelf) => setCategoryMenu({ x: event.clientX, y: event.clientY, shelf })}
                 onReorderNotes={(shelf, activeId, overId) => reorderNote(shelf, activeId, overId)}
                 onContextMenu={(event, note) => setContextMenu({ x: event.clientX, y: event.clientY, note })}
               />
@@ -380,6 +384,31 @@ export default function App() {
           onMoveCategory={(id, shelf) => {
             setContextMenu(null);
             void moveCategory(id, shelf);
+          }}
+        />
+      )}
+
+      {categoryMenu && (
+        <CategoryMenu
+          x={categoryMenu.x}
+          y={categoryMenu.y}
+          shelf={categoryMenu.shelf}
+          onClose={() => setCategoryMenu(null)}
+          onDelete={(shelf) => {
+            setCategoryMenu(null);
+            void deleteCategory(shelf);
+          }}
+          onRename={async (shelf, newName) => {
+            const err = await renameCategory(shelf, newName);
+            if (!err) {
+              setActive((cur) => (cur === shelf ? newName : cur));
+              setCollapsed((prev) => {
+                if (!(shelf in prev)) return prev;
+                const { [shelf]: was, ...rest } = prev;
+                return { ...rest, [newName]: was };
+              });
+            }
+            return err;
           }}
         />
       )}

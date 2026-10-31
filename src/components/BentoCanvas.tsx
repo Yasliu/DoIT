@@ -20,6 +20,7 @@ interface BentoCanvasProps {
   onToggleItem: (note: NoteItem, itemId: string) => void;
   onMoveCategory: (id: string, category: string) => void;
   onDeleteCategory?: (shelf: string) => void;
+  onCategoryContextMenu?: (event: React.MouseEvent, shelf: string) => void;
   onReorderNotes?: (shelf: string, activeId: string, overId: string) => void;
   onContextMenu?: (event: React.MouseEvent, note: NoteItem) => void;
 }
@@ -61,6 +62,7 @@ export function BentoCanvas({
   onToggleItem,
   onMoveCategory,
   onDeleteCategory,
+  onCategoryContextMenu,
   onReorderNotes,
   onContextMenu,
 }: BentoCanvasProps) {
@@ -407,6 +409,7 @@ export function BentoCanvas({
                 onToggleCollapse={() => onToggleCollapse(group.shelf)}
                 onNewNote={onNewNote}
                 onDeleteCategory={onDeleteCategory}
+                onCategoryContextMenu={onCategoryContextMenu}
                 onOpen={onOpen}
                 onArm={arm}
                 onToggleItem={onToggleItem}

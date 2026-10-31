@@ -177,6 +177,7 @@ pub fn run() {
             get_categories,
             add_category,
             delete_category,
+            rename_category,
             toggle_category_collapse,
             get_settings,
             get_default_storage_path,

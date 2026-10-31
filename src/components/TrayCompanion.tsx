@@ -474,7 +474,7 @@ export function TrayCompanion() {
           completed: false,
         }));
     }
-    editActive({ content: convertContentMode(source, nextIsTodo) });
+    editActive({ content: convertContentMode(source, nextIsTodo, activeNote.id) });
   };
 
   const handleContextMenu = (e: React.MouseEvent) => {
@@ -586,7 +586,7 @@ export function TrayCompanion() {
         {/* 1. Fluid permanent top bar: Hold and drag to move, click to toggle minimize */}
         <div
           onPointerDown={handleTopBarPointerDown}
-          title="Tap to toggle minimize · Hold and drag to move"
+          title="Tap to toggle minimize | Hold and drag to move"
           className="flex h-6 w-full shrink-0 items-center justify-between px-1 select-none cursor-pointer group/topbar scale-100 overflow-hidden"
         >
           <div className="flex items-center gap-2 pointer-events-none min-w-0 overflow-hidden h-full whitespace-nowrap">
@@ -647,7 +647,7 @@ export function TrayCompanion() {
                 closeTray();
               }}
               className="grid size-5 place-items-center rounded text-white/50 hover:bg-white/10 hover:text-white transition-colors cursor-pointer"
-              title="Hide to System Tray (✕)"
+              title="Hide to System Tray (âœ•)"
               aria-label="Hide to System Tray"
             >
               <X size={12} strokeWidth={1.8} />
@@ -920,7 +920,7 @@ export function TrayCompanion() {
             ) : (
               <div key="task-list" className="space-y-1">
                 {activeNote.content.map((item, index) => {
-                  const cleanItemText = item.text.replace(/^\s*[-*•]\s+/, "");
+                  const cleanItemText = item.text.replace(/^\s*[-*â€¢]\s+/, "");
                   return (
                     <div key={item.id} className="flex items-start gap-3 w-full py-1 group">
                       <button
@@ -944,7 +944,7 @@ export function TrayCompanion() {
                         value={cleanItemText}
                         onChange={(text) => {
                           const content = activeNote.content.map((c) =>
-                            c.id === item.id ? { ...c, text: text.replace(/^\s*[-*•]\s+/, "") } : c,
+                            c.id === item.id ? { ...c, text: text.replace(/^\s*[-*â€¢]\s+/, "") } : c,
                           );
                           editActive({ content });
                         }}
@@ -1027,7 +1027,7 @@ export function TrayCompanion() {
             </span>
             <span className="whitespace-nowrap overflow-hidden text-ellipsis truncate">New note</span>
             <span className="ml-auto shrink-0 whitespace-nowrap rounded-md bg-white/[0.06] px-1.5 py-0.5 font-mono text-[10px] text-white/40 border border-white/[0.08]">
-              ⌘N
+              âŒ˜N
             </span>
           </button>
 
@@ -1269,7 +1269,17 @@ export function TrayCompanion() {
           {/* Interactive Zoomable & Pannable Viewport */}
           <div
             className="relative flex-1 w-full overflow-hidden flex items-center justify-center p-2 cursor-grab active:cursor-grabbing select-none"
-            onClick={(e) => e.stopPropagation()}
+            onClick={(e) => {
+              e.stopPropagation();
+              if (panStartRef.current.moved) return;
+              const img = e.currentTarget.querySelector("img");
+              const r = img?.getBoundingClientRect();
+              const onImage = !!r && e.clientX >= r.left && e.clientX <= r.right && e.clientY >= r.top && e.clientY <= r.bottom;
+              if (onImage) return;
+              setPreviewImage(null);
+              setZoomLevel(1);
+              setImagePan({ x: 0, y: 0 });
+            }}
             onPointerDown={handleImagePointerDown}
             onPointerMove={handleImagePointerMove}
             onPointerUp={handleImagePointerUp}
@@ -1303,7 +1313,7 @@ export function TrayCompanion() {
                 }
               }}
               className="max-w-[90vw] max-h-[75vh] object-contain rounded-xl border border-white/20 shadow-2xl select-none"
-              title="Hold and drag to move · Click to toggle 2x zoom · Scroll to zoom"
+              title="Hold and drag to move | Click to toggle 2x zoom | Scroll to zoom"
             />
           </div>
         </div>

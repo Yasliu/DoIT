@@ -16,6 +16,7 @@ interface SidebarProps {
   onOpenSettings?: () => void;
   isSettings?: boolean;
   onDeleteCategory?: (shelf: string) => void;
+  onCategoryContextMenu?: (event: React.MouseEvent, shelf: string) => void;
 }
 
 export function Sidebar({
@@ -31,6 +32,7 @@ export function Sidebar({
   onOpenSettings,
   isSettings,
   onDeleteCategory,
+  onCategoryContextMenu,
 }: SidebarProps) {
   const [creatingCategory, setCreatingCategory] = useState(false);
   const [categoryName, setCategoryName] = useState("");
@@ -207,6 +209,11 @@ export function Sidebar({
               key={item.key ?? "__all__"}
               type="button"
               onClick={() => onSelect(item.key)}
+              onContextMenu={(e) => {
+                if (!item.key || item.key.toLowerCase() === "uncategorized" || !onCategoryContextMenu) return;
+                e.preventDefault();
+                onCategoryContextMenu(e, item.key);
+              }}
               title={`${item.label} (${item.count})`}
               className={cx(
                 "group/row relative mb-1 flex h-8 items-center rounded-[8px] transition-all duration-300 ease-out cursor-pointer select-none",

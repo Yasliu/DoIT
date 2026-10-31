@@ -45,6 +45,7 @@ export function useWorkspace() {
   useEffect(() => {
     let unlistenSaved: (() => void) | null = null;
     let unlistenDeleted: (() => void) | null = null;
+    let unlistenCats: (() => void) | null = null;
 
     getCurrentWindow()
       .listen<NoteItem>("note-saved", (event) => {
@@ -70,6 +71,14 @@ export function useWorkspace() {
       });
 
     getCurrentWindow()
+      .listen<void>("categories-changed", () => {
+        void tauriApi.getCategories().then(setCategories);
+      })
+      .then((unlisten) => {
+        unlistenCats = unlisten;
+      });
+
+    getCurrentWindow()
       .listen<string>("note-deleted", (event) => {
         const deletedId = event.payload;
         setNotes((prev) => prev.filter((n) => n.id !== deletedId));
@@ -81,6 +90,7 @@ export function useWorkspace() {
     return () => {
       if (unlistenSaved) unlistenSaved();
       if (unlistenDeleted) unlistenDeleted();
+      if (unlistenCats) unlistenCats();
     };
   }, []);
 
@@ -206,6 +216,19 @@ export function useWorkspace() {
     },
     [load],
   );
+
+  const renameCategory = useCallback(async (category: string, newName: string): Promise<string | null> => {
+    // flush unsaved edits first so a late save cannot resurrect the old category name
+    pending.current.forEach((n) => persist(n, true));
+    try {
+      const updated = await tauriApi.renameCategory(category, newName);
+      setNotes((prev) => prev.map((n) => updated.find((u) => u.id === n.id) ?? n));
+      setCategories(await tauriApi.getCategories());
+      return null;
+    } catch (err) {
+      return typeof err === "string" ? err : "Could not rename category.";
+    }
+  }, [persist]);
 
   const createCategory = useCallback(
     async (category: string) => {
@@ -348,6 +371,7 @@ export function useWorkspace() {
     moveCategory,
     deleteCategory,
     createCategory,
+    renameCategory,
     reorderNote,
     importNoteFile,
     scanFolder,

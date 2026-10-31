@@ -285,3 +285,11 @@
 
 ## [2026-10-31] - Branding
 - Tray top bar and pill label now read **DoIT** (was DESK TRAY), centered in the pill; rebuilt `doit.exe` + `DoIT-Setup.exe`.
+
+## [2026-10-31] - Bullet Memory, Category Rename, Image Preview Click-Out
+- **Bullet memory** (`src/lib/format.tsx`): `convertContentMode` now remembers each line's stripped bullet prefix per note (localStorage `doit.bullets.<noteId>`, keyed by line id) and restores it on list -> text. Survives app restarts.
+- **Rename category**: right-click a category in the sidebar or a shelf header -> `CategoryMenu` (Rename / Delete) with a rename dialog (Enter saves, Esc cancels, duplicate/empty names rejected). Backend `StorageManager::rename_category` + `rename_category` command re-files every note in it and emits `note-saved` / `categories-changed` so the tray stays in sync. Active filter and collapsed state follow the new name. Uncategorized is protected.
+- **Image preview**: clicking the dark area outside the image (tray + canvas) now closes it; dragging/panning does not.
+
+## [2026-10-31] - Pasted multi-line text collapsing
+- `htmlToMarkdown` (`src/lib/format.tsx`): the editors are `white-space: pre-wrap`, so pasted text arrives as text nodes containing `\n`; my earlier rewrite collapsed those to spaces, merging pasted lines into one. Newlines inside text nodes are now real line breaks.

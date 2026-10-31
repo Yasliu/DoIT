@@ -155,6 +155,21 @@ pub fn add_category(
 }
 
 #[tauri::command]
+pub fn rename_category(
+    category: String,
+    new_name: String,
+    storage: State<'_, StorageManager>,
+    app: AppHandle,
+) -> Result<Vec<NoteItem>, String> {
+    let updated = storage.rename_category(&category, &new_name)?;
+    for note in &updated {
+        let _ = app.emit("note-saved", note);
+    }
+    let _ = app.emit("categories-changed", ());
+    Ok(updated)
+}
+
+#[tauri::command]
 pub fn delete_category(
     category: String,
     storage: State<'_, StorageManager>,

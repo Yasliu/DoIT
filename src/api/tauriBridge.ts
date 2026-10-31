@@ -249,6 +249,11 @@ export const tauriApi = {
     return true;
   },
 
+  async renameCategory(category: string, newName: string): Promise<NoteItem[]> {
+    if (!isTauri()) return [];
+    return await invoke<NoteItem[]>("rename_category", { category, newName });
+  },
+
   async minimize(): Promise<void> {
     if (!isTauri()) return;
     try {

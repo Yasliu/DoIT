@@ -82,7 +82,12 @@ export function htmlToMarkdown(container: HTMLElement): string {
 
   const walk = (node: Node): void => {
     if (node.nodeType === Node.TEXT_NODE) {
-      cur += (node.textContent || "").replace(/\u00a0/g, " ").replace(/[\r\n]+/g, " ");
+      // Editors are white-space: pre-wrap, so a pasted "\n" inside a text node is a real line break
+      const parts = (node.textContent || "").replace(/\u00a0/g, " ").split(/\r\n|\r|\n/);
+      parts.forEach((part, i) => {
+        if (i > 0) flush();
+        cur += part;
+      });
       return;
     }
     if (node.nodeType !== Node.ELEMENT_NODE) return;
@@ -277,23 +282,62 @@ export function handleRichEditorKeyDown(
   return false;
 }
 
+const BULLET_PREFIX = /^\s*[-*•]\s+/;
+const bulletKey = (noteId: string) => `doit.bullets.${noteId}`;
+
+function loadBulletMemory(noteId?: string): Record<string, string> {
+  if (!noteId) return {};
+  try {
+    return JSON.parse(window.localStorage.getItem(bulletKey(noteId)) || "{}") as Record<string, string>;
+  } catch {
+    return {};
+  }
+}
+
+function saveBulletMemory(noteId: string | undefined, memory: Record<string, string>) {
+  if (!noteId) return;
+  try {
+    if (Object.keys(memory).length === 0) window.localStorage.removeItem(bulletKey(noteId));
+    else window.localStorage.setItem(bulletKey(noteId), JSON.stringify(memory));
+  } catch {
+    /* storage unavailable: bullets simply won't be remembered */
+  }
+}
+
 /**
  * Converts note lines between plain-text and checklist mode without merging or inventing lines:
  * every non-empty line maps 1:1 to an item; blank lines are dropped (one blank item is kept if nothing remains).
+ * Bullet prefixes stripped when going to a checklist are remembered per note (by line id) and put back
+ * when converting back to text.
  */
 export function convertContentMode(
   content: { id: string; text: string; is_todo: boolean; completed: boolean }[],
   toTodo: boolean,
+  noteId?: string,
 ): { id: string; text: string; is_todo: boolean; completed: boolean }[] {
+  const memory = loadBulletMemory(noteId);
+
   const cleaned = content
     .flatMap((c) => c.text.split(/\r?\n/).map((text, i) => ({ c, text, i })))
-    .map(({ c, text, i }) => ({
-      id: i === 0 ? c.id : `${c.id}_${i}`,
-      text: toTodo ? text.replace(/^\s*[-*•]\s+/, "") : text,
-      is_todo: toTodo,
-      completed: toTodo ? c.completed : false,
-    }))
+    .map(({ c, text, i }) => {
+      const id = i === 0 ? c.id : `${c.id}_${i}`;
+      let out = text;
+      if (toTodo) {
+        const match = text.match(BULLET_PREFIX);
+        if (match) {
+          memory[id] = match[0];
+          out = text.slice(match[0].length);
+        }
+      } else if (memory[id] && out.trim().length > 0 && !BULLET_PREFIX.test(out)) {
+        out = memory[id] + out;
+        delete memory[id];
+      }
+      return { id, text: out, is_todo: toTodo, completed: toTodo ? c.completed : false };
+    })
     .filter((c) => c.text.trim().length > 0);
+
+  saveBulletMemory(noteId, memory);
+
   if (cleaned.length > 0) return cleaned;
   const base = content[0];
   return [{ id: base?.id ?? "line_0", text: "", is_todo: toTodo, completed: false }];

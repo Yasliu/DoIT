@@ -18,6 +18,7 @@ interface CategoryShelfProps {
   onToggleCollapse: () => void;
   onNewNote: (shelf: string) => void;
   onDeleteCategory?: (shelf: string) => void;
+  onCategoryContextMenu?: (event: React.MouseEvent, shelf: string) => void;
   onOpen: (note: NoteItem, rect: DOMRect) => void;
   onArm: (event: ReactPointerEvent, note: NoteItem) => void;
   onToggleItem: (note: NoteItem, itemId: string) => void;
@@ -38,6 +39,7 @@ export function CategoryShelf({
   onToggleCollapse,
   onNewNote,
   onDeleteCategory,
+  onCategoryContextMenu,
   onOpen,
   onArm,
   onToggleItem,
@@ -59,6 +61,11 @@ export function CategoryShelf({
         <button
           type="button"
           onClick={onToggleCollapse}
+          onContextMenu={(e) => {
+            if (!onCategoryContextMenu || shelf.toLowerCase() === "uncategorized") return;
+            e.preventDefault();
+            onCategoryContextMenu(e, shelf);
+          }}
           className="group/head flex min-w-0 items-baseline gap-3"
           aria-expanded={!collapsed}
         >

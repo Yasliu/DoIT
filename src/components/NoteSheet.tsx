@@ -300,7 +300,7 @@ export function NoteSheet({
           completed: false,
         }));
     }
-    const content = convertContentMode(source, nextIsTodo);
+    const content = convertContentMode(source, nextIsTodo, draftRef.current.id);
     commit({ ...draftRef.current, content, last_edited: Date.now() }, true);
   };
 
@@ -859,7 +859,7 @@ export function NoteSheet({
               <>
                 <div className="space-y-1">
                   {body.map((item, index) => {
-                    const cleanItemText = item.text.replace(/^\s*[-*•]\s+/, "");
+                    const cleanItemText = item.text.replace(/^\s*[-*â€¢]\s+/, "");
                     return (
                       <div
                         key={item.id}
@@ -886,7 +886,7 @@ export function NoteSheet({
                           }}
                           onFocus={() => setFocusLine(item.id)}
                           value={cleanItemText}
-                          onChange={(text) => patchLine(item.id, { text: text.replace(/^\s*[-*•]\s+/, "") })}
+                          onChange={(text) => patchLine(item.id, { text: text.replace(/^\s*[-*â€¢]\s+/, "") })}
                           onKeyDown={(event) => {
                             if (event.key === "Enter") {
                               event.preventDefault();
@@ -946,7 +946,7 @@ export function NoteSheet({
             </span>
             <span className="mx-1 h-3 w-px bg-white/10" />
             <CornerDownLeft size={10} strokeWidth={1.8} />
-            new line · esc
+            new line | esc
           </span>
         </div>
       </div>
@@ -1015,7 +1015,17 @@ export function NoteSheet({
           {/* Interactive Zoomable & Pannable Viewport */}
           <div
             className="relative flex-1 w-full overflow-hidden flex items-center justify-center p-2 cursor-grab active:cursor-grabbing select-none"
-            onClick={(e) => e.stopPropagation()}
+            onClick={(e) => {
+              e.stopPropagation();
+              if (panStartRef.current.moved) return;
+              const img = e.currentTarget.querySelector("img");
+              const r = img?.getBoundingClientRect();
+              const onImage = !!r && e.clientX >= r.left && e.clientX <= r.right && e.clientY >= r.top && e.clientY <= r.bottom;
+              if (onImage) return;
+              setPreviewImage(null);
+              setZoomLevel(1);
+              setImagePan({ x: 0, y: 0 });
+            }}
             onPointerDown={handleImagePointerDown}
             onPointerMove={handleImagePointerMove}
             onPointerUp={handleImagePointerUp}
@@ -1049,7 +1059,7 @@ export function NoteSheet({
                 }
               }}
               className="max-w-[90vw] max-h-[82vh] object-contain rounded-xl border border-white/20 shadow-2xl select-none"
-              title="Hold and drag to move · Click to toggle 2x zoom · Scroll to zoom"
+              title="Hold and drag to move | Click to toggle 2x zoom | Scroll to zoom"
             />
           </div>
         </div>

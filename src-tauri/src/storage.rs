@@ -272,6 +272,45 @@ impl StorageManager {
         Ok(true)
     }
 
+    pub fn rename_category(&self, old: &str, new_name: &str) -> Result<Vec<NoteItem>, String> {
+        if old.eq_ignore_ascii_case("uncategorized") {
+            return Err("The default Uncategorized category cannot be renamed".to_string());
+        }
+        let new_clean = crate::models::clean_yaml_scalar(new_name);
+        if new_clean.is_empty() {
+            return Err("Category name cannot be empty".to_string());
+        }
+        if new_clean.eq_ignore_ascii_case("uncategorized") {
+            return Err("That name is reserved".to_string());
+        }
+
+        let changed: Vec<NoteItem> = {
+            let mut lock = self.data.write().map_err(|e| e.to_string())?;
+            let same_name = new_clean.eq_ignore_ascii_case(old);
+            if !same_name && lock.categories.iter().any(|c| c.name.eq_ignore_ascii_case(&new_clean)) {
+                return Err("A category with that name already exists".to_string());
+            }
+            for cat in lock.categories.iter_mut() {
+                if cat.name.eq_ignore_ascii_case(old) {
+                    cat.name = new_clean.clone();
+                }
+            }
+            let mut moved = Vec::new();
+            for note in lock.notes.iter_mut() {
+                if note.category.eq_ignore_ascii_case(old) {
+                    note.category = new_clean.clone();
+                    moved.push(note.clone());
+                }
+            }
+            moved
+        };
+
+        let mut saved = Vec::with_capacity(changed.len());
+        for note in changed {
+            saved.push(self.upsert_note(note)?);
+        }
+        Ok(saved)
+    }
     pub fn upsert_note(&self, note: NoteItem) -> Result<NoteItem, String> {
         let mut note = note;
         note.title = crate::models::clean_yaml_scalar(&note.title);
