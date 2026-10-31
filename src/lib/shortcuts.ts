@@ -7,6 +7,7 @@ export interface MarkdownShortcuts {
   table: string;
   tableCol: string;
   tableRow: string;
+  task: string;
 }
 
 export const DEFAULT_MD_SHORTCUTS: MarkdownShortcuts = {
@@ -18,6 +19,7 @@ export const DEFAULT_MD_SHORTCUTS: MarkdownShortcuts = {
   table: "Ctrl+T",
   tableCol: "Ctrl+Alt+ArrowRight",
   tableRow: "Ctrl+Alt+ArrowDown",
+  task: "Ctrl+L",
 };
 
 let current: MarkdownShortcuts = { ...DEFAULT_MD_SHORTCUTS };
@@ -31,6 +33,7 @@ interface SettingsLike {
   hotkey_table?: string;
   hotkey_table_col?: string;
   hotkey_table_row?: string;
+  hotkey_task?: string;
 }
 
 /** Applies the editable shortcut settings to the live editors (called after settings load / save). */
@@ -44,6 +47,7 @@ export function applyShortcutSettings(s: SettingsLike): void {
     table: s.hotkey_table || DEFAULT_MD_SHORTCUTS.table,
     tableCol: s.hotkey_table_col || DEFAULT_MD_SHORTCUTS.tableCol,
     tableRow: s.hotkey_table_row || DEFAULT_MD_SHORTCUTS.tableRow,
+    task: s.hotkey_task || DEFAULT_MD_SHORTCUTS.task,
   };
 }
 

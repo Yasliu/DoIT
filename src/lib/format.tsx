@@ -99,7 +99,7 @@ const HR_RE = /^\s{0,3}([-*_])(?:\s*\1){2,}\s*$/;
 const TABLE_ROW_RE = /^\s*\|.*\|\s*$/;
 
 /** Detects a block prefix at the start of a source line. */
-function blockPrefix(text: string): { cls: string; prefix: string; consumed: number } | null {
+function blockPrefix(text: string, typed = false): { cls: string; prefix: string; consumed: number } | null {
   const task = text.match(/^(\s*[-*]\s+\[([ xX])\](?:\s+|$))/);
   if (task) {
     const done = task[2].toLowerCase() === "x";
@@ -108,6 +108,18 @@ function blockPrefix(text: string): { cls: string; prefix: string; consumed: num
       prefix: task[1].replace(/\s*$/, "") + " ",
       consumed: task[1].length,
     };
+  }
+  if (typed) {
+    // live typing: "[] " or "[ ] " at the start of a line becomes a task
+    const quick = text.match(/^\[([ xX]?)\]\s+/);
+    if (quick) {
+      const state = quick[1].trim() ? quick[1] : " ";
+      return {
+        cls: state.toLowerCase() === "x" ? "md-task md-task-done" : "md-task",
+        prefix: `- [${state}] `,
+        consumed: quick[0].length,
+      };
+    }
   }
   const h = text.match(/^(#{1,6})\s+/);
   if (h) return { cls: `md-h${h[1].length}`, prefix: h[0], consumed: h[0].length };
@@ -384,7 +396,7 @@ export function normalizeEditor(editor: HTMLElement): void {
       continue;
     }
 
-    const info = blockPrefix(child.textContent || "");
+    const info = blockPrefix(child.textContent || "", true);
     if (!info) continue;
 
     removeLeadingChars(child, info.consumed);
@@ -625,7 +637,8 @@ export function handleRichEditorKeyDown(
   const sc = getMarkdownShortcuts();
   const headingLevel = matchesCombo(e, sc.h1) ? 1 : matchesCombo(e, sc.h2) ? 2 : matchesCombo(e, sc.h3) ? 3 : 0;
   const wantsTable = matchesCombo(e, sc.table);
-  const isShortcut = headingLevel > 0 || wantsTable;
+  const wantsTask = matchesCombo(e, sc.task);
+  const isShortcut = headingLevel > 0 || wantsTable || wantsTask;
 
   // ---- inside a table cell ----
   const cell = startEl?.closest("td,th") as HTMLElement | null;
@@ -662,6 +675,7 @@ export function handleRichEditorKeyDown(
   if (isShortcut) {
     e.preventDefault();
     if (wantsTable) insertTableAtCaret(editor);
+    else if (wantsTask) applyTask(editor);
     else applyHeading(editor, headingLevel);
     onInput();
     return true;

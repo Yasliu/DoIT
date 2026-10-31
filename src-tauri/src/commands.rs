@@ -321,6 +321,17 @@ pub fn get_window_active_monitor(window: &tauri::WebviewWindow) -> Option<tauri:
     window.primary_monitor().ok().flatten()
 }
 
+/// Panel size in logical px: roomy by default, but never taller/wider than the screen allows.
+pub const TRAY_PANEL_W: f64 = 440.0;
+pub const TRAY_PANEL_H: f64 = 620.0;
+
+pub fn tray_panel_logical(monitor: &tauri::Monitor) -> (f64, f64) {
+    let scale = monitor.scale_factor();
+    let mw = monitor.size().width as f64 / scale;
+    let mh = monitor.size().height as f64 / scale;
+    (TRAY_PANEL_W.min(mw * 0.9), TRAY_PANEL_H.min(mh * 0.88))
+}
+
 pub fn position_tray_on_monitor(
     window: &tauri::WebviewWindow,
     monitor: &tauri::Monitor,
@@ -332,8 +343,9 @@ pub fn position_tray_on_monitor(
 
     let small_w_phys = (180.0 * scale_factor).round() as i32;
     let small_h_phys = (44.0 * scale_factor).round() as i32;
-    let expanded_w_phys = (380.0 * scale_factor).round() as i32;
-    let expanded_h_phys = (480.0 * scale_factor).round() as i32;
+    let (panel_w, panel_h) = tray_panel_logical(monitor);
+    let expanded_w_phys = (panel_w * scale_factor).round() as i32;
+    let expanded_h_phys = (panel_h * scale_factor).round() as i32;
 
     let margin_x = (24.0 * scale_factor).round() as i32;
     let margin_y = (72.0 * scale_factor).round() as i32;
@@ -574,7 +586,7 @@ fn ensure_tray(app: &AppHandle) -> Result<(tauri::WebviewWindow, bool), String> 
     }
     let window = tauri::WebviewWindowBuilder::new(app, "tray", tauri::WebviewUrl::App("index.html?window=tray".into()))
         .title("DoIT Companion")
-        .inner_size(380.0, 480.0)
+        .inner_size(TRAY_PANEL_W, TRAY_PANEL_H)
         .decorations(false)
         .transparent(true)
         .shadow(false)
@@ -667,6 +679,12 @@ fn open_tray_mode_inner(app: &AppHandle) -> Result<(), String> {
 /// Called by the tray page after mount: reveals the (already positioned) window.
 #[tauri::command]
 pub fn tray_ready(window: tauri::WebviewWindow) -> String {
+    // The frame is created on one monitor and then moved: Windows may have rescaled it (DPI change) during
+    // that move, which left the very first panel too small. Re-apply the exact geometry now that it sits on
+    // its final monitor.
+    if let Some(mon) = get_window_active_monitor(&window) {
+        position_tray_on_monitor(&window, &mon, true);
+    }
     let _ = window.show();
     let _ = window.set_always_on_top(true);
     let _ = window.set_focus();
@@ -684,7 +702,13 @@ pub fn set_tray_mode(app: AppHandle, mode: String) -> Result<(), String> {
     let size = tray.outer_size().map_err(|e| e.to_string())?;
     let scale = tray.scale_factor().unwrap_or(1.0);
 
-    let (lw, lh) = if mode == "pill" { (180.0, 44.0) } else { (380.0, 480.0) };
+    let (lw, lh) = if mode == "pill" {
+        (180.0, 44.0)
+    } else {
+        get_window_active_monitor(&tray)
+            .map(|m| tray_panel_logical(&m))
+            .unwrap_or((TRAY_PANEL_W, TRAY_PANEL_H))
+    };
     let w = (lw * scale).round() as i32;
     let h = (lh * scale).round() as i32;
     let right = pos.x + size.width as i32;

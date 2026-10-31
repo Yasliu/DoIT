@@ -18,6 +18,7 @@ import type { NoteItem } from "../api/tauriBridge";
 import { NOTE_FONTS, fontStack, tauriApi } from "../api/tauriBridge";
 import { useUndoStack } from "../hooks/useUndoStack";
 import { HeadingSelect } from "./HeadingSelect";
+import { ImageLightbox } from "./ImageLightbox";
 import { ModeToggle } from "./ModeToggle";
 import { RawEditor } from "./RawEditor";
 import { TableMenu } from "./TableMenu";
@@ -86,10 +87,6 @@ export function NoteSheet({
   const [fontOpen, setFontOpen] = useState(false);
   const [shelfOpen, setShelfOpen] = useState(false);
   const [previewImage, setPreviewImage] = useState<string | null>(null);
-  const [zoomLevel, setZoomLevel] = useState<number>(1);
-  const [imagePan, setImagePan] = useState({ x: 0, y: 0 });
-  const isPanningImage = useRef(false);
-  const panStartRef = useRef({ x: 0, y: 0, panX: 0, panY: 0, moved: false });
   const fileInputRef = useRef<HTMLInputElement | null>(null);
   const [newShelf, setNewShelf] = useState("");
   const titleRef = useRef<HTMLInputElement | null>(null);
@@ -198,43 +195,6 @@ export function NoteSheet({
       };
       reader.readAsDataURL(file);
     });
-  };
-
-  // Image Lightbox Holding & Dragging Pan Handlers
-  const handleImagePointerDown = (e: React.PointerEvent) => {
-    if (e.button !== 0) return; // Left mouse click
-    e.preventDefault();
-    e.stopPropagation();
-    isPanningImage.current = true;
-    panStartRef.current = {
-      x: e.clientX,
-      y: e.clientY,
-      panX: imagePan.x,
-      panY: imagePan.y,
-      moved: false,
-    };
-    (e.currentTarget as HTMLElement).setPointerCapture(e.pointerId);
-  };
-
-  const handleImagePointerMove = (e: React.PointerEvent) => {
-    if (!isPanningImage.current) return;
-    const dx = e.clientX - panStartRef.current.x;
-    const dy = e.clientY - panStartRef.current.y;
-    if (Math.abs(dx) > 3 || Math.abs(dy) > 3) {
-      panStartRef.current.moved = true;
-    }
-    setImagePan({
-      x: panStartRef.current.panX + dx,
-      y: panStartRef.current.panY + dy,
-    });
-  };
-
-  const handleImagePointerUp = (e: React.PointerEvent) => {
-    if (!isPanningImage.current) return;
-    isPanningImage.current = false;
-    try {
-      (e.currentTarget as HTMLElement).releasePointerCapture(e.pointerId);
-    } catch {}
   };
 
   const handleDrop = (event: React.DragEvent) => {
@@ -900,118 +860,7 @@ export function NoteSheet({
         />
       )}
 
-      {/* Lightbox Preview Modal with Zoom & Holding-Mouse Pan */}
-      {previewImage && (
-        <div
-          onClick={() => {
-            setPreviewImage(null);
-            setZoomLevel(1);
-            setImagePan({ x: 0, y: 0 });
-          }}
-          className="fixed inset-0 z-[100] flex flex-col items-center justify-center bg-black/90 backdrop-blur-md p-4 select-none"
-        >
-          {/* Zoom & Action Controls Bar */}
-          <div
-            className="flex items-center gap-2 mb-2 z-20 bg-black/80 px-3.5 py-1.5 rounded-full border border-white/20 shadow-xl"
-            onClick={(e) => e.stopPropagation()}
-          >
-            <button
-              type="button"
-              onClick={() => setZoomLevel((z) => Math.max(0.5, Number((z - 0.25).toFixed(2))))}
-              className="grid size-6 place-items-center rounded text-white/70 hover:text-white hover:bg-white/10 text-[14px] font-bold cursor-pointer"
-              title="Zoom out"
-            >
-              -
-            </button>
-            <span className="font-mono text-[10px] text-white/90 min-w-[36px] text-center font-semibold">
-              {Math.round(zoomLevel * 100)}%
-            </span>
-            <button
-              type="button"
-              onClick={() => setZoomLevel((z) => Math.min(4, Number((z + 0.25).toFixed(2))))}
-              className="grid size-6 place-items-center rounded text-white/70 hover:text-white hover:bg-white/10 text-[14px] font-bold cursor-pointer"
-              title="Zoom in"
-            >
-              +
-            </button>
-            <button
-              type="button"
-              onClick={() => {
-                setZoomLevel(1);
-                setImagePan({ x: 0, y: 0 });
-              }}
-              className="ml-1 text-[9.5px] font-mono uppercase px-1.5 py-0.5 rounded bg-white/10 hover:bg-white/20 text-white/90 cursor-pointer"
-              title="Reset Zoom (100%)"
-            >
-              1:1
-            </button>
-            <span className="mx-0.5 h-3 w-px bg-white/20" />
-            <button
-              type="button"
-              onClick={() => {
-                setPreviewImage(null);
-                setZoomLevel(1);
-                setImagePan({ x: 0, y: 0 });
-              }}
-              className="grid size-6 place-items-center rounded-full text-white/70 hover:text-white hover:bg-white/10 cursor-pointer"
-              title="Close preview"
-            >
-              <X size={13} strokeWidth={2.4} />
-            </button>
-          </div>
-
-          {/* Interactive Zoomable & Pannable Viewport */}
-          <div
-            className="relative flex-1 w-full overflow-hidden flex items-center justify-center p-2 cursor-grab active:cursor-grabbing select-none"
-            onClick={(e) => {
-              e.stopPropagation();
-              if (panStartRef.current.moved) return;
-              const img = e.currentTarget.querySelector("img");
-              const r = img?.getBoundingClientRect();
-              const onImage = !!r && e.clientX >= r.left && e.clientX <= r.right && e.clientY >= r.top && e.clientY <= r.bottom;
-              if (onImage) return;
-              setPreviewImage(null);
-              setZoomLevel(1);
-              setImagePan({ x: 0, y: 0 });
-            }}
-            onPointerDown={handleImagePointerDown}
-            onPointerMove={handleImagePointerMove}
-            onPointerUp={handleImagePointerUp}
-            onPointerCancel={handleImagePointerUp}
-            onWheel={(e) => {
-              e.preventDefault();
-              if (e.deltaY < 0) {
-                setZoomLevel((z) => Math.min(4, Number((z + 0.25).toFixed(2))));
-              } else {
-                setZoomLevel((z) => Math.max(0.5, Number((z - 0.25).toFixed(2))));
-              }
-            }}
-          >
-            <img
-              src={previewImage}
-              alt="Preview"
-              draggable={false}
-              style={{
-                transform: `translate3d(${imagePan.x}px, ${imagePan.y}px, 0) scale(${zoomLevel})`,
-                transformOrigin: "center center",
-                transition: isPanningImage.current ? "none" : "transform 0.1s ease-out",
-              }}
-              onClick={(e) => {
-                e.stopPropagation();
-                if (!panStartRef.current.moved) {
-                  setZoomLevel((z) => {
-                    if (z === 1) return 2;
-                    setImagePan({ x: 0, y: 0 });
-                    return 1;
-                  });
-                }
-              }}
-              className="max-w-[90vw] max-h-[82vh] object-contain rounded-xl border border-white/20 shadow-2xl select-none"
-              title="Hold and drag to move | Click to toggle 2x zoom | Scroll to zoom"
-            />
-          </div>
-        </div>
-      )}
+      {previewImage && <ImageLightbox src={previewImage} onClose={() => setPreviewImage(null)} />}
     </>
   );
 }
