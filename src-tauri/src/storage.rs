@@ -5,7 +5,7 @@ use std::path::PathBuf;
 use std::sync::{Arc, RwLock};
 
 use crate::models::{
-    compute_markdown_filename, AppSettings, AppStateData, CategoryInfo, GridCoordinates, NoteItem,
+    compute_note_filename, AppSettings, AppStateData, CategoryInfo, GridCoordinates, NoteItem,
     ScanSummary, MAX_FILE_SIZE_BYTES,
 };
 
@@ -78,7 +78,33 @@ impl StorageManager {
         Ok(())
     }
 
-    /// High-speed memory-optimized indexing of all .md files in the storage directory
+    /// Reads any .md / .txt file into a NoteItem. Never rejects on content: invalid UTF-8 is repaired
+    /// lossily and routed through the defensive sanitizer.
+    fn read_note_file(path: &PathBuf) -> Option<NoteItem> {
+        if !path.is_file() {
+            return None;
+        }
+        let ext = path.extension().and_then(|s| s.to_str())?.to_ascii_lowercase();
+        if ext != "md" && ext != "txt" {
+            return None;
+        }
+        let metadata = fs::metadata(path).ok()?;
+        if metadata.len() > MAX_FILE_SIZE_BYTES {
+            return None;
+        }
+        let modified_ms = metadata
+            .modified()
+            .ok()
+            .and_then(|m| m.duration_since(std::time::UNIX_EPOCH).ok())
+            .map(|d| d.as_millis() as i64)
+            .unwrap_or(0);
+        let bytes = fs::read(path).ok()?;
+        let content = String::from_utf8_lossy(&bytes).into_owned();
+        let stem = path.file_stem().and_then(|s| s.to_str()).unwrap_or("note");
+        Some(NoteItem::from_file(&content, stem, &ext, modified_ms))
+    }
+
+    /// High-speed memory-optimized indexing of all .md / .txt files in the storage directory
     fn load_markdown_repository(dir: &PathBuf) -> (AppStateData, HashMap<String, PathBuf>) {
         let mut notes: Vec<NoteItem> = Vec::new();
         let mut file_map = HashMap::new();
@@ -86,39 +112,25 @@ impl StorageManager {
         if let Ok(entries) = fs::read_dir(dir) {
             for entry in entries.flatten() {
                 let path = entry.path();
-                if path.is_file() && path.extension().and_then(|s| s.to_str()) == Some("md") {
-                    if let Ok(metadata) = fs::metadata(&path) {
-                        if metadata.len() > MAX_FILE_SIZE_BYTES {
-                            continue;
-                        }
+                if let Some(mut note) = Self::read_note_file(&path) {
+                    // Eliminate all pre-made categories across versions/updates
+                    if note.category.eq_ignore_ascii_case("Architecture") || note.category.eq_ignore_ascii_case("Ideas") {
+                        note.category = "Uncategorized".to_string();
                     }
-                    if let Ok(mut f) = File::open(&path) {
-                        let mut content = String::new();
-                        if f.read_to_string(&mut content).is_ok() {
-                            let filename = path.file_stem().and_then(|s| s.to_str()).unwrap_or("note");
-                            if let Some(mut note) = NoteItem::from_markdown(&content, filename) {
-                                // Eliminate all pre-made categories across versions/updates
-                                if note.category.eq_ignore_ascii_case("Architecture") || note.category.eq_ignore_ascii_case("Ideas") {
-                                    note.category = "Uncategorized".to_string();
-                                }
-                                note.title = crate::models::clean_yaml_scalar(&note.title);
-                                note.category = crate::models::clean_yaml_scalar(&note.category);
-                                if note.category.trim().is_empty() {
-                                    note.category = "Uncategorized".to_string();
-                                }
-                                if let Some(ref f) = note.font_family {
-                                    note.font_family = Some(crate::models::clean_yaml_scalar(f));
-                                }
-                                note.content.retain(|c| !(c.text.trim().eq_ignore_ascii_case("Line") && !c.is_todo));
-                                file_map.insert(note.id.clone(), path.clone());
-                                notes.push(note);
-                            }
-                        }
+                    note.title = crate::models::clean_yaml_scalar(&note.title);
+                    note.category = crate::models::clean_yaml_scalar(&note.category);
+                    if note.category.trim().is_empty() {
+                        note.category = "Uncategorized".to_string();
                     }
+                    if let Some(ref f) = note.font_family {
+                        note.font_family = Some(crate::models::clean_yaml_scalar(f));
+                    }
+                    note.content.retain(|c| !(c.text.trim().eq_ignore_ascii_case("Line") && !c.is_todo));
+                    file_map.insert(note.id.clone(), path.clone());
+                    notes.push(note);
                 }
             }
         }
-
         // If repository is brand new and empty, start with an empty clean repository
         // Never auto-generate dummy notes or pre-made categories!
 
@@ -272,6 +284,78 @@ impl StorageManager {
         Ok(true)
     }
 
+    /// Opens any .md / .txt file in place (no copy). A file that already belongs to the repository
+    /// resolves to its native note instead.
+    pub fn open_external(&self, path_str: &str) -> Result<NoteItem, String> {
+        let path = PathBuf::from(path_str);
+        if !path.is_file() {
+            return Err(format!("File does not exist: {path_str}"));
+        }
+        let ext = path
+            .extension()
+            .and_then(|s| s.to_str())
+            .map(|s| s.to_ascii_lowercase())
+            .unwrap_or_default();
+        if ext != "md" && ext != "markdown" && ext != "txt" {
+            return Err("Only .md and .txt files can be opened.".to_string());
+        }
+        if let Ok(canon) = path.canonicalize() {
+            let map = self.file_map.read().map_err(|e| e.to_string())?;
+            let data = self.data.read().map_err(|e| e.to_string())?;
+            for (id, p) in map.iter() {
+                if p.canonicalize().map(|c| c == canon).unwrap_or(false) {
+                    if let Some(n) = data.notes.iter().find(|n| &n.id == id) {
+                        return Ok(n.clone());
+                    }
+                }
+            }
+        }
+        let metadata = fs::metadata(&path).map_err(|e| format!("Cannot read file metadata: {e}"))?;
+        if metadata.len() > MAX_FILE_SIZE_BYTES {
+            return Err("File is larger than the 30 MB limit.".to_string());
+        }
+        let modified_ms = metadata
+            .modified()
+            .ok()
+            .and_then(|m| m.duration_since(std::time::UNIX_EPOCH).ok())
+            .map(|d| d.as_millis() as i64)
+            .unwrap_or(0);
+        let bytes = fs::read(&path).map_err(|e| format!("Cannot read file: {e}"))?;
+        let content = String::from_utf8_lossy(&bytes).into_owned();
+        Ok(NoteItem::from_external_file(&content, path_str, modified_ms))
+    }
+
+    /// Writes an external note back to its own path (atomic). A MD <-> Text mode change renames the
+    /// extension (.md <-> .txt) in place.
+    pub fn save_external(&self, note: NoteItem) -> Result<NoteItem, String> {
+        let src = note
+            .source_path
+            .clone()
+            .ok_or_else(|| "This note has no external file path.".to_string())?;
+        let path = PathBuf::from(&src);
+        let current_kind = match path.extension().and_then(|s| s.to_str()).map(|s| s.to_ascii_lowercase()) {
+            Some(e) if e == "txt" => "txt",
+            _ => "md",
+        };
+        let wanted = note.file_extension();
+        let target = if current_kind == wanted { path.clone() } else { path.with_extension(wanted) };
+        if target != path && target.exists() {
+            return Err(format!("{} already exists.", target.display()));
+        }
+
+        let text = note.to_external_text();
+        let mut tmp = target.clone();
+        tmp.set_extension("doit-tmp");
+        fs::write(&tmp, text.as_bytes()).map_err(|e| format!("Cannot write file: {e}"))?;
+        fs::rename(&tmp, &target).map_err(|e| format!("Cannot finalise file: {e}"))?;
+        if target != path {
+            let _ = fs::remove_file(&path);
+        }
+
+        let mut saved = note;
+        saved.source_path = Some(target.to_string_lossy().to_string());
+        Ok(saved)
+    }
     pub fn rename_category(&self, old: &str, new_name: &str) -> Result<Vec<NoteItem>, String> {
         if old.eq_ignore_ascii_case("uncategorized") {
             return Err("The default Uncategorized category cannot be renamed".to_string());
@@ -312,6 +396,10 @@ impl StorageManager {
         Ok(saved)
     }
     pub fn upsert_note(&self, note: NoteItem) -> Result<NoteItem, String> {
+        // External files are edited in place and only ever written by an explicit Save
+        if note.source_path.is_some() {
+            return Ok(note);
+        }
         let mut note = note;
         note.title = crate::models::clean_yaml_scalar(&note.title);
         note.category = crate::models::clean_yaml_scalar(&note.category);
@@ -361,12 +449,14 @@ impl StorageManager {
         drop(lock);
 
         // Compute markdown content and target filename
-        let md_content = note.to_markdown(repeated_num);
-        let target_filename = compute_markdown_filename(
+        let ext = note.file_extension();
+        let md_content = if ext == "txt" { note.to_plain_text() } else { note.to_markdown(repeated_num) };
+        let target_filename = compute_note_filename(
             &note.category,
             &note.title,
             note.last_edited,
             repeated_num,
+            ext,
         );
 
         let storage_dir = {
@@ -520,41 +610,28 @@ impl StorageManager {
     }
 
     /// Single File Ingestion Layer:
-    /// Reads target file, strictly verifies frontmatter app: "DoIT",
+    /// Reads the target .md / .txt file,
     /// parses metadata and note body, and ingests into workspace memory pool.
     pub fn import_single_file(&self, path_str: &str) -> Result<NoteItem, String> {
         let path = PathBuf::from(path_str);
         if !path.exists() || !path.is_file() {
             return Err(format!("File does not exist: {path_str}"));
         }
-
-        // Strict 2 MB boundary check before reading into memory
         let metadata = fs::metadata(&path).map_err(|e| format!("Cannot read file metadata: {e}"))?;
         if metadata.len() > MAX_FILE_SIZE_BYTES {
             return Err(format!(
-                "File size limit exceeded: Maximum allowed note size is 2 MB (file is {:.2} MB).",
+                "File size limit exceeded: maximum allowed note size is 30 MB (file is {:.2} MB).",
                 (metadata.len() as f64) / (1024.0 * 1024.0)
             ));
         }
-
-        let mut file = File::open(&path).map_err(|e| format!("Cannot read file: {e}"))?;
-        let mut content = String::new();
-        file.read_to_string(&mut content)
-            .map_err(|e| format!("Cannot read file contents: {e}"))?;
-
-        let file_stem = path.file_stem().and_then(|s| s.to_str()).unwrap_or("imported_note");
-        // Strict Validation: must have app: "DoIT"
-        let note = NoteItem::parse_and_validate_doit_markdown(&content, file_stem)?;
-
-        // Ingest into active workspace pool and write copy to local repository
-        let saved = self.upsert_note(note)?;
-        Ok(saved)
+        let note = Self::read_note_file(&path)
+            .ok_or_else(|| "Only .md and .txt files can be imported.".to_string())?;
+        self.upsert_note(note)
     }
-
     /// Automated Folder Scanning Loop:
     /// Iterates through every .md file in the target directory,
-    /// verifies app: "DoIT" on every file, safely skips unformatted files,
-    /// and brings verified DoIT notes into the live workspace memory pool.
+    /// ingests every file without requiring any header,
+    /// and brings every note into the live workspace memory pool.
     pub fn scan_folder(&self, folder_path_str: Option<&str>) -> Result<ScanSummary, String> {
         let target_dir = match folder_path_str {
             Some(p) if !p.trim().is_empty() => PathBuf::from(p.trim()),
@@ -576,38 +653,24 @@ impl StorageManager {
         if let Ok(entries) = fs::read_dir(&target_dir) {
             for entry in entries.flatten() {
                 let path = entry.path();
-                if path.is_file() && path.extension().and_then(|s| s.to_str()) == Some("md") {
+                let is_note_file = path.is_file()
+                    && path
+                        .extension()
+                        .and_then(|s| s.to_str())
+                        .map(|e| e.eq_ignore_ascii_case("md") || e.eq_ignore_ascii_case("txt"))
+                        .unwrap_or(false);
+                if is_note_file {
                     total_scanned += 1;
-                    if let Ok(meta) = fs::metadata(&path) {
-                        if meta.len() > MAX_FILE_SIZE_BYTES {
-                            skipped_count += 1;
-                            continue;
+                    match Self::read_note_file(&path) {
+                        Some(note) => {
+                            valid_notes.push(note);
+                            imported_count += 1;
                         }
-                    }
-                    if let Ok(mut f) = File::open(&path) {
-                        let mut content = String::new();
-                        if f.read_to_string(&mut content).is_ok() {
-                            let file_stem = path.file_stem().and_then(|s| s.to_str()).unwrap_or("note");
-                            match NoteItem::parse_and_validate_doit_markdown(&content, file_stem) {
-                                Ok(note) => {
-                                    valid_notes.push(note);
-                                    imported_count += 1;
-                                }
-                                Err(_) => {
-                                    // Completely ignore standard or unformatted text files without breaking loop
-                                    skipped_count += 1;
-                                }
-                            }
-                        } else {
-                            skipped_count += 1;
-                        }
-                    } else {
-                        skipped_count += 1;
+                        None => skipped_count += 1,
                     }
                 }
             }
         }
-
         // Ingest valid notes into memory pool
         for note in &valid_notes {
             let _ = self.upsert_note(note.clone());

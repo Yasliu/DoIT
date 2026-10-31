@@ -30,6 +30,11 @@ export interface NoteItem {
   media_urls?: string[];
   is_collapsed?: boolean;
   is_pinned?: boolean;
+  /** source file format; "txt" notes show a Convert to Markdown action */
+  format?: "md" | "txt" | string;
+  /** absolute path of an external file opened in place (edited only via the Save button) */
+  source_path?: string;
+  external_header?: string;
 }
 
 export interface CategoryInfo {
@@ -52,6 +57,14 @@ export interface AppSettings {
   hotkey_search: string;
   hotkey_settings: string;
   hotkey_open_file?: string;
+  hotkey_h1?: string;
+  hotkey_h2?: string;
+  hotkey_h3?: string;
+  hotkey_bold?: string;
+  hotkey_italic?: string;
+  hotkey_table?: string;
+  hotkey_table_col?: string;
+  hotkey_table_row?: string;
   theme_mode?: "glass" | "monochrome";
 }
 
@@ -62,6 +75,14 @@ export const DEFAULT_SETTINGS: AppSettings = {
   hotkey_search: "Ctrl+F",
   hotkey_settings: "Ctrl+,",
   hotkey_open_file: "Ctrl+O",
+  hotkey_h1: "Ctrl+1",
+  hotkey_h2: "Ctrl+2",
+  hotkey_h3: "Ctrl+3",
+  hotkey_bold: "Ctrl+B",
+  hotkey_italic: "Ctrl+I",
+  hotkey_table: "Ctrl+T",
+  hotkey_table_col: "Ctrl+Alt+ArrowRight",
+  hotkey_table_row: "Ctrl+Alt+ArrowDown",
   theme_mode: "glass",
 };
 
@@ -118,7 +139,6 @@ export const tauriApi = {
       try {
         return await invoke<NoteItem[]>("get_notes");
       } catch (err) {
-        console.warn("get_notes failed, using local cache", err);
       }
     }
     return readLocal<NoteItem[]>(NOTES_KEY, DEFAULT_NOTES);
@@ -129,7 +149,6 @@ export const tauriApi = {
       try {
         return await invoke<CategoryInfo[]>("get_categories");
       } catch (err) {
-        console.warn("get_categories failed, using local cache", err);
       }
     }
     return readLocal<CategoryInfo[]>(CATS_KEY, DEFAULT_CATEGORIES);
@@ -140,7 +159,6 @@ export const tauriApi = {
       try {
         return await invoke<string>("get_default_storage_path");
       } catch (err) {
-        console.warn("get_default_storage_path failed", err);
       }
     }
     return "Documents/DoIT";
@@ -151,7 +169,6 @@ export const tauriApi = {
       try {
         return await invoke<AppSettings>("get_settings");
       } catch (err) {
-        console.warn("get_settings failed", err);
       }
     }
     const stored = localStorage.getItem("doit.settings");
@@ -163,7 +180,6 @@ export const tauriApi = {
       try {
         return await invoke<AppSettings>("update_settings", { settings });
       } catch (err) {
-        console.warn("update_settings failed", err);
       }
     }
     localStorage.setItem("doit.settings", JSON.stringify(settings));
@@ -175,7 +191,6 @@ export const tauriApi = {
       try {
         return await invoke<string | null>("select_storage_directory");
       } catch (err) {
-        console.warn("select_storage_directory failed", err);
       }
     }
     return null;
@@ -186,7 +201,6 @@ export const tauriApi = {
       try {
         return await invoke<NoteItem>("save_note", { note });
       } catch (err) {
-        console.warn("save_note failed, keeping local copy", err);
       }
     }
     const notes = readLocal<NoteItem[]>(NOTES_KEY, DEFAULT_NOTES);
@@ -202,7 +216,6 @@ export const tauriApi = {
       try {
         return await invoke<NoteItem>("update_note_category", { id, category });
       } catch (err) {
-        console.warn("update_note_category failed", err);
       }
     }
     const notes = readLocal<NoteItem[]>(NOTES_KEY, DEFAULT_NOTES);
@@ -220,7 +233,6 @@ export const tauriApi = {
         await invoke<boolean>("delete_note", { id });
         return;
       } catch (err) {
-        console.warn("delete_note failed", err);
       }
     }
     const notes = readLocal<NoteItem[]>(NOTES_KEY, DEFAULT_NOTES).filter((n) => n.id !== id);
@@ -232,7 +244,6 @@ export const tauriApi = {
       try {
         return await invoke<boolean>("add_category", { category });
       } catch (err) {
-        console.warn("add_category failed", err);
       }
     }
     return true;
@@ -243,7 +254,6 @@ export const tauriApi = {
       try {
         return await invoke<boolean>("delete_category", { category });
       } catch (err) {
-        console.warn("delete_category failed", err);
       }
     }
     return true;
@@ -259,7 +269,6 @@ export const tauriApi = {
     try {
       await invoke("toggle_window_minimize");
     } catch (err) {
-      console.warn("minimize failed", err);
     }
   },
 
@@ -268,7 +277,6 @@ export const tauriApi = {
     try {
       await getCurrentWindow().toggleMaximize();
     } catch (err) {
-      console.warn("maximize failed", err);
     }
   },
 
@@ -278,52 +286,6 @@ export const tauriApi = {
       // Cross button hides to background Desk Tray so app remains active companion
       await invoke("open_tray_mode");
     } catch (err) {
-      console.warn("close to tray failed", err);
-    }
-  },
-
-  async resizeTrayWindow(expanded: boolean): Promise<void> {
-    if (!isTauri()) return;
-    try {
-      await invoke("resize_tray_window", { expanded });
-    } catch (err) {
-      console.warn("resize_tray_window failed", err);
-    }
-  },
-
-  async syncTrayWindowHeight(logicalHeight: number): Promise<void> {
-    if (!isTauri()) return;
-    try {
-      await invoke("sync_tray_window_height", { logicalHeight });
-    } catch (err) {
-      console.warn("sync_tray_window_height failed", err);
-    }
-  },
-
-  async syncTrayWindowBounds(logicalWidth: number, logicalHeight: number): Promise<void> {
-    if (!isTauri()) return;
-    try {
-      await invoke("sync_tray_window_bounds", { logicalWidth, logicalHeight });
-    } catch (err) {
-      console.warn("sync_tray_window_bounds failed", err);
-    }
-  },
-
-  async snapTrayWindow(logicalWidth: number, logicalHeight: number): Promise<void> {
-    if (!isTauri()) return;
-    try {
-      await invoke("snap_tray_window", { logicalWidth, logicalHeight });
-    } catch (err) {
-      console.warn("snap_tray_window failed", err);
-    }
-  },
-
-  async setTrayMinimized(minimized: boolean): Promise<void> {
-    if (!isTauri()) return;
-    try {
-      await invoke("set_tray_minimized", { minimized });
-    } catch (err) {
-      console.warn("set_tray_minimized failed", err);
     }
   },
 
@@ -332,7 +294,6 @@ export const tauriApi = {
     try {
       await invoke("set_mini_window_mode", { mini });
     } catch (err) {
-      console.warn("set_mini_window_mode failed", err);
     }
   },
 
@@ -341,7 +302,6 @@ export const tauriApi = {
     try {
       await invoke("open_tray_mode");
     } catch (err) {
-      console.warn("open_tray_mode failed", err);
     }
   },
 
@@ -350,28 +310,65 @@ export const tauriApi = {
     try {
       await invoke("open_canvas_mode");
     } catch (err) {
-      console.warn("open_canvas_mode failed", err);
     }
   },
 
-  async collapseTrayToPill(): Promise<void> {
+  async takeLaunchFile(): Promise<string | null> {
+    if (!isTauri()) return null;
+    try {
+      return (await invoke<string | null>("take_launch_file")) ?? null;
+    } catch {
+      return null;
+    }
+  },
+
+  async openExternalFile(path: string): Promise<NoteItem> {
+    return await invoke<NoteItem>("open_external_file", { path });
+  },
+
+  async saveExternalFile(note: NoteItem): Promise<NoteItem> {
+    return await invoke<NoteItem>("save_external_file", { note });
+  },
+
+  /** Tray page mounted: the backend shows the (pre-positioned) frame and returns the start mode. */
+  async trayReady(): Promise<"panel" | "pill"> {
+    if (!isTauri()) return "panel";
+    try {
+      return (await invoke<string>("tray_ready")) === "pill" ? "pill" : "panel";
+    } catch {
+      return "panel";
+    }
+  },
+
+  /** Mutates the single tray frame between the 380x480 panel and the 180x44 floating bar. */
+  async setTrayMode(mode: "panel" | "pill"): Promise<void> {
     if (!isTauri()) return;
     try {
-      await invoke("collapse_tray_to_pill");
-    } catch (err) {
-      console.warn("collapse_tray_to_pill failed", err);
+      await invoke("set_tray_mode", { mode });
+    } catch {
+      /* frame already gone */
     }
   },
 
-  async expandTrayFromPill(): Promise<void> {
+  /** Canvas page mounted after a (re)load: lets the backend reveal the window. */
+  async canvasReady(): Promise<void> {
     if (!isTauri()) return;
     try {
-      await invoke("expand_tray_from_pill");
-    } catch (err) {
-      console.warn("expand_tray_from_pill failed", err);
+      await invoke("canvas_ready");
+    } catch {
+      /* not running under Tauri */
     }
   },
 
+  /** True while an external file has unsaved edits (the canvas is then never swapped for a blank page). */
+  async setExternalDirty(dirty: boolean): Promise<void> {
+    if (!isTauri()) return;
+    try {
+      await invoke("set_external_dirty", { dirty });
+    } catch {
+      /* ignore */
+    }
+  },
   async beginDrag(): Promise<void> {
     if (!isTauri()) return;
     try {
@@ -410,7 +407,7 @@ export const tauriApi = {
   /**
    * Single File Ingestion Layer:
    * Opens file picker (or uses provided path), reads the Markdown file,
-   * strictly verifies app: "DoIT" header signature, and imports into active Bento grid canvas.
+   * and imports it into the active Bento grid canvas. Any .md / .txt file is accepted.
    */
   async importSingleMarkdownFile(filePath?: string): Promise<NoteItem> {
     if (!isTauri()) {
@@ -421,8 +418,7 @@ export const tauriApi = {
 
   /**
    * Automated Folder Scanning:
-   * Scans target or current directory for valid DoIT notes,
-   * isolating frontmatter and filtering out non-DoIT files.
+   * Scans the target or current directory and imports every .md / .txt file.
    */
   async scanMarkdownFolder(folderPath?: string): Promise<ScanSummary> {
     if (!isTauri()) {
