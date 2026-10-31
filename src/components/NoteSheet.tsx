@@ -406,7 +406,7 @@ export function NoteSheet({
   closeRef.current = close;
 
   const addShelf = () => {
-    const name = newShelf.trim();
+    const name = newShelf.trim().slice(0, 24);
     if (!name) return;
     edit({ category: name });
     setNewShelf("");
@@ -450,8 +450,8 @@ export function NoteSheet({
           style={{ backgroundColor: accent, animation: "strip-in 620ms cubic-bezier(0.22,1,0.36,1) both" }}
         />
 
-        <div className="flex min-h-[52px] shrink-0 flex-wrap items-center justify-between gap-x-4 gap-y-1 px-5 py-1.5">
-          <div className="flex min-w-0 items-center gap-2.5">
+        <div className="flex min-h-[52px] shrink-0 flex-nowrap items-center justify-between gap-x-3 px-5 py-1.5">
+          <div className="flex min-w-0 max-w-[130px] shrink items-center gap-2.5">
             {external ? (
               <span
                 title={draft.source_path}
@@ -467,8 +467,8 @@ export function NoteSheet({
                 onClick={() => setShelfOpen((v) => !v)}
                 className="flex h-6 items-center gap-1.5 rounded-md px-1.5 font-mono text-[9.5px] uppercase tracking-[0.11em] text-ink-3 transition-colors hover:bg-white/[0.06] hover:text-ink-1"
               >
-                <span className="size-[4px] rounded-full" style={{ backgroundColor: accent }} />
-                {cleanText(draft.category)}
+                <span className="size-[4px] shrink-0 rounded-full" style={{ backgroundColor: accent }} />
+                <span className="fade-end max-w-[96px] overflow-hidden whitespace-nowrap">{cleanText(draft.category)}</span>
                 <ChevronDown size={10} strokeWidth={2} />
               </button>
 
@@ -524,7 +524,7 @@ export function NoteSheet({
             )}
           </div>
 
-          <div className="flex shrink-0 items-center gap-0.5">
+          <div className="no-scrollbar flex min-w-0 items-center gap-0.5 overflow-x-auto">
             <div className="relative">
               <button
                 type="button"

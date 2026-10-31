@@ -288,6 +288,7 @@ export function BentoCanvas({
                   type="text"
                   autoFocus
                   value={newCatName}
+                maxLength={24}
                   onChange={(e) => setNewCatName(e.target.value)}
                   onKeyDown={(e) => {
                     if (e.key === "Enter" && newCatName.trim()) {

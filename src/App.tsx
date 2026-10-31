@@ -60,63 +60,75 @@ export default function App() {
   const toastTimer = useRef(0);
   const deepLinkUsed = useRef(false);
 
-  // Asynchronous non-blocking update check on boot
+  // Background update check. It never blocks the UI, but GitHub's release CDN sometimes needs 10s+ for the
+  // TLS handshake: one 3s attempt silently missed updates for 6 hours. So retry with growing patience.
+  const checkForUpdate = useCallback(async (timeoutMs: number): Promise<"found" | "none" | "error"> => {
+    if (typeof navigator !== "undefined" && navigator.onLine === false) return "error";
+    try {
+      const { check } = await import("@tauri-apps/plugin-updater");
+      const update = await check({ timeout: timeoutMs });
+      if (update && update.available) {
+        setAvailableUpdate({
+          version: update.version,
+          currentVersion: update.currentVersion,
+          notes: update.body,
+          date: update.date,
+          onInstall: async (onProgress) => {
+            let total = 0;
+            let done = 0;
+            await update.downloadAndInstall((event) => {
+              if (event.event === "Started") {
+                total = event.data.contentLength ?? 0;
+                onProgress(total ? 0 : null);
+              } else if (event.event === "Progress") {
+                done += event.data.chunkLength;
+                onProgress(total ? Math.min(100, Math.round((done / total) * 100)) : null);
+              } else if (event.event === "Finished") {
+                onProgress(100);
+              }
+            });
+            await tauriApi.restartApp();
+          },
+          onDismiss: () => setAvailableUpdate(null),
+        });
+        return "found";
+      }
+      return "none";
+    } catch {
+      return "error";
+    }
+  }, []);
+
   useEffect(() => {
     let cancelled = false;
-    const checkUpdate = async () => {
-      // Offline: surrender immediately, never touch the network
-      if (typeof navigator !== "undefined" && navigator.onLine === false) return;
-      try {
-        const { check } = await import("@tauri-apps/plugin-updater");
-        // Hard 3s ceiling: the plugin-level timeout plus a race guard
-        const update = await Promise.race([
-          check({ timeout: 3000 }),
-          new Promise<null>((resolve) => window.setTimeout(() => resolve(null), 3000)),
-        ]);
-        if (update && update.available && !cancelled) {
-          setAvailableUpdate({
-            version: update.version,
-            currentVersion: update.currentVersion,
-            notes: update.body,
-            date: update.date,
-            onInstall: async (onProgress) => {
-              let total = 0;
-              let done = 0;
-              await update.downloadAndInstall((event) => {
-                if (event.event === "Started") {
-                  total = event.data.contentLength ?? 0;
-                  onProgress(total ? 0 : null);
-                } else if (event.event === "Progress") {
-                  done += event.data.chunkLength;
-                  onProgress(total ? Math.min(100, Math.round((done / total) * 100)) : null);
-                } else if (event.event === "Finished") {
-                  onProgress(100);
-                }
-              });
-              await tauriApi.restartApp();
-            },
-            onDismiss: () => setAvailableUpdate(null),
-          });
-        }
-      } catch {
-        /* offline / endpoint unreachable: fail silently */
-      }
+    const timers: number[] = [];
+    const attempts = [
+      { delay: 1200, timeout: 15000 },
+      { delay: 25000, timeout: 30000 },
+      { delay: 120000, timeout: 30000 },
+      { delay: 600000, timeout: 30000 },
+    ];
+    const run = (i: number) => {
+      if (cancelled || i >= attempts.length) return;
+      timers.push(
+        window.setTimeout(async () => {
+          if (cancelled) return;
+          if ((await checkForUpdate(attempts[i].timeout)) === "error") run(i + 1);
+        }, attempts[i].delay),
+      );
     };
-
-    const timer = window.setTimeout(() => {
-      void checkUpdate();
-    }, 1200);
+    run(0);
     // long-running sessions (tray mode) also re-check every 6 hours
     const interval = window.setInterval(() => {
-      void checkUpdate();
+      void checkForUpdate(30000);
     }, 6 * 60 * 60 * 1000);
 
     return () => {
       cancelled = true;
-      window.clearTimeout(timer);
+      timers.forEach((t) => window.clearTimeout(t));
       window.clearInterval(interval);
     };
-  }, []);
+  }, [checkForUpdate]);
 
   useEffect(() => {
     void tauriApi.getSettings().then((s) => {
@@ -186,6 +198,16 @@ export default function App() {
   useEffect(() => {
     void tauriApi.canvasReady();
   }, []);
+
+  useEffect(() => {
+    const onManualCheck = async () => {
+      const result = await checkForUpdate(30000);
+      if (result === "none") notify("You are on the latest version.");
+      else if (result === "error") notify("Could not reach the update server. Try again in a moment.");
+    };
+    window.addEventListener("doit:check-updates", onManualCheck);
+    return () => window.removeEventListener("doit:check-updates", onManualCheck);
+  }, [checkForUpdate, notify]);
 
   // ---- External files (double-click in Explorer / "Open with DoIT"): opened in place, never copied ----
   const openExternal = useCallback(

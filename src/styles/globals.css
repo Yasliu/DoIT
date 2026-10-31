@@ -823,3 +823,10 @@ html[data-theme="monochrome"] .lightscape {
   color: var(--color-ink-2, #c3c6cc);
   user-select: none;
 }
+/* single-line text that fades out instead of wrapping or growing */
+.fade-end {
+  -webkit-mask-image: linear-gradient(to right, #000 calc(100% - 14px), transparent);
+  mask-image: linear-gradient(to right, #000 calc(100% - 14px), transparent);
+}
+.no-scrollbar { scrollbar-width: none; }
+.no-scrollbar::-webkit-scrollbar { display: none; }

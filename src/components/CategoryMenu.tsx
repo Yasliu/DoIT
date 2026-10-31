@@ -116,7 +116,7 @@ export function CategoryMenu({ x, y, shelf, onClose, onRename, onDelete }: Categ
                 setError(null);
               }}
               onKeyDown={(e) => e.stopPropagation()}
-              maxLength={60}
+              maxLength={24}
               className="h-9 w-full rounded-[10px] border border-white/15 bg-white/[0.05] px-3 text-[13px] text-white outline-none focus:border-white/35"
             />
             {error && <div className="mt-2 text-[11px] text-red-400">{error}</div>}

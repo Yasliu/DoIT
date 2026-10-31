@@ -92,7 +92,12 @@ export function comboFromEvent(e: KeyEventLike): string | null {
   if (e.ctrlKey || e.metaKey) parts.push("Ctrl");
   if (e.altKey) parts.push("Alt");
   if (e.shiftKey) parts.push("Shift");
-  const k = e.code && /^Digit\d$/.test(e.code) ? e.code.slice(5) : e.key;
+  const k =
+    e.code && /^Digit\d$/.test(e.code)
+      ? e.code.slice(5)
+      : e.code && /^Arrow(Up|Down|Left|Right)$/.test(e.code)
+        ? e.code
+        : e.key;
   parts.push(k.length === 1 ? k.toUpperCase() : k);
   return parts.join("+");
 }

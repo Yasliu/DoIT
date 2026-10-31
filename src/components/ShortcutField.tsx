@@ -2,21 +2,7 @@ import { useState } from "react";
 import { ArrowDown, ArrowLeft, ArrowRight, ArrowUp } from "lucide-react";
 import { comboFromEvent } from "../lib/shortcuts";
 
-const ARROWS: Record<string, typeof ArrowRight> = {
-  ArrowLeft,
-  ArrowRight,
-  ArrowUp,
-  ArrowDown,
-};
-
-function KeyCap({ k }: { k: string }) {
-  const Icon = ARROWS[k];
-  return (
-    <kbd className="inline-flex h-[20px] min-w-[20px] items-center justify-center rounded-[6px] border border-white/15 bg-white/[0.07] px-1.5 font-mono text-[10.5px] leading-none text-white">
-      {Icon ? <Icon size={11} strokeWidth={2.4} /> : k}
-    </kbd>
-  );
-}
+const ARROWS: Record<string, typeof ArrowRight> = { ArrowLeft, ArrowRight, ArrowUp, ArrowDown };
 
 interface ShortcutFieldProps {
   value: string;
@@ -24,7 +10,7 @@ interface ShortcutFieldProps {
   onChange: (combo: string) => void;
 }
 
-/** Click, then press the new combination. Arrow keys show as theme-matched arrow icons. */
+/** Same look as the default shortcut boxes; arrows render as icons. Click, then press the new combination. */
 export function ShortcutField({ value, def, onChange }: ShortcutFieldProps) {
   const [listening, setListening] = useState(false);
   const parts = (value || def).split("+").filter(Boolean);
@@ -45,12 +31,20 @@ export function ShortcutField({ value, def, onChange }: ShortcutFieldProps) {
         if (combo && combo.includes("+")) onChange(combo);
       }}
       title="Click, then press the new key combination (Backspace restores the default)"
-      className="flex min-h-[28px] shrink-0 cursor-pointer items-center justify-center gap-1 rounded-lg border border-white/15 bg-black/40 px-2 py-1 outline-none transition-colors hover:border-white/30 focus:border-white/50"
+      className="flex h-7 min-w-24 shrink-0 cursor-pointer items-center justify-center whitespace-nowrap rounded-lg border border-white/15 bg-black/40 px-2.5 font-mono text-[11.5px] text-white outline-none focus:border-white/40"
     >
       {listening ? (
-        <span className="px-1 font-mono text-[10.5px] text-ink-4">Press keys...</span>
+        <span className="text-ink-4">Press keys...</span>
       ) : (
-        parts.map((k, i) => <KeyCap key={`${k}-${i}`} k={k} />)
+        parts.map((k, i) => {
+          const Icon = ARROWS[k];
+          return (
+            <span key={`${k}-${i}`} className="inline-flex items-center">
+              {i > 0 && <span>+</span>}
+              {Icon ? <Icon size={12} strokeWidth={2.2} className="mx-px" /> : k}
+            </span>
+          );
+        })
       )}
     </button>
   );

@@ -217,7 +217,8 @@ export function useWorkspace() {
     [load],
   );
 
-  const renameCategory = useCallback(async (category: string, newName: string): Promise<string | null> => {
+  const renameCategory = useCallback(async (category: string, rawName: string): Promise<string | null> => {
+    const newName = rawName.trim().slice(0, 24);
     // flush unsaved edits first so a late save cannot resurrect the old category name
     pending.current.forEach((n) => persist(n, true));
     try {
@@ -232,7 +233,7 @@ export function useWorkspace() {
 
   const createCategory = useCallback(
     async (category: string) => {
-      const trimmed = category.trim();
+      const trimmed = category.trim().slice(0, 24);
       if (!trimmed) return;
       setCategories((prev) => {
         if (prev.some((c) => c.name.toLowerCase() === trimmed.toLowerCase())) return prev;

@@ -39,6 +39,36 @@ const MD_SHORTCUT_ROWS = [
   { key: "hotkey_table_row", label: "Table: Add Row", hint: "Inside a table cell: new row at the bottom", def: DEFAULT_MD_SHORTCUTS.tableRow },
 ] as const;
 
+function AppUpdatesSection() {
+  const [version, setVersion] = useState("");
+  useEffect(() => {
+    void import("@tauri-apps/api/app")
+      .then((m) => m.getVersion())
+      .then(setVersion)
+      .catch(() => undefined);
+  }, []);
+  return (
+    <section className="glass rounded-[20px] border border-white/10 p-5 shadow-[0_20px_50px_-20px_rgba(0,0,0,0.8)]">
+      <div className="flex items-center justify-between gap-4">
+        <div>
+          <h2 className="text-[14px] font-semibold text-ink-1">App updates</h2>
+          <p className="text-[11.5px] text-ink-4">
+            DoIT {version ? `v${version}` : ""} - updates download in the background and are signature-verified.
+          </p>
+        </div>
+        <button
+          type="button"
+          onClick={() => window.dispatchEvent(new CustomEvent("doit:check-updates"))}
+          className="flex h-9 shrink-0 cursor-pointer items-center gap-2 rounded-xl border border-white/15 bg-white/[0.07] px-3.5 text-[12px] font-medium text-white transition-all hover:bg-white/[0.14]"
+        >
+          <RefreshCw size={13} />
+          Check for updates
+        </button>
+      </div>
+    </section>
+  );
+}
+
 export function SettingsPanel({ onBack, onStoragePathChanged, onThemeChanged }: SettingsPanelProps) {
   const [settings, setSettings] = useState<AppSettings>(DEFAULT_SETTINGS);
   const [loading, setLoading] = useState(true);
@@ -548,6 +578,8 @@ export function SettingsPanel({ onBack, onStoragePathChanged, onThemeChanged }: 
               <li>Right-click a table: Add Column / Add Row / Delete Column / Delete Row</li>
             </ul>          </div>
         </section>
+
+        <AppUpdatesSection />
       </div>
     </div>
   );
