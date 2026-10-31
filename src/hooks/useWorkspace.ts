@@ -54,7 +54,12 @@ export function useWorkspace() {
           const idx = prev.findIndex((n) => n.id === incoming.id);
           if (idx >= 0) {
             const copy = [...prev];
-            copy[idx] = incoming;
+            const local = prev[idx];
+            // Backend trims titles on write; never let that echo eat spaces the user is still typing.
+            copy[idx] =
+              local.title !== incoming.title && local.title.trim() === incoming.title
+                ? { ...incoming, title: local.title }
+                : incoming;
             return copy;
           }
           return [incoming, ...prev];

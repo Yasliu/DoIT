@@ -38,51 +38,71 @@ export function renderFormattedText(text: string): React.ReactNode {
 /**
  * Converts Markdown text (with **bold** and *italic*) into HTML for a contenteditable rich editor.
  */
-export function markdownToHtml(md: string): string {
-  if (!md) return "<div><br></div>";
-  const lines = md.split("\n");
-  const htmlLines = lines.map((line) => {
-    if (!line) return "<div><br></div>";
-    let formatted = line
-      .replace(/&/g, "&amp;")
-      .replace(/</g, "&lt;")
-      .replace(/>/g, "&gt;");
+export function inlineMarkdownToHtml(line: string): string {
+  let formatted = line
+    .replace(/&/g, "&amp;")
+    .replace(/</g, "&lt;")
+    .replace(/>/g, "&gt;");
 
-    // Replace bold+italic ***text*** -> <strong><em>text</em></strong>
-    formatted = formatted.replace(/\*\*\*([^*]+?)\*\*\*/g, "<strong><em>$1</em></strong>");
-    // Replace bold **text** -> <strong>text</strong>
-    formatted = formatted.replace(/\*\*([^*]+?)\*\*/g, "<strong>$1</strong>");
-    // Replace italic *text* -> <em>text</em>
-    formatted = formatted.replace(/(?<!\*)\*([^*]+?)\*(?!\*)/g, "<em>$1</em>");
-
-    return `<div>${formatted}</div>`;
-  });
-
-  return htmlLines.join("");
+  // Replace bold+italic ***text*** -> <strong><em>text</em></strong>
+  formatted = formatted.replace(/\*\*\*([^*]+?)\*\*\*/g, "<strong><em>$1</em></strong>");
+  // Replace bold **text** -> <strong>text</strong>
+  formatted = formatted.replace(/\*\*([^*]+?)\*\*/g, "<strong>$1</strong>");
+  // Replace italic *text* -> <em>text</em>
+  formatted = formatted.replace(/(?<!\*)\*([^*]+?)\*(?!\*)/g, "<em>$1</em>");
+  return formatted;
 }
 
+export function markdownToHtml(md: string): string {
+  if (!md) return "<div><br></div>";
+  return md
+    .split("\n")
+    .map((line) => (line ? `<div>${inlineMarkdownToHtml(line)}</div>` : "<div><br></div>"))
+    .join("");
+}
 /**
  * Converts rich contenteditable DOM back to clean Markdown without losing formatting.
  */
 export function htmlToMarkdown(container: HTMLElement): string {
-  function processNode(node: Node): string {
+  const BLOCK_TAGS = new Set(["DIV", "P", "LI", "UL", "OL", "H1", "H2", "H3", "H4", "H5", "H6", "BLOCKQUOTE", "PRE"]);
+  const lines: string[] = [];
+  let cur = "";
+  const flush = () => {
+    lines.push(cur);
+    cur = "";
+  };
+
+  const isTrailingBr = (el: HTMLElement): boolean => {
+    let sib = el.nextSibling;
+    while (sib && sib.nodeType === Node.TEXT_NODE && !(sib.textContent || "").length) sib = sib.nextSibling;
+    if (sib) return false;
+    const parent = el.parentElement;
+    return !!parent && (parent === container || BLOCK_TAGS.has(parent.tagName.toUpperCase()));
+  };
+
+  const walk = (node: Node): void => {
     if (node.nodeType === Node.TEXT_NODE) {
-      return node.textContent || "";
+      cur += (node.textContent || "").replace(/\u00a0/g, " ").replace(/[\r\n]+/g, " ");
+      return;
     }
-    if (node.nodeType !== Node.ELEMENT_NODE) {
-      return "";
-    }
+    if (node.nodeType !== Node.ELEMENT_NODE) return;
 
     const el = node as HTMLElement;
     const tag = el.tagName.toUpperCase();
 
     if (tag === "BR") {
-      return "\n";
+      // A trailing <br> inside a block is just Chrome's empty-line placeholder.
+      if (!isTrailingBr(el)) flush();
+      return;
     }
 
-    let inner = "";
-    for (const child of Array.from(el.childNodes)) {
-      inner += processNode(child);
+    if (BLOCK_TAGS.has(tag)) {
+      // Block elements always begin on a fresh line (fixes nested <div> merging into the previous line)
+      if (cur !== "") flush();
+      const start = lines.length;
+      for (const child of Array.from(el.childNodes)) walk(child);
+      if (cur !== "" || lines.length === start) flush();
+      return;
     }
 
     const isBold =
@@ -90,53 +110,29 @@ export function htmlToMarkdown(container: HTMLElement): string {
       tag === "B" ||
       el.style.fontWeight === "bold" ||
       parseInt(el.style.fontWeight, 10) >= 600;
+    const isItalic = tag === "EM" || tag === "I" || el.style.fontStyle === "italic";
 
-    const isItalic =
-      tag === "EM" ||
-      tag === "I" ||
-      el.style.fontStyle === "italic";
+    const before = cur;
+    const startLines = lines.length;
+    for (const child of Array.from(el.childNodes)) walk(child);
 
-    if (isBold && isItalic) {
+    if ((isBold || isItalic) && lines.length === startLines) {
+      const inner = cur.slice(before.length);
       const trimmed = inner.trim();
       if (trimmed) {
         const lead = inner.match(/^\s*/)?.[0] || "";
         const trail = inner.match(/\s*$/)?.[0] || "";
-        return `${lead}***${trimmed}***${trail}`;
-      }
-    } else if (isBold) {
-      const trimmed = inner.trim();
-      if (trimmed) {
-        const lead = inner.match(/^\s*/)?.[0] || "";
-        const trail = inner.match(/\s*$/)?.[0] || "";
-        return `${lead}**${trimmed}**${trail}`;
-      }
-    } else if (isItalic) {
-      const trimmed = inner.trim();
-      if (trimmed) {
-        const lead = inner.match(/^\s*/)?.[0] || "";
-        const trail = inner.match(/\s*$/)?.[0] || "";
-        return `${lead}*${trimmed}*${trail}`;
+        const mark = isBold && isItalic ? "***" : isBold ? "**" : "*";
+        cur = `${before}${lead}${mark}${trimmed}${mark}${trail}`;
       }
     }
+  };
 
-    if (tag === "DIV" || tag === "P") {
-      return inner + "\n";
-    }
+  for (const child of Array.from(container.childNodes)) walk(child);
+  if (cur !== "") flush();
 
-    return inner;
-  }
-
-  let result = "";
-  for (const child of Array.from(container.childNodes)) {
-    result += processNode(child);
-  }
-
-  // Normalize newlines
-  const normalized = result.replace(/\r\n/g, "\n");
-  // Remove single trailing newline added by last div
-  return normalized.endsWith("\n") ? normalized.slice(0, -1) : normalized;
+  return lines.join("\n");
 }
-
 /**
  * Toggles bold in the active contenteditable editor or fallback input.
  */
@@ -279,4 +275,26 @@ export function handleRichEditorKeyDown(
   }
 
   return false;
+}
+
+/**
+ * Converts note lines between plain-text and checklist mode without merging or inventing lines:
+ * every non-empty line maps 1:1 to an item; blank lines are dropped (one blank item is kept if nothing remains).
+ */
+export function convertContentMode(
+  content: { id: string; text: string; is_todo: boolean; completed: boolean }[],
+  toTodo: boolean,
+): { id: string; text: string; is_todo: boolean; completed: boolean }[] {
+  const cleaned = content
+    .flatMap((c) => c.text.split(/\r?\n/).map((text, i) => ({ c, text, i })))
+    .map(({ c, text, i }) => ({
+      id: i === 0 ? c.id : `${c.id}_${i}`,
+      text: toTodo ? text.replace(/^\s*[-*•]\s+/, "") : text,
+      is_todo: toTodo,
+      completed: toTodo ? c.completed : false,
+    }))
+    .filter((c) => c.text.trim().length > 0);
+  if (cleaned.length > 0) return cleaned;
+  const base = content[0];
+  return [{ id: base?.id ?? "line_0", text: "", is_todo: toTodo, completed: false }];
 }

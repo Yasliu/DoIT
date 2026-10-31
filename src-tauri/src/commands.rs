@@ -485,6 +485,9 @@ pub fn open_tray_mode(app: AppHandle) -> Result<(), String> {
             PRE_STATE_BUFFER.lock().unwrap().expanded_physical_pos = Some(pos);
         }
 
+        if let Some(pill) = app.get_webview_window("pill") {
+            let _ = pill.hide();
+        }
         let _ = tray_win.emit("set-expanded", true);
         let _ = tray_win.emit("spawn-indicator", ());
         let _ = tray_win.show();
@@ -568,7 +571,11 @@ pub fn open_canvas_mode(app: AppHandle) -> Result<(), String> {
             }
         }
 
+        let _ = tray_win.emit("set-expanded", false);
         let _ = tray_win.hide();
+        if let Some(pill) = app.get_webview_window("pill") {
+            let _ = pill.hide();
+        }
         let _ = main_win.show();
         let _ = main_win.set_focus();
     }
@@ -713,13 +720,80 @@ pub fn sync_tray_window_height(app: AppHandle, logical_height: f64) -> Result<()
     snap_tray_window(app, 380.0, logical_height)
 }
 
+fn clamp_to_monitor(
+    window: &tauri::WebviewWindow,
+    app: &AppHandle,
+    x: i32,
+    y: i32,
+    w: i32,
+    h: i32,
+) -> (i32, i32) {
+    if let Some(mon) = get_window_active_monitor(window).or_else(|| app.primary_monitor().ok().flatten()) {
+        let m_pos = mon.position();
+        let m_size = mon.size();
+        let min_x = m_pos.x + 8;
+        let min_y = m_pos.y + 8;
+        let max_x = (m_pos.x + m_size.width as i32 - w - 8).max(min_x);
+        let max_y = (m_pos.y + m_size.height as i32 - h - 8).max(min_y);
+        (x.clamp(min_x, max_x), y.clamp(min_y, max_y))
+    } else {
+        (x, y)
+    }
+}
+
+/// Closing the tray: hide it and show the mini floating pill anchored to its bottom-right corner.
+#[tauri::command]
+pub fn collapse_tray_to_pill(app: AppHandle) -> Result<(), String> {
+    let (Some(tray_win), Some(pill)) = (app.get_webview_window("tray"), app.get_webview_window("pill")) else {
+        return Ok(());
+    };
+    // Canvas is up: tray mode is over, never leave a pill behind
+    if app
+        .get_webview_window("main")
+        .map(|w| w.is_visible().unwrap_or(false))
+        .unwrap_or(false)
+    {
+        let _ = tray_win.hide();
+        let _ = pill.hide();
+        return Ok(());
+    }
+    if let (Ok(pos), Ok(tsize), Ok(psize)) = (tray_win.outer_position(), tray_win.outer_size(), pill.outer_size()) {
+        let x = pos.x + tsize.width as i32 - psize.width as i32;
+        let y = pos.y + tsize.height as i32 - psize.height as i32;
+        let (x, y) = clamp_to_monitor(&tray_win, &app, x, y, psize.width as i32, psize.height as i32);
+        lock_window_transition(200);
+        set_window_bounds_atomic(&pill, x, y, psize.width, psize.height);
+    }
+    let _ = pill.show();
+    let _ = pill.set_always_on_top(true);
+    let _ = tray_win.hide();
+    Ok(())
+}
+
+/// Clicking the pill: open the tray with its bottom-right corner where the pill sits.
+#[tauri::command]
+pub fn expand_tray_from_pill(app: AppHandle) -> Result<(), String> {
+    let (Some(tray_win), Some(pill)) = (app.get_webview_window("tray"), app.get_webview_window("pill")) else {
+        return Ok(());
+    };
+    if let (Ok(pos), Ok(psize), Ok(tsize)) = (pill.outer_position(), pill.outer_size(), tray_win.outer_size()) {
+        let x = pos.x + psize.width as i32 - tsize.width as i32;
+        let y = pos.y + psize.height as i32 - tsize.height as i32;
+        let (x, y) = clamp_to_monitor(&pill, &app, x, y, tsize.width as i32, tsize.height as i32);
+        lock_window_transition(200);
+        set_window_bounds_atomic(&tray_win, x, y, tsize.width, tsize.height);
+    }
+    let _ = tray_win.emit("set-expanded", true);
+    let _ = tray_win.show();
+    let _ = tray_win.set_always_on_top(true);
+    let _ = tray_win.set_focus();
+    let _ = pill.hide();
+    Ok(())
+}
+
 #[tauri::command]
 pub fn set_tray_minimized(app: AppHandle, minimized: bool) -> Result<(), String> {
-    if minimized {
-        let _ = snap_tray_window(app.clone(), 180.0, 44.0);
-    } else {
-        let _ = snap_tray_window(app.clone(), 380.0, 480.0);
-    }
+    // Tray window is a static 380x480 box; visibility is driven by the frontend fade.
     if let Some(tray_win) = app.get_webview_window("tray") {
         let _ = tray_win.emit("set-expanded", !minimized);
     }

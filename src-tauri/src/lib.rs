@@ -80,9 +80,9 @@ pub fn run() {
                         // X button on main → switch to floating tray companion on the same monitor
                         let _ = open_tray_mode(app.clone());
                     } else {
-                        // X button on tray companion → just hide it
-                        if let Some(tray_win) = app.get_webview_window("tray") {
-                            let _ = tray_win.hide();
+                        // X button on tray companion / pill → just hide it
+                        if let Some(win) = app.get_webview_window(&label) {
+                            let _ = win.hide();
                         }
                     }
                 });
@@ -196,6 +196,8 @@ pub fn run() {
             sync_tray_window_bounds,
             snap_tray_window,
             set_tray_minimized,
+            collapse_tray_to_pill,
+            expand_tray_from_pill,
             start_drag,
             save_tray_position,
             restart_app,

@@ -15,7 +15,10 @@ import {
 } from "lucide-react";
 import type { ContentItem, NoteItem } from "../api/tauriBridge";
 import { NOTE_FONTS, fontStack } from "../api/tauriBridge";
+import { useUndoStack } from "../hooks/useUndoStack";
+import { TaskLineInput } from "./TaskLineInput";
 import {
+  convertContentMode,
   handleRichEditorKeyDown,
   htmlToMarkdown,
   isRichBoldActive,
@@ -64,7 +67,7 @@ export function NoteSheet({
   const fileInputRef = useRef<HTMLInputElement | null>(null);
   const [newShelf, setNewShelf] = useState("");
   const [focusLine, setFocusLine] = useState<string | null>(null);
-  const lineRefs = useRef(new Map<string, HTMLInputElement>());
+  const lineRefs = useRef(new Map<string, HTMLElement>());
   const titleRef = useRef<HTMLInputElement | null>(null);
   const closeRef = useRef<() => void>(() => {});
   const closeCancel = useRef<() => void>(() => {});
@@ -149,6 +152,13 @@ export function NoteSheet({
         });
         return;
       }
+    }
+
+    // 1b. Rich (contenteditable) task line formatting
+    if (activeEl instanceof HTMLElement && activeEl.dataset.taskLine) {
+      document.execCommand(style, false);
+      updateActiveFormatting();
+      return;
     }
 
     // 2. Contenteditable freeform editor selection formatting
@@ -278,11 +288,19 @@ export function NoteSheet({
   const isAllTodos = draft.content.some((c) => c.is_todo);
   const toggleContentMode = () => {
     const nextIsTodo = !isAllTodos;
-    const content = draftRef.current.content.map((c) => ({
-      ...c,
-      is_todo: nextIsTodo,
-      text: c.text.replace(/^\s*[-*•]\s+/, ""),
-    }));
+    let source: NoteItem["content"] = draftRef.current.content;
+    if (!isAllTodos && editorRef.current) {
+      // Read the live editor DOM so nothing typed since the last sync is lost or merged
+      source = htmlToMarkdown(editorRef.current)
+        .split("\n")
+        .map((text, idx) => ({
+          id: draftRef.current.content[idx]?.id ?? uid("line"),
+          text,
+          is_todo: false,
+          completed: false,
+        }));
+    }
+    const content = convertContentMode(source, nextIsTodo);
     commit({ ...draftRef.current, content, last_edited: Date.now() }, true);
   };
 
@@ -301,6 +319,30 @@ export function NoteSheet({
 
   const edit = (patch: Partial<NoteItem>) => {
     commit({ ...draftRef.current, ...patch, last_edited: Date.now() });
+  };
+
+  const titleHistory = useUndoStack<string>(draft.id, draft.title ?? "", (title) => edit({ title }));
+  const bodyHistory = useUndoStack<NoteItem["content"]>(draft.id, draft.content, (content) => {
+    edit({ content });
+    if (editorRef.current && !content.some((c) => c.is_todo)) {
+      editorRef.current.innerHTML = markdownToHtml(content.map((c) => c.text).join("\n"));
+    }
+  });
+
+  // Title and body keep separate undo/redo stacks; the focused field decides which one runs.
+  const handleUndoKeys = (e: React.KeyboardEvent) => {
+    if (!(e.ctrlKey || e.metaKey)) return;
+    const k = e.key.toLowerCase();
+    const isUndo = k === "z" && !e.shiftKey;
+    const isRedo = k === "y" || (k === "z" && e.shiftKey);
+    if (!isUndo && !isRedo) return;
+    const zone = (e.target as HTMLElement).closest("[data-undo]")?.getAttribute("data-undo");
+    if (!zone) return;
+    e.preventDefault();
+    e.stopPropagation();
+    const history = zone === "title" ? titleHistory : bodyHistory;
+    if (isUndo) history.undo();
+    else history.redo();
   };
 
   // ---- Organic soft modal bloom transition (Eliminates bubble popping & ghost after-images) ----
@@ -488,6 +530,7 @@ export function NoteSheet({
           aria-modal="true"
           aria-label={cleanText(draft.title) || "Untitled note"}
           tabIndex={-1}
+          onKeyDownCapture={handleUndoKeys}
           onPaste={handlePaste}
           onDragOver={(e) => {
             e.preventDefault();
@@ -722,6 +765,7 @@ export function NoteSheet({
               value={draft.title ?? ""}
               onChange={(event) => edit({ title: event.target.value })}
               onKeyDown={(e) => e.stopPropagation()}
+              data-undo="title"
               placeholder="Untitled"
               aria-label="Note title"
               className="w-full bg-transparent text-[27px] leading-[1.18] tracking-[-0.032em] text-ink-1 outline-none placeholder:text-ink-4/70"
@@ -777,6 +821,7 @@ export function NoteSheet({
 
             <div className="rule my-5" />
 
+            <div data-undo="body">
             {!isAllTodos ? (
               /* Basic Note (Point 4): Freeform multi-line text writing without lists or checkboxes */
               <div className="min-h-[220px]">
@@ -803,7 +848,7 @@ export function NoteSheet({
                   }}
                   onKeyUp={updateActiveFormatting}
                   onMouseUp={updateActiveFormatting}
-                  className="w-full min-h-[300px] bg-transparent text-[15.5px] leading-relaxed text-ink-2 outline-none scroll select-text"
+                  className="w-full min-h-[300px] whitespace-pre-wrap break-words bg-transparent text-[15.5px] leading-relaxed text-ink-2 outline-none scroll select-text"
                   style={{
                     fontFamily: fontStack(draft.font_family),
                   }}
@@ -818,14 +863,14 @@ export function NoteSheet({
                     return (
                       <div
                         key={item.id}
-                        className="flex items-center gap-3 w-full py-1 group rounded-[8px] px-2 transition-colors hover:bg-white/[0.025]"
+                        className="flex items-start gap-3 w-full py-1 group rounded-[8px] px-2 transition-colors hover:bg-white/[0.025]"
                       >
                         <button
                           type="button"
                           onClick={() => patchLine(item.id, { completed: !item.completed })}
                           aria-label={item.completed ? "Mark incomplete" : "Mark complete"}
                           className={cx(
-                            "border rounded-md w-4 h-4 bg-transparent cursor-pointer check-indicator-layer flex items-center justify-center shrink-0 transition-all duration-200 outline-none select-none",
+                            "border rounded-md w-4 h-4 mt-[3px] bg-transparent cursor-pointer check-indicator-layer flex items-center justify-center shrink-0 transition-all duration-200 outline-none select-none",
                             item.completed
                               ? "border-white bg-white text-black"
                               : "border-white/20 hover:border-white/50 text-transparent",
@@ -834,14 +879,14 @@ export function NoteSheet({
                           <Check size={11} strokeWidth={3.5} className={cx(item.completed ? "opacity-100" : "opacity-0")} />
                         </button>
 
-                        <input
-                          ref={(node) => {
+                        <TaskLineInput
+                          elRef={(node) => {
                             if (node) lineRefs.current.set(item.id, node);
                             else lineRefs.current.delete(item.id);
                           }}
                           onFocus={() => setFocusLine(item.id)}
                           value={cleanItemText}
-                          onChange={(event) => patchLine(item.id, { text: event.target.value.replace(/^\s*[-*•]\s+/, "") })}
+                          onChange={(text) => patchLine(item.id, { text: text.replace(/^\s*[-*•]\s+/, "") })}
                           onKeyDown={(event) => {
                             if (event.key === "Enter") {
                               event.preventDefault();
@@ -853,9 +898,9 @@ export function NoteSheet({
                             }
                           }}
                           placeholder={index === 0 ? "Task description..." : "Task item..."}
-                          aria-label="Note task line"
+                          ariaLabel="Note task line"
                           className={cx(
-                            "line-input flex-1 bg-transparent text-[14.5px] leading-relaxed outline-none transition-all duration-150",
+                            "line-input flex-1 bg-transparent text-[14.5px] leading-relaxed transition-all duration-150",
                             item.completed ? "line-through text-ink-4 opacity-50" : "text-ink-1 opacity-90",
                           )}
                           style={{
@@ -886,6 +931,7 @@ export function NoteSheet({
                 </button>
               </>
             )}
+            </div>
           </div>
         </div>
 

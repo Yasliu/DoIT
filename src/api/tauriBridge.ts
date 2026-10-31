@@ -349,6 +349,24 @@ export const tauriApi = {
     }
   },
 
+  async collapseTrayToPill(): Promise<void> {
+    if (!isTauri()) return;
+    try {
+      await invoke("collapse_tray_to_pill");
+    } catch (err) {
+      console.warn("collapse_tray_to_pill failed", err);
+    }
+  },
+
+  async expandTrayFromPill(): Promise<void> {
+    if (!isTauri()) return;
+    try {
+      await invoke("expand_tray_from_pill");
+    } catch (err) {
+      console.warn("expand_tray_from_pill failed", err);
+    }
+  },
+
   async beginDrag(): Promise<void> {
     if (!isTauri()) return;
     try {

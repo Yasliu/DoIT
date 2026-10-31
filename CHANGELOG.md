@@ -236,3 +236,52 @@
     * Filtered out bubbling child exit animation completions (such as `opacity: 0`).
     * Verified that physical dimensions settled at target small bar metrics (`width <= 185px`, `height <= 50px`) prior to executing atomic Win32 `SetWindowPos` snap.
   - Integrated `isClosing` lifecycle for hide action (✕) to animate container opacity to 0 smoothly before invoking `getCurrentWindow().hide()`, completely eradicating closing blink loops.
+
+## [2026-10-31] - Desk Tray Expand/Collapse Flash Fix
+- **src/components/TrayCompanion.tsx**
+  - Removed native `snapTrayWindow` from the click handler and `set-expanded` listener.
+  - Added `panelExpanded` state: on open, an effect snaps the native window to 380x480 first, then releases the spring (content stays hidden until then).
+  - On close, the spring collapses first; `onAnimationComplete` crops the native window to 180x44 once settled.
+  - Content mounts only when `panelExpanded`; panel root enforces `whitespace-nowrap` (editor uses `whitespace-pre-wrap`).
+- **Transparency audit**: `tauri.conf.json` (`transparent: true`), `lib.rs`, `index.html` and `globals.css` already enforce transparent root/body; no change needed.
+
+
+## [2026-10-31] - Desk Tray Squash & End-of-Close Blink
+- **src/components/TrayCompanion.tsx**
+  - Removed outer drop shadows (`shadow-2xl` + animated `boxShadow`): they spilled past the native window bounds and were cropped/popped when the window resized (blink at close end / open start). Only the inset ring remains.
+  - Lower content now has a fixed 358x434 layout box, so text no longer reflows/squashes while the panel springs; the panel clips it. Content fade-in delayed 60ms.
+
+## [2026-10-31] - Desk Tray Visibility Freeze (teleport + close blink)
+- **src/components/TrayCompanion.tsx** (sizing stays in `commands.rs::snap_tray_window`; no `main.rs` change needed)
+  - Added `veil` state: panel goes opacity 0 instantly on open click; native window is only resized while invisible.
+  - Open: veil -> `snapTrayWindow(380,480)` -> 40ms layout buffer -> lift veil (100ms fade) + spring.
+  - Close: panel + content fade to 0 (150ms) -> instant swap to pill size -> `snapTrayWindow(180,44)` -> 40ms buffer -> fade pill in.
+  - Removed the spring-settle `onAnimationComplete` shrink; it now only handles hide-to-tray. Panel is `visibility:hidden` while opening and non-interactive while veiled.
+  - Guarded `set-expanded` events against redundant state (prevents stuck veil).
+
+## [2026-10-31] - Desk Tray Simplification (static window + opacity fade) & Title Space Fix
+- **src/components/TrayCompanion.tsx**: removed spring width/height morph, veil/layout-buffer pipeline and pill mode. Panel is a static 380x480 box; open = `opacity 0->1` (`transition-opacity duration-200 ease-out`), close = fade to 0 then `getCurrentWindow().hide()` on `transitionend` (260ms fallback). No native resizing during transitions.
+- **src-tauri/tauri.conf.json**: tray window now 380x480.
+- **src-tauri/src/commands.rs**: `set_tray_minimized` no longer resizes (emits only); `open_canvas_mode` emits `set-expanded=false` before hiding tray so it reopens at opacity 0.
+- **Title spacebar bug** (src/hooks/useWorkspace.ts): root cause was the backend `note-saved` echo (`upsert_note` trims title via `clean_yaml_scalar`) overwriting local state after the 320ms debounce. Echo no longer replaces a title that differs only by surrounding whitespace; trimming now only happens on write.
+
+## [2026-10-31] - Mini Floating Pill + List-Mode Duplicate Text Fix
+- **Pill window**: new static 180x44 transparent `pill` window (`tauri.conf.json`, capability, `src/components/TrayPill.tsx`, routed in `main.tsx`). Closing the tray (✕/Minimize/Esc/Ctrl+J/top-bar tap) fades out then `collapse_tray_to_pill` hides the tray and shows the pill at the tray's bottom-right. Click pill -> `expand_tray_from_pill` opens the tray anchored to the pill's bottom-right; drag (>4px) moves the pill. No window is ever resized.
+- **commands.rs / lib.rs**: added both commands; `open_tray_mode`/`open_canvas_mode` hide the pill.
+- **List-mode bug** (`TrayCompanion.tsx`): React reused the same `div` for the contenteditable editor and the task list, so the editor's manually injected HTML stayed and duplicated as large text above the checklist. Added distinct `key`s (`rich-editor` / `task-list`).
+
+## [2026-10-31] - Undo/Redo, Pill Persistence, List Conversion & Round-trip Formatting
+- **Undo/redo** (`src/hooks/useUndoStack.ts`, `TrayCompanion.tsx`, `NoteSheet.tsx`): title and body now have separate history stacks (typing bursts coalesce, 600ms). Ctrl+Z / Ctrl+Y / Ctrl+Shift+Z act on the focused field only (`data-undo="title|body"`), covering text edits and text<->list conversion.
+- **Pill persisting after Maximize**: `set-expanded=false` from Rust (canvas opened) made the tray's fade-out call `collapse_tray_to_pill`. Added a suppress flag in the tray and a guard in `collapse_tray_to_pill` (hides tray+pill when the main window is visible).
+- **Merged lines / extra empty lines** (`src/lib/format.tsx`): `htmlToMarkdown` rewritten as a line-based walker. Root cause: nested `<div>` text was concatenated onto the previous line (`- a- b`), and `<div><br></div>` produced two newlines. Block elements now always start a new line, trailing placeholder `<br>` ignored, NBSP normalised.
+- **Text<->list conversion**: new `convertContentMode` (1 non-empty line -> 1 item, blank lines dropped, bullet prefixes stripped); reads the live editor DOM first. Used by tray and canvas.
+- **Restart reformatting** (`src-tauri/src/models.rs`): new `parse_todo_line` handles bare `- [ ]` (empty checklist items were reloaded as text "- [ ]"); blank lines in text notes are preserved instead of dropped (checklist notes still skip them).
+
+## [2026-10-31] - Rich/Wrapping Checklist Lines, Text Wrapping & Folder Cleanup
+- **Raw stars in list mode**: checklist lines were plain `<input>`s showing `**bold**`/`***bold italic***` literally. New `src/components/TaskLineInput.tsx` (contenteditable) renders markdown as real bold/italic and writes it back as markdown; used in tray and canvas sheet. Toolbar Bold/Italic now works on focused task lines. Added `inlineMarkdownToHtml` in `src/lib/format.tsx`.
+- **Wrapping**: task lines wrap inside their own checkbox (`whitespace-pre-wrap break-words`, checkbox top-aligned) instead of scrolling right; canvas text editor also gets `whitespace-pre-wrap break-words` (tray editor already had it).
+- **Installer targets**: `tauri.conf.json` bundle targets `"all"` -> `["nsis"]` (no more MSI/WiX).
+- **Cleanup**: removed `DoIT-Setup.msi`, `DoIT-Portable.zip`, root `WebView2Loader.dll` (verified the exe launches without it), `.build.log`, `.preview/`, `src/.openclaw-write-probe`, `src-tauri/target/{debug,flycheck0}`, release `wix/` and `bundle/msi`. Root now ships exactly `doit.exe` + `DoIT-Setup.exe` (fresh build).
+
+## [2026-10-31] - Branding
+- Tray top bar and pill label now read **DoIT** (was DESK TRAY), centered in the pill; rebuilt `doit.exe` + `DoIT-Setup.exe`.

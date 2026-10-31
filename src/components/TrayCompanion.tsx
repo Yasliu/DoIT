@@ -2,6 +2,7 @@ import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { getCurrentWindow } from "@tauri-apps/api/window";
 import { AnimatePresence, motion } from "motion/react";
 import { Mark } from "./Mark";
+import { TaskLineInput } from "./TaskLineInput";
 import {
   AlignLeft,
   ArrowLeft,
@@ -27,7 +28,9 @@ import {
   tauriApi,
 } from "../api/tauriBridge";
 import { useWorkspace } from "../hooks/useWorkspace";
+import { useUndoStack } from "../hooks/useUndoStack";
 import {
+  convertContentMode,
   handleRichEditorKeyDown,
   htmlToMarkdown,
   isRichBoldActive,
@@ -36,10 +39,14 @@ import {
 } from "../lib/format";
 import { accentFor, cleanText, cx, relativeShort, uid } from "../lib/text";
 
+const NO_CONTENT: ContentItem[] = [];
+
 export function TrayCompanion() {
   const { notes, categories, patch, create, remove } = useWorkspace();
-  const [isMinimized, setIsMinimized] = useState(false);
-  const [isClosing, setIsClosing] = useState(false);
+  const [shown, setShown] = useState(false);
+  const shownRef = useRef(false);
+  const hideTimerRef = useRef<number | null>(null);
+  const suppressCollapseRef = useRef(false);
   const [drawerOpen, setDrawerOpen] = useState(true);
   const [filter, setFilter] = useState("");
   const [selectedShelf, setSelectedShelf] = useState<string | null>(null);
@@ -111,18 +118,42 @@ export function TrayCompanion() {
 
   const shelves = useMemo(() => categories.map((c) => c.name), [categories]);
 
+  // Static 380x480 window; open/close is a pure opacity fade, then native hide().
+  const hideNow = useCallback(() => {
+    if (hideTimerRef.current) window.clearTimeout(hideTimerRef.current);
+    hideTimerRef.current = null;
+    if (suppressCollapseRef.current) {
+      suppressCollapseRef.current = false;
+      return;
+    }
+    if (!shownRef.current) void tauriApi.collapseTrayToPill();
+  }, []);
+
+  const openTray = useCallback(() => {
+    if (hideTimerRef.current) window.clearTimeout(hideTimerRef.current);
+    hideTimerRef.current = null;
+    suppressCollapseRef.current = false;
+    requestAnimationFrame(() =>
+      requestAnimationFrame(() => {
+        shownRef.current = true;
+        setShown(true);
+      }),
+    );
+  }, []);
+
+  const closeTray = useCallback(() => {
+    if (!shownRef.current) return;
+    shownRef.current = false;
+    setShown(false);
+    // Fallback in case transitionend never fires
+    hideTimerRef.current = window.setTimeout(hideNow, 260);
+  }, [hideNow]);
+
   const toggleMinimize = useCallback(() => {
     if (Date.now() < visibilityLockRef.current) return;
     visibilityLockRef.current = Date.now() + 350;
-    setIsMinimized((prev) => {
-      const next = !prev;
-      if (!next) {
-        // Expanding: instantly allocate outer native window space so the spring morphs fluidly at 60 FPS
-        void tauriApi.snapTrayWindow(380, 480);
-      }
-      return next;
-    });
-  }, []);
+    closeTray();
+  }, [closeTray]);
 
   // Synchronize with external Tauri expansion events
   useEffect(() => {
@@ -130,11 +161,16 @@ export function TrayCompanion() {
 
     getCurrentWindow()
       .listen<boolean>("set-expanded", (event) => {
-        const expanded = event.payload;
-        if (expanded) {
-          void tauriApi.snapTrayWindow(380, 480);
+        if (event.payload) {
+          openTray();
+        } else {
+          // Canvas took over: fade out silently, never spawn the pill
+          if (hideTimerRef.current) window.clearTimeout(hideTimerRef.current);
+          hideTimerRef.current = null;
+          suppressCollapseRef.current = true;
+          shownRef.current = false;
+          setShown(false);
         }
-        setIsMinimized(!expanded);
       })
       .then((unlisten) => {
         unlistenFn = unlisten;
@@ -143,7 +179,7 @@ export function TrayCompanion() {
     return () => {
       if (unlistenFn) unlistenFn();
     };
-  }, []);
+  }, [openTray]);
 
   // Load theme mode for tray window
   useEffect(() => {
@@ -179,6 +215,13 @@ export function TrayCompanion() {
     return () => window.removeEventListener("keydown", handleKeyDown);
   }, [activeNoteId, previewImage, toggleMinimize]);
 
+  // Safety: a fresh webview whose window is already visible should still fade in once
+  useEffect(() => {
+    void getCurrentWindow().isVisible().then((v) => {
+      if (v) openTray();
+    });
+  }, [openTray]);
+
   const filteredNotes = useMemo(() => {
     let list = [...notes].sort((a, b) => b.last_edited - a.last_edited);
     if (selectedShelf) {
@@ -205,6 +248,36 @@ export function TrayCompanion() {
     if (!activeNote) return;
     const next: NoteItem = { ...activeNote, ...patchData, last_edited: Date.now() };
     patch(next);
+  };
+
+  const syncEditorDom = (content: ContentItem[]) => {
+    if (editorRef.current && !content.some((c) => c.is_todo)) {
+      editorRef.current.innerHTML = markdownToHtml(content.map((c) => c.text).join("\n"));
+    }
+  };
+
+  const titleHistory = useUndoStack<string>(activeNote?.id ?? null, activeNote?.title ?? "", (title) =>
+    editActive({ title }),
+  );
+  const bodyHistory = useUndoStack<ContentItem[]>(activeNote?.id ?? null, activeNote?.content ?? NO_CONTENT, (content) => {
+    editActive({ content });
+    syncEditorDom(content);
+  });
+
+  // Title and body keep separate undo/redo stacks; the focused field decides which one runs.
+  const handleUndoKeys = (e: React.KeyboardEvent) => {
+    if (!(e.ctrlKey || e.metaKey) || !activeNote) return;
+    const k = e.key.toLowerCase();
+    const isUndo = k === "z" && !e.shiftKey;
+    const isRedo = k === "y" || (k === "z" && e.shiftKey);
+    if (!isUndo && !isRedo) return;
+    const zone = (e.target as HTMLElement).closest("[data-undo]")?.getAttribute("data-undo");
+    if (!zone) return;
+    e.preventDefault();
+    e.stopPropagation();
+    const history = zone === "title" ? titleHistory : bodyHistory;
+    if (isUndo) history.undo();
+    else history.redo();
   };
 
   const appendActiveImages = (newUrls: string[]) => {
@@ -357,6 +430,12 @@ export function TrayCompanion() {
       }
     }
 
+    if (activeEl instanceof HTMLElement && activeEl.dataset.taskLine) {
+      document.execCommand(style, false);
+      updateActiveFormatting();
+      return;
+    }
+
     if (editorRef.current) {
       const sel = window.getSelection();
       const hasSelection = sel && sel.rangeCount > 0 && !sel.isCollapsed && editorRef.current.contains(sel.anchorNode);
@@ -383,12 +462,19 @@ export function TrayCompanion() {
   const toggleMode = () => {
     if (!activeNote) return;
     const nextIsTodo = !isTasksMode;
-    const content = activeNote.content.map((c) => ({
-      ...c,
-      is_todo: nextIsTodo,
-      text: c.text.replace(/^\s*[-*•]\s+/, ""),
-    }));
-    editActive({ content });
+    let source: ContentItem[] = activeNote.content;
+    if (!isTasksMode && editorRef.current) {
+      // Read the live editor DOM so nothing typed since the last sync is lost or merged
+      source = htmlToMarkdown(editorRef.current)
+        .split("\n")
+        .map((text, idx) => ({
+          id: activeNote.content[idx]?.id ?? uid("line"),
+          text,
+          is_todo: false,
+          completed: false,
+        }));
+    }
+    editActive({ content: convertContentMode(source, nextIsTodo) });
   };
 
   const handleContextMenu = (e: React.MouseEvent) => {
@@ -477,46 +563,24 @@ export function TrayCompanion() {
       className="flex h-screen w-screen items-end justify-end p-0 m-0 overflow-hidden bg-transparent select-none"
       style={{ background: "transparent", backgroundColor: "transparent" }}
     >
-      <motion.div
+      <div
         ref={panelRef}
-        animate={{
-          width: isMinimized ? 180 : 380,
-          height: isMinimized ? 44 : 480,
-          opacity: isClosing ? 0 : 1,
-        }}
-        transition={{ type: "spring", bounce: 0, duration: 0.55 }}
-        onAnimationComplete={(definition: any) => {
-          if (isClosing) {
-            void getCurrentWindow().hide().then(() => {
-              setIsClosing(false);
-            });
-            return;
-          }
-          if (!isMinimized) return;
-          // Filter out child animations (which animate opacity/etc, not width: 180)
-          if (definition && typeof definition === "object" && "opacity" in definition && !("width" in definition)) {
-            return;
-          }
-          if (panelRef.current) {
-            const rect = panelRef.current.getBoundingClientRect();
-            // Confirm the spring physics calculations have settled down to target small bar metrics
-            if (rect.width <= 185 && rect.height <= 50) {
-              void tauriApi.snapTrayWindow(180, 44);
-            }
-          } else {
-            void tauriApi.snapTrayWindow(180, 44);
+        onTransitionEnd={(e) => {
+          if (e.target === e.currentTarget && e.propertyName === "opacity" && !shownRef.current) {
+            hideNow();
           }
         }}
         onPaste={handlePaste}
+        onKeyDownCapture={handleUndoKeys}
         onContextMenu={handleContextMenu}
-        className="box-border flex flex-col overflow-hidden text-ink-1 rounded-2xl border border-white/10 select-none p-2.5 shadow-2xl scale-100 will-change-[width,height,opacity]"
+        className="box-border flex h-full w-full flex-col overflow-hidden whitespace-nowrap text-ink-1 rounded-2xl border border-white/10 select-none p-2.5 shadow-none scale-100 transition-opacity duration-200 ease-out"
         style={{
+          opacity: shown ? 1 : 0,
+          pointerEvents: shown ? "auto" : "none",
           backgroundColor: "var(--theme-tray-bg)",
           backdropFilter: "var(--theme-tray-blur)",
           WebkitBackdropFilter: "var(--theme-tray-blur)",
-          boxShadow: isMinimized
-            ? "inset 0 0 0 1px var(--theme-tray-border), 0 10px 25px -5px rgba(0,0,0,0.5)"
-            : "inset 0 0 0 1px var(--theme-tray-border), 0 40px 90px -30px rgba(0,0,0,0.95)",
+          boxShadow: "inset 0 0 0 1px var(--theme-tray-border)",
         }}
       >
         {/* 1. Fluid permanent top bar: Hold and drag to move, click to toggle minimize */}
@@ -526,7 +590,7 @@ export function TrayCompanion() {
           className="flex h-6 w-full shrink-0 items-center justify-between px-1 select-none cursor-pointer group/topbar scale-100 overflow-hidden"
         >
           <div className="flex items-center gap-2 pointer-events-none min-w-0 overflow-hidden h-full whitespace-nowrap">
-            {activeNote && !isMinimized ? (
+            {activeNote ? (
               <button
                 type="button"
                 onPointerDown={(e) => e.stopPropagation()}
@@ -546,9 +610,12 @@ export function TrayCompanion() {
               </div>
             )}
             <span
-              className="font-mono text-[9.5px] font-semibold uppercase tracking-[0.14em] text-white/70 group-hover/topbar:text-white/95 transition-colors whitespace-nowrap overflow-hidden text-ellipsis truncate select-none leading-none flex items-center"
+              className={cx(
+                "font-semibold text-white/70 group-hover/topbar:text-white/95 transition-colors whitespace-nowrap overflow-hidden text-ellipsis truncate select-none leading-none flex items-center",
+                activeNote ? "font-mono text-[9.5px] uppercase tracking-[0.14em]" : "text-[13px] tracking-[0.02em]",
+              )}
             >
-              {activeNote && !isMinimized ? "EDIT NOTE" : "DESK TRAY"}
+              {activeNote ? "EDIT NOTE" : "DoIT"}
             </span>
           </div>
 
@@ -557,7 +624,7 @@ export function TrayCompanion() {
             onPointerDown={(e) => e.stopPropagation()}
             onClick={(e) => e.stopPropagation()}
           >
-            {!isMinimized && (
+            {(
               <button
                 type="button"
                 onPointerDown={(e) => e.stopPropagation()}
@@ -577,7 +644,7 @@ export function TrayCompanion() {
               onPointerDown={(e) => e.stopPropagation()}
               onClick={(e) => {
                 e.stopPropagation();
-                setIsClosing(true);
+                closeTray();
               }}
               className="grid size-5 place-items-center rounded text-white/50 hover:bg-white/10 hover:text-white transition-colors cursor-pointer"
               title="Hide to System Tray (✕)"
@@ -589,15 +656,7 @@ export function TrayCompanion() {
         </div>
 
         {/* Lower note collection container: smooth fade with 100% scale */}
-        <AnimatePresence>
-          {!isMinimized && !isClosing && (
-            <motion.div
-              initial={{ opacity: 0 }}
-              animate={{ opacity: 1 }}
-              exit={{ opacity: 0, transition: { duration: 0.15, ease: "easeOut" } }}
-              transition={{ duration: 0.2 }}
-              className="pt-2 flex flex-1 flex-col overflow-hidden min-h-0 scale-100"
-            >
+        <div className="pt-2 flex flex-1 flex-col overflow-hidden min-h-0 scale-100">
               <AnimatePresence mode="wait" initial={false}>
                 {activeNote ? (
           /* ---- IN-TRAY PROPER NOTE EDITOR ---- */
@@ -770,6 +829,7 @@ export function TrayCompanion() {
             value={activeNote.title ?? ""}
             onChange={(e) => editActive({ title: e.target.value })}
             onKeyDown={(e) => e.stopPropagation()}
+            data-undo="title"
             placeholder="Untitled"
             className="w-full mt-2.5 bg-transparent text-[16px] font-semibold text-ink-1 outline-none placeholder:text-ink-4/60"
             style={{
@@ -826,9 +886,10 @@ export function TrayCompanion() {
           })()}
 
           {/* Editor: Basic Note freeform writing vs Tasks mode */}
-          <div className="flex-1 min-h-0 mt-2 overflow-y-auto scroll">
+          <div data-undo="body" className="flex-1 min-h-0 mt-2 overflow-y-auto scroll">
             {!isTasksMode ? (
               <div
+                key="rich-editor"
                 ref={initEditor}
                 contentEditable
                 suppressContentEditableWarning
@@ -851,17 +912,17 @@ export function TrayCompanion() {
                 }}
                 onKeyUp={updateActiveFormatting}
                 onMouseUp={updateActiveFormatting}
-                className="w-full h-full min-h-[180px] bg-transparent text-[12.5px] leading-relaxed text-ink-2 outline-none scroll select-text"
+                className="w-full h-full min-h-[180px] whitespace-pre-wrap break-words bg-transparent text-[12.5px] leading-relaxed text-ink-2 outline-none scroll select-text"
                 style={{
                   fontFamily: fontStack(activeNote.font_family),
                 }}
               />
             ) : (
-              <div className="space-y-1">
+              <div key="task-list" className="space-y-1">
                 {activeNote.content.map((item, index) => {
                   const cleanItemText = item.text.replace(/^\s*[-*•]\s+/, "");
                   return (
-                    <div key={item.id} className="flex items-center gap-3 w-full py-1 group">
+                    <div key={item.id} className="flex items-start gap-3 w-full py-1 group">
                       <button
                         type="button"
                         onClick={() => {
@@ -871,7 +932,7 @@ export function TrayCompanion() {
                           editActive({ content });
                         }}
                         className={cx(
-                          "border rounded-md w-4 h-4 bg-transparent cursor-pointer check-indicator-layer flex items-center justify-center shrink-0 transition-all duration-200 outline-none select-none",
+                          "border rounded-md w-4 h-4 mt-[2px] bg-transparent cursor-pointer check-indicator-layer flex items-center justify-center shrink-0 transition-all duration-200 outline-none select-none",
                           item.completed
                             ? "border-white bg-white text-black"
                             : "border-white/20 hover:border-white/50 text-transparent",
@@ -879,12 +940,11 @@ export function TrayCompanion() {
                       >
                         <Check size={11} strokeWidth={3.5} className={cx(item.completed ? "opacity-100" : "opacity-0")} />
                       </button>
-                      <input
-                        type="text"
+                      <TaskLineInput
                         value={cleanItemText}
-                        onChange={(e) => {
+                        onChange={(text) => {
                           const content = activeNote.content.map((c) =>
-                            c.id === item.id ? { ...c, text: e.target.value.replace(/^\s*[-*•]\s+/, "") } : c,
+                            c.id === item.id ? { ...c, text: text.replace(/^\s*[-*•]\s+/, "") } : c,
                           );
                           editActive({ content });
                         }}
@@ -908,7 +968,7 @@ export function TrayCompanion() {
                         }}
                         placeholder="Task item..."
                         className={cx(
-                          "flex-1 bg-transparent text-[12.5px] outline-none transition-all duration-150",
+                          "flex-1 bg-transparent text-[12.5px] leading-[1.5] transition-all duration-150",
                           item.completed ? "line-through text-ink-4 opacity-50" : "text-ink-1 opacity-90",
                         )}
                         style={{
@@ -1145,9 +1205,7 @@ export function TrayCompanion() {
         </motion.div>
       )}
       </AnimatePresence>
-      </motion.div>
-      )}
-      </AnimatePresence>
+      </div>
 
       {/* Lightbox Preview Modal with Full Interactive Zoom */}
       {previewImage && (
@@ -1250,7 +1308,7 @@ export function TrayCompanion() {
           </div>
         </div>
       )}
-      </motion.div>
+      </div>
     </div>
   );
 }

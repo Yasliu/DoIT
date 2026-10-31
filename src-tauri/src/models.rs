@@ -146,6 +146,21 @@ pub fn format_date(timestamp_ms: i64) -> String {
     format!("{year:04}-{m:02}-{d:02}")
 }
 
+/// Parses "- [ ] text" / "- [x] text" (also the bare "- [ ]" an empty checklist item is written as).
+fn parse_todo_line(trimmed: &str) -> Option<(bool, String)> {
+    for (prefix, completed) in [("- [x]", true), ("- [X]", true), ("- [ ]", false)] {
+        if let Some(rest) = trimmed.strip_prefix(prefix) {
+            if rest.is_empty() {
+                return Some((completed, String::new()));
+            }
+            if let Some(text) = rest.strip_prefix(' ') {
+                return Some((completed, text.to_string()));
+            }
+        }
+    }
+    None
+}
+
 pub fn clean_yaml_scalar(s: &str) -> String {
     let mut val = s.trim();
     let unescaped = val.replace("\\\"", "").replace("\\\\", "").replace('\\', "");
@@ -439,22 +454,16 @@ impl NoteItem {
 
         for (idx, line) in body_lines.into_iter().enumerate() {
             let trimmed = line.trim();
-            if trimmed.starts_with("- [x] ") || trimmed.starts_with("- [X] ") {
+            if let Some((completed, text)) = parse_todo_line(trimmed) {
                 content_items.push(ContentItem {
                     id: format!("item_{idx}"),
-                    text: trimmed[6..].to_string(),
+                    text,
                     is_todo: true,
-                    completed: true,
-                });
-            } else if trimmed.starts_with("- [ ] ") {
-                content_items.push(ContentItem {
-                    id: format!("item_{idx}"),
-                    text: trimmed[6..].to_string(),
-                    is_todo: true,
-                    completed: false,
+                    completed,
                 });
             } else {
-                if trimmed.is_empty() {
+                // Blank lines are real content in text notes; only checklist notes drop them
+                if trimmed.is_empty() && note_type == "checkbox" {
                     continue;
                 }
                 let is_todo = note_type == "checkbox";
@@ -569,24 +578,14 @@ impl NoteItem {
         let mut content_items = Vec::new();
         for (idx, line) in body_lines.into_iter().enumerate() {
             let trimmed = line.trim();
-            if trimmed.starts_with("- [x] ") || trimmed.starts_with("- [X] ") {
+            if let Some((completed, text)) = parse_todo_line(trimmed) {
                 content_items.push(ContentItem {
                     id: format!("item_{idx}"),
-                    text: trimmed[6..].to_string(),
+                    text,
                     is_todo: true,
-                    completed: true,
-                });
-            } else if trimmed.starts_with("- [ ] ") {
-                content_items.push(ContentItem {
-                    id: format!("item_{idx}"),
-                    text: trimmed[6..].to_string(),
-                    is_todo: true,
-                    completed: false,
+                    completed,
                 });
             } else {
-                if trimmed.is_empty() {
-                    continue;
-                }
                 content_items.push(ContentItem {
                     id: format!("item_{idx}"),
                     text: line.to_string(),
