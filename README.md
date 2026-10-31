@@ -39,7 +39,7 @@ Ensure you have the native C++ build tools installed on your Windows machine alo
 ### Local Development Loop
 ```bash
 # 1. Clone the repository
-git clone https://github.com
+git clone https://github.com/Yasliu/DoIT.git
 cd YOUR_REPO
 
 # 2. Install frontend visual packages
