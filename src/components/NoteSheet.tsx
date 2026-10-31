@@ -1,4 +1,4 @@
-import { useEffect, useLayoutEffect, useRef, useState } from "react";
+import { useCallback, useEffect, useLayoutEffect, useRef, useState } from "react";
 import {
   AlignLeft,
   Bold,
@@ -15,6 +15,16 @@ import {
 } from "lucide-react";
 import type { ContentItem, NoteItem } from "../api/tauriBridge";
 import { NOTE_FONTS, fontStack } from "../api/tauriBridge";
+import { useUndoStack } from "../hooks/useUndoStack";
+import { TaskLineInput } from "./TaskLineInput";
+import {
+  convertContentMode,
+  handleRichEditorKeyDown,
+  htmlToMarkdown,
+  isRichBoldActive,
+  isRichItalicActive,
+  markdownToHtml,
+} from "../lib/format";
 import { springTo } from "../lib/spring";
 import { accentFor, cleanText, cx, fullStamp, uid } from "../lib/text";
 
@@ -28,49 +38,10 @@ interface NoteSheetProps {
   onDelete: (note: NoteItem) => void;
 }
 
-interface Rect {
-  left: number;
-  top: number;
-  width: number;
-  height: number;
-}
-
-function targetRect(_canvas: HTMLElement | null, note: NoteItem): Rect {
-  const vw = typeof window !== "undefined" ? window.innerWidth : 1280;
-  const vh = typeof window !== "undefined" ? window.innerHeight : 800;
-
-  // Sizing: Generously wide up to 880px, strictly centered on the viewport
-  const width = Math.min(880, Math.max(540, Math.floor(vw * 0.72)));
-  const availH = vh - 48;
-
-  // Dynamic height calculation based on lines, title, and images:
-  const lineCount = note.content.length;
-  const totalChars = note.content.reduce((acc, c) => acc + c.text.length, 0);
-  const hasImages = (note.media_urls && note.media_urls.length > 0) || !!note.media_url;
-  const imageCount = (note.media_urls && note.media_urls.length > 0) ? note.media_urls.length : (note.media_url ? 1 : 0);
-
-  const baseHeaderAndFooter = 160;
-  const textSpace = Math.max(180, lineCount * 36 + Math.floor(totalChars / 80) * 24);
-  const imageSpace = imageCount > 0 ? 140 : 0;
-
-  const contentEstimate = baseHeaderAndFooter + textSpace + (hasImages ? imageSpace : 0);
-
-  // Dynamic height capped at max screen boundary (90% of available height)
-  // When content exceeds maxLimit, internal smooth scrolling takes over automatically.
-  const minHeight = 460;
-  const maxLimit = Math.max(minHeight, Math.floor(availH * 0.90));
-  const height = Math.max(minHeight, Math.min(maxLimit, contentEstimate));
-
-  const left = Math.round((vw - width) / 2);
-  const top = Math.round(Math.max(20, (vh - height) / 2));
-
-  return { left, top, width, height };
-}
-
 export function NoteSheet({
   note,
   origin: _origin,
-  canvas,
+  canvas: _canvas,
   shelves,
   onCommit,
   onClose,
@@ -78,7 +49,6 @@ export function NoteSheet({
 }: NoteSheetProps) {
   const frame = useRef<HTMLDivElement | null>(null);
   const scrim = useRef<HTMLDivElement | null>(null);
-  const target = useRef<Rect>(targetRect(canvas, note));
   const closing = useRef(false);
   const deleted = useRef(false);
   const commitRef = useRef(onCommit);
@@ -90,13 +60,127 @@ export function NoteSheet({
   const [fontOpen, setFontOpen] = useState(false);
   const [shelfOpen, setShelfOpen] = useState(false);
   const [previewImage, setPreviewImage] = useState<string | null>(null);
+  const [zoomLevel, setZoomLevel] = useState<number>(1);
+  const [imagePan, setImagePan] = useState({ x: 0, y: 0 });
+  const isPanningImage = useRef(false);
+  const panStartRef = useRef({ x: 0, y: 0, panX: 0, panY: 0, moved: false });
   const fileInputRef = useRef<HTMLInputElement | null>(null);
   const [newShelf, setNewShelf] = useState("");
   const [focusLine, setFocusLine] = useState<string | null>(null);
-  const lineRefs = useRef(new Map<string, HTMLInputElement>());
+  const lineRefs = useRef(new Map<string, HTMLElement>());
   const titleRef = useRef<HTMLInputElement | null>(null);
   const closeRef = useRef<() => void>(() => {});
   const closeCancel = useRef<() => void>(() => {});
+
+  // Rich text formatting state
+  const editorRef = useRef<HTMLDivElement | null>(null);
+  const [isBoldActive, setIsBoldActive] = useState(false);
+  const [isItalicActive, setIsItalicActive] = useState(false);
+  const lastNoteIdRef = useRef<string | null>(null);
+
+  const updateActiveFormatting = () => {
+    setIsBoldActive(isRichBoldActive());
+    setIsItalicActive(isRichItalicActive());
+  };
+
+  const initEditor = useCallback((node: HTMLDivElement | null) => {
+    editorRef.current = node;
+    if (node) {
+      if (lastNoteIdRef.current !== draft.id || !node.innerHTML || node.innerHTML === "<div><br></div>") {
+        lastNoteIdRef.current = draft.id;
+        const md = draft.content.map((c) => c.text).join("\n");
+        node.innerHTML = markdownToHtml(md);
+      }
+    }
+  }, [draft.id, draft.content]);
+
+  useEffect(() => {
+    if (lastNoteIdRef.current !== draft.id) {
+      lastNoteIdRef.current = draft.id;
+      if (editorRef.current) {
+        const md = draft.content.map((c) => c.text).join("\n");
+        editorRef.current.innerHTML = markdownToHtml(md);
+      }
+    }
+  }, [draft.id, draft.content]);
+
+  const handleEditorInput = () => {
+    if (!editorRef.current) return;
+    const md = htmlToMarkdown(editorRef.current);
+    const lines = md.split("\n");
+    const content = lines.map((line, idx) => ({
+      id: draft.content[idx]?.id ?? uid("line"),
+      text: line,
+      is_todo: false,
+      completed: false,
+    }));
+    commit({ ...draftRef.current, content, last_edited: Date.now() });
+    updateActiveFormatting();
+  };
+
+  const handleToolbarFormat = (style: "bold" | "italic") => {
+    const activeEl = document.activeElement;
+
+    // 1. Task line input selection formatting
+    if (activeEl instanceof HTMLInputElement && focusLine) {
+      const start = activeEl.selectionStart ?? 0;
+      const end = activeEl.selectionEnd ?? 0;
+      if (start !== end) {
+        const val = activeEl.value;
+        const selected = val.slice(start, end);
+        const marker = style === "bold" ? "**" : "*";
+
+        let nextVal: string;
+        let newStart: number;
+        let newEnd: number;
+
+        if (selected.startsWith(marker) && selected.endsWith(marker) && selected.length >= marker.length * 2) {
+          const unwrapped = selected.slice(marker.length, selected.length - marker.length);
+          nextVal = val.slice(0, start) + unwrapped + val.slice(end);
+          newStart = start;
+          newEnd = start + unwrapped.length;
+        } else {
+          const wrapped = `${marker}${selected}${marker}`;
+          nextVal = val.slice(0, start) + wrapped + val.slice(end);
+          newStart = start;
+          newEnd = start + wrapped.length;
+        }
+
+        patchLine(focusLine, { text: nextVal });
+        requestAnimationFrame(() => {
+          activeEl.setSelectionRange(newStart, newEnd);
+        });
+        return;
+      }
+    }
+
+    // 1b. Rich (contenteditable) task line formatting
+    if (activeEl instanceof HTMLElement && activeEl.dataset.taskLine) {
+      document.execCommand(style, false);
+      updateActiveFormatting();
+      return;
+    }
+
+    // 2. Contenteditable freeform editor selection formatting
+    if (editorRef.current) {
+      const sel = window.getSelection();
+      const hasSelection = sel && sel.rangeCount > 0 && !sel.isCollapsed && editorRef.current.contains(sel.anchorNode);
+
+      if (hasSelection) {
+        // Text is highlighted: apply formatting strictly to that exact text slice
+        document.execCommand(style, false);
+        handleEditorInput();
+        updateActiveFormatting();
+      } else {
+        // No text selected: toggle formatting state for subsequent typed characters forward
+        if (!editorRef.current.contains(document.activeElement)) {
+          editorRef.current.focus();
+        }
+        document.execCommand(style, false);
+        updateActiveFormatting();
+      }
+    }
+  };
 
   const appendImages = (newUrls: string[]) => {
     const existing = (draftRef.current.media_urls && draftRef.current.media_urls.length > 0)
@@ -142,6 +226,43 @@ export function NoteSheet({
     });
   };
 
+  // Image Lightbox Holding & Dragging Pan Handlers
+  const handleImagePointerDown = (e: React.PointerEvent) => {
+    if (e.button !== 0) return; // Left mouse click
+    e.preventDefault();
+    e.stopPropagation();
+    isPanningImage.current = true;
+    panStartRef.current = {
+      x: e.clientX,
+      y: e.clientY,
+      panX: imagePan.x,
+      panY: imagePan.y,
+      moved: false,
+    };
+    (e.currentTarget as HTMLElement).setPointerCapture(e.pointerId);
+  };
+
+  const handleImagePointerMove = (e: React.PointerEvent) => {
+    if (!isPanningImage.current) return;
+    const dx = e.clientX - panStartRef.current.x;
+    const dy = e.clientY - panStartRef.current.y;
+    if (Math.abs(dx) > 3 || Math.abs(dy) > 3) {
+      panStartRef.current.moved = true;
+    }
+    setImagePan({
+      x: panStartRef.current.panX + dx,
+      y: panStartRef.current.panY + dy,
+    });
+  };
+
+  const handleImagePointerUp = (e: React.PointerEvent) => {
+    if (!isPanningImage.current) return;
+    isPanningImage.current = false;
+    try {
+      (e.currentTarget as HTMLElement).releasePointerCapture(e.pointerId);
+    } catch {}
+  };
+
   const handleDrop = (event: React.DragEvent) => {
     event.preventDefault();
     const files = event.dataTransfer?.files;
@@ -167,7 +288,19 @@ export function NoteSheet({
   const isAllTodos = draft.content.some((c) => c.is_todo);
   const toggleContentMode = () => {
     const nextIsTodo = !isAllTodos;
-    const content = draftRef.current.content.map((c) => ({ ...c, is_todo: nextIsTodo }));
+    let source: NoteItem["content"] = draftRef.current.content;
+    if (!isAllTodos && editorRef.current) {
+      // Read the live editor DOM so nothing typed since the last sync is lost or merged
+      source = htmlToMarkdown(editorRef.current)
+        .split("\n")
+        .map((text, idx) => ({
+          id: draftRef.current.content[idx]?.id ?? uid("line"),
+          text,
+          is_todo: false,
+          completed: false,
+        }));
+    }
+    const content = convertContentMode(source, nextIsTodo);
     commit({ ...draftRef.current, content, last_edited: Date.now() }, true);
   };
 
@@ -186,6 +319,30 @@ export function NoteSheet({
 
   const edit = (patch: Partial<NoteItem>) => {
     commit({ ...draftRef.current, ...patch, last_edited: Date.now() });
+  };
+
+  const titleHistory = useUndoStack<string>(draft.id, draft.title ?? "", (title) => edit({ title }));
+  const bodyHistory = useUndoStack<NoteItem["content"]>(draft.id, draft.content, (content) => {
+    edit({ content });
+    if (editorRef.current && !content.some((c) => c.is_todo)) {
+      editorRef.current.innerHTML = markdownToHtml(content.map((c) => c.text).join("\n"));
+    }
+  });
+
+  // Title and body keep separate undo/redo stacks; the focused field decides which one runs.
+  const handleUndoKeys = (e: React.KeyboardEvent) => {
+    if (!(e.ctrlKey || e.metaKey)) return;
+    const k = e.key.toLowerCase();
+    const isUndo = k === "z" && !e.shiftKey;
+    const isRedo = k === "y" || (k === "z" && e.shiftKey);
+    if (!isUndo && !isRedo) return;
+    const zone = (e.target as HTMLElement).closest("[data-undo]")?.getAttribute("data-undo");
+    if (!zone) return;
+    e.preventDefault();
+    e.stopPropagation();
+    const history = zone === "title" ? titleHistory : bodyHistory;
+    if (isUndo) history.undo();
+    else history.redo();
   };
 
   // ---- Organic soft modal bloom transition (Eliminates bubble popping & ghost after-images) ----
@@ -289,7 +446,23 @@ export function NoteSheet({
     if (closing.current) return;
     closing.current = true;
     window.clearTimeout(saveTimer.current);
-    commitRef.current(draftRef.current);
+
+    // Prune excessive empty items before persisting
+    const cur = draftRef.current;
+    let prunedContent = cur.content;
+    if (prunedContent.length > 1) {
+      prunedContent = prunedContent.filter(
+        (c, i) =>
+          c.text.trim().length > 0 ||
+          (i === prunedContent.length - 1 && prunedContent.some((other) => other.text.trim().length > 0)),
+      );
+      if (prunedContent.length === 0) {
+        prunedContent = [{ id: uid("line"), text: "", is_todo: cur.content[0]?.is_todo ?? false, completed: false }];
+      }
+    }
+    const cleanFinal = { ...cur, content: prunedContent };
+    draftRef.current = cleanFinal;
+    commitRef.current(cleanFinal);
 
     if (scrim.current) scrim.current.style.pointerEvents = "none";
     if (frame.current) frame.current.style.pointerEvents = "none";
@@ -350,26 +523,22 @@ export function NoteSheet({
         aria-hidden="true"
       />
 
-      <div
-        ref={frame}
-        role="dialog"
-        aria-modal="true"
-        aria-label={draft.title || "Untitled note"}
-        tabIndex={-1}
-        onPaste={handlePaste}
-        onDragOver={(e) => {
-          e.preventDefault();
-          e.dataTransfer.dropEffect = "copy";
-        }}
-        onDrop={handleDrop}
-        className="sheet-frame glass-sheet outline-none"
-        style={{
-          left: target.current.left,
-          top: target.current.top,
-          width: target.current.width,
-          height: target.current.height,
-        }}
-      >
+      <div className="fixed inset-0 z-60 flex items-center justify-center p-4 sm:p-6 md:p-8 pointer-events-none">
+        <div
+          ref={frame}
+          role="dialog"
+          aria-modal="true"
+          aria-label={cleanText(draft.title) || "Untitled note"}
+          tabIndex={-1}
+          onKeyDownCapture={handleUndoKeys}
+          onPaste={handlePaste}
+          onDragOver={(e) => {
+            e.preventDefault();
+            e.dataTransfer.dropEffect = "copy";
+          }}
+          onDrop={handleDrop}
+          className="pointer-events-auto flex flex-col w-[92vw] max-w-[920px] min-h-[380px] max-h-[88vh] h-auto overflow-hidden rounded-[24px] glass-sheet outline-none border border-white/10 shadow-[0_30px_90px_rgba(0,0,0,0.85)]"
+        >
         <div
           className="h-[2px] shrink-0 origin-left"
           style={{ backgroundColor: accent, animation: "strip-in 620ms cubic-bezier(0.22,1,0.36,1) both" }}
@@ -507,28 +676,22 @@ export function NoteSheet({
             <button
               type="button"
               onMouseDown={(e) => e.preventDefault()}
-              onClick={() => {
-                const nextBold = !draft.is_bold;
-                edit({ is_bold: nextBold });
-              }}
-              aria-label="Toggle Bold for note"
-              title="Bold note text"
-              data-active={draft.is_bold || undefined}
-              className={cx("icon-btn !size-7 cursor-pointer", draft.is_bold && "!bg-white/20 !text-white")}
+              onClick={() => handleToolbarFormat("bold")}
+              aria-label="Toggle Bold"
+              title="Bold text (Ctrl+B)"
+              data-active={isBoldActive || undefined}
+              className={cx("icon-btn !size-7 cursor-pointer", isBoldActive && "!bg-white/20 !text-white")}
             >
               <Bold size={12.5} strokeWidth={2.4} />
             </button>
             <button
               type="button"
               onMouseDown={(e) => e.preventDefault()}
-              onClick={() => {
-                const nextItalic = !draft.is_italic;
-                edit({ is_italic: nextItalic });
-              }}
-              aria-label="Toggle Italic for note"
-              title="Italic note text"
-              data-active={draft.is_italic || undefined}
-              className={cx("icon-btn !size-7 cursor-pointer", draft.is_italic && "!bg-white/20 !text-white")}
+              onClick={() => handleToolbarFormat("italic")}
+              aria-label="Toggle Italic"
+              title="Italic text (Ctrl+I)"
+              data-active={isItalicActive || undefined}
+              className={cx("icon-btn !size-7 cursor-pointer", isItalicActive && "!bg-white/20 !text-white")}
             >
               <Italic size={12.5} strokeWidth={2.4} />
             </button>
@@ -596,25 +759,27 @@ export function NoteSheet({
         </div>
 
         <div className="scroll min-h-0 flex-1 overflow-y-auto px-6">
-          <div className="mx-auto w-full max-w-[640px] pb-8 pt-2">
+          <div className="mx-auto w-full max-w-[760px] pb-8 pt-2">
             <input
               ref={titleRef}
-              value={cleanText(draft.title)}
+              value={draft.title ?? ""}
               onChange={(event) => edit({ title: event.target.value })}
+              onKeyDown={(e) => e.stopPropagation()}
+              data-undo="title"
               placeholder="Untitled"
               aria-label="Note title"
               className="w-full bg-transparent text-[27px] leading-[1.18] tracking-[-0.032em] text-ink-1 outline-none placeholder:text-ink-4/70"
               style={{
                 fontFamily: fontStack(draft.font_family),
-                fontWeight: draft.is_bold ? 700 : 560,
-                fontStyle: draft.is_italic ? "italic" : "normal",
+                fontWeight: 560,
               }}
             />
 
             {(() => {
-              const images = (draft.media_urls && draft.media_urls.length > 0)
+              const rawImages = (draft.media_urls && draft.media_urls.length > 0)
                 ? draft.media_urls
                 : (draft.media_url ? [draft.media_url] : []);
+              const images = rawImages.filter((img) => img && typeof img === "string" && img.trim().length > 0);
               if (images.length === 0) return null;
               return (
                 <div className="mt-4">
@@ -623,7 +788,7 @@ export function NoteSheet({
                       <div
                         key={`img-${idx}`}
                         onClick={() => setPreviewImage(imgUrl)}
-                        className="relative group aspect-video rounded-[10px] overflow-hidden bg-black/50 border border-white/10 shadow-sm cursor-pointer hover:border-white/30 transition-all flex items-center justify-center"
+                        className="relative group aspect-video min-h-[100px] rounded-[10px] overflow-hidden bg-black/50 border border-white/10 shadow-sm cursor-pointer hover:border-white/30 transition-all flex items-center justify-center"
                         title="Click to preview full image"
                       >
                         <img
@@ -631,7 +796,8 @@ export function NoteSheet({
                           alt=""
                           className="w-full h-full object-cover transition-transform duration-200 group-hover:scale-105"
                           onError={(event) => {
-                            event.currentTarget.style.display = "none";
+                            const parent = event.currentTarget.parentElement;
+                            if (parent) parent.style.display = "none";
                           }}
                         />
                         <button
@@ -655,189 +821,104 @@ export function NoteSheet({
 
             <div className="rule my-5" />
 
+            <div data-undo="body">
             {!isAllTodos ? (
               /* Basic Note (Point 4): Freeform multi-line text writing without lists or checkboxes */
               <div className="min-h-[220px]">
-                <textarea
-                  value={body.map((item) => item.text).join("\n")}
+                <div
+                  ref={initEditor}
+                  contentEditable
+                  suppressContentEditableWarning
+                  onInput={handleEditorInput}
                   onKeyDown={(e) => {
                     const meta = e.ctrlKey || e.metaKey;
                     if (meta && e.key.toLowerCase() === "b") {
                       e.preventDefault();
-                      edit({ is_bold: !draft.is_bold });
-                    } else if (meta && e.key.toLowerCase() === "i") {
+                      handleToolbarFormat("bold");
+                      return;
+                    }
+                    if (meta && e.key.toLowerCase() === "i") {
                       e.preventDefault();
-                      edit({ is_italic: !draft.is_italic });
-                    } else if (e.key === "Enter") {
-                      // Smart Bullet Continuation Feature
-                      const textarea = e.currentTarget;
-                      const val = textarea.value;
-                      const selStart = textarea.selectionStart;
-                      const selEnd = textarea.selectionEnd;
-
-                      // Find start of current line
-                      const lineStart = val.lastIndexOf("\n", selStart - 1) + 1;
-                      const currentLine = val.substring(lineStart, selStart);
-
-                      // Match bullet prefix (e.g., "- ", "* ", "• ")
-                      const match = currentLine.match(/^(\s*[-*•]\s+)/);
-                      if (match) {
-                        const bulletPrefix = match[1];
-                        const lineContent = currentLine.substring(bulletPrefix.length).trim();
-
-                        if (lineContent === "") {
-                          // If current line only contains the bullet and Enter is pressed, remove the bullet
-                          e.preventDefault();
-                          const nextVal = val.substring(0, lineStart) + val.substring(selEnd);
-                          const lines = nextVal.split("\n");
-                          const content = lines.map((line, idx) => ({
-                            id: body[idx]?.id ?? uid("line"),
-                            text: line,
-                            is_todo: false,
-                            completed: false,
-                          }));
-                          commit({ ...draftRef.current, content, last_edited: Date.now() });
-                          requestAnimationFrame(() => {
-                            textarea.value = nextVal;
-                            textarea.setSelectionRange(lineStart, lineStart);
-                          });
-                        } else {
-                          // Insert newline followed by the same bullet prefix
-                          e.preventDefault();
-                          const insertion = "\n" + bulletPrefix;
-                          const nextVal = val.substring(0, selStart) + insertion + val.substring(selEnd);
-                          const nextPos = selStart + insertion.length;
-                          const lines = nextVal.split("\n");
-                          const content = lines.map((line, idx) => ({
-                            id: body[idx]?.id ?? uid("line"),
-                            text: line,
-                            is_todo: false,
-                            completed: false,
-                          }));
-                          commit({ ...draftRef.current, content, last_edited: Date.now() });
-                          requestAnimationFrame(() => {
-                            textarea.value = nextVal;
-                            textarea.setSelectionRange(nextPos, nextPos);
-                          });
-                        }
-                      }
-                    } else if (e.key === "Backspace") {
-                      // If backspacing directly at empty bullet prefix, remove prefix cleanly
-                      const textarea = e.currentTarget;
-                      const val = textarea.value;
-                      const selStart = textarea.selectionStart;
-                      const selEnd = textarea.selectionEnd;
-
-                      if (selStart === selEnd) {
-                        const lineStart = val.lastIndexOf("\n", selStart - 1) + 1;
-                        const currentLine = val.substring(lineStart, selStart);
-                        const match = currentLine.match(/^(\s*[-*•]\s+)$/);
-                        if (match) {
-                          e.preventDefault();
-                          const nextVal = val.substring(0, lineStart) + val.substring(selEnd);
-                          const lines = nextVal.split("\n");
-                          const content = lines.map((line, idx) => ({
-                            id: body[idx]?.id ?? uid("line"),
-                            text: line,
-                            is_todo: false,
-                            completed: false,
-                          }));
-                          commit({ ...draftRef.current, content, last_edited: Date.now() });
-                          requestAnimationFrame(() => {
-                            textarea.value = nextVal;
-                            textarea.setSelectionRange(lineStart, lineStart);
-                          });
-                        }
-                      }
+                      handleToolbarFormat("italic");
+                      return;
+                    }
+                    if (editorRef.current && handleRichEditorKeyDown(e, editorRef.current, handleEditorInput)) {
+                      return;
                     }
                   }}
-                  onChange={(e) => {
-                    const lines = e.target.value.split("\n");
-                    const content = lines.map((line, idx) => ({
-                      id: body[idx]?.id ?? uid("line"),
-                      text: line,
-                      is_todo: false,
-                      completed: false,
-                    }));
-                    commit({ ...draftRef.current, content, last_edited: Date.now() });
-                  }}
-                  placeholder="Start typing your note... (Plain text mode without checkboxes or lists)"
-                  className="w-full min-h-[300px] resize-none bg-transparent text-[15.5px] leading-relaxed text-ink-2 outline-none placeholder:text-ink-4/45 scroll"
+                  onKeyUp={updateActiveFormatting}
+                  onMouseUp={updateActiveFormatting}
+                  className="w-full min-h-[300px] whitespace-pre-wrap break-words bg-transparent text-[15.5px] leading-relaxed text-ink-2 outline-none scroll select-text"
                   style={{
                     fontFamily: fontStack(draft.font_family),
-                    fontWeight: draft.is_bold ? 650 : 420,
-                    fontStyle: draft.is_italic ? "italic" : "normal",
                   }}
                 />
               </div>
             ) : (
               /* Checklist / Tasks Mode */
               <>
-                <div className="space-y-[2px]">
-                  {body.map((item, index) => (
-                    <div
-                      key={item.id}
-                      className="group/line -mx-2 flex items-start gap-2.5 rounded-[8px] px-2 py-[3px] transition-colors hover:bg-white/[0.025]"
-                    >
-                      <button
-                        type="button"
-                        onClick={() => patchLine(item.id, { completed: !item.completed })}
-                        onContextMenu={(event) => {
-                          event.preventDefault();
-                          patchLine(item.id, { is_todo: !item.is_todo });
-                        }}
-                        data-done={item.is_todo && item.completed ? true : undefined}
-                        aria-label={item.is_todo ? "Toggle task" : "Convert to task"}
-                        title={item.is_todo ? "Right-click for a plain line" : "Right-click for a checkbox"}
-                        className={cx("mt-[5px] shrink-0", item.is_todo ? "check" : "grid size-4 place-items-center")}
+                <div className="space-y-1">
+                  {body.map((item, index) => {
+                    const cleanItemText = item.text.replace(/^\s*[-*•]\s+/, "");
+                    return (
+                      <div
+                        key={item.id}
+                        className="flex items-start gap-3 w-full py-1 group rounded-[8px] px-2 transition-colors hover:bg-white/[0.025]"
                       >
-                        {item.is_todo ? (
-                          <Check size={10} strokeWidth={3} />
-                        ) : (
-                          <span className="size-[3px] rounded-full bg-white/30 transition-colors group-hover/line:bg-white/55" />
-                        )}
-                      </button>
+                        <button
+                          type="button"
+                          onClick={() => patchLine(item.id, { completed: !item.completed })}
+                          aria-label={item.completed ? "Mark incomplete" : "Mark complete"}
+                          className={cx(
+                            "border rounded-md w-4 h-4 mt-[3px] bg-transparent cursor-pointer check-indicator-layer flex items-center justify-center shrink-0 transition-all duration-200 outline-none select-none",
+                            item.completed
+                              ? "border-white bg-white text-black"
+                              : "border-white/20 hover:border-white/50 text-transparent",
+                          )}
+                        >
+                          <Check size={11} strokeWidth={3.5} className={cx(item.completed ? "opacity-100" : "opacity-0")} />
+                        </button>
 
-                      <input
-                        ref={(node) => {
-                          if (node) lineRefs.current.set(item.id, node);
-                          else lineRefs.current.delete(item.id);
-                        }}
-                        value={item.text}
-                        onChange={(event) => patchLine(item.id, { text: event.target.value })}
-                        onKeyDown={(event) => {
-                          if (event.key === "Enter") {
-                            event.preventDefault();
-                            addLine(index);
-                          }
-                          if (event.key === "Backspace" && item.text === "" && body.length > 1) {
-                            event.preventDefault();
-                            removeLine(item.id, index);
-                          }
-                        }}
-                        placeholder={item.is_todo ? "Task" : "Line"}
-                        aria-label="Note line"
-                        className={cx(
-                          "line-input",
-                          item.is_todo && item.completed && "text-ink-4 line-through",
-                        )}
-                        style={{
-                          fontFamily: fontStack(draft.font_family),
-                          fontWeight: draft.is_bold ? 620 : 420,
-                          fontStyle: draft.is_italic ? "italic" : "normal",
-                        }}
-                      />
+                        <TaskLineInput
+                          elRef={(node) => {
+                            if (node) lineRefs.current.set(item.id, node);
+                            else lineRefs.current.delete(item.id);
+                          }}
+                          onFocus={() => setFocusLine(item.id)}
+                          value={cleanItemText}
+                          onChange={(text) => patchLine(item.id, { text: text.replace(/^\s*[-*•]\s+/, "") })}
+                          onKeyDown={(event) => {
+                            if (event.key === "Enter") {
+                              event.preventDefault();
+                              addLine(index);
+                            }
+                            if (event.key === "Backspace" && cleanItemText === "" && body.length > 1) {
+                              event.preventDefault();
+                              removeLine(item.id, index);
+                            }
+                          }}
+                          placeholder={index === 0 ? "Task description..." : "Task item..."}
+                          ariaLabel="Note task line"
+                          className={cx(
+                            "line-input flex-1 bg-transparent text-[14.5px] leading-relaxed transition-all duration-150",
+                            item.completed ? "line-through text-ink-4 opacity-50" : "text-ink-1 opacity-90",
+                          )}
+                          style={{
+                            fontFamily: fontStack(draft.font_family),
+                          }}
+                        />
 
-                      <button
-                        type="button"
-                        onClick={() => removeLine(item.id, index)}
-                        aria-label="Remove line"
-                        className="mt-[5px] grid size-4 shrink-0 place-items-center rounded text-ink-4 opacity-0 transition-opacity hover:text-ink-1 focus-visible:opacity-100 group-hover/line:opacity-100"
-                      >
-                        <X size={10} strokeWidth={2} />
-                      </button>
-                    </div>
-                  ))}
+                        <button
+                          type="button"
+                          onClick={() => removeLine(item.id, index)}
+                          aria-label="Remove line"
+                          className="grid size-4 shrink-0 place-items-center rounded text-ink-4 opacity-0 transition-opacity hover:text-ink-1 focus-visible:opacity-100 group-hover:opacity-100"
+                        >
+                          <X size={10} strokeWidth={2} />
+                        </button>
+                      </div>
+                    );
+                  })}
                 </div>
 
                 <button
@@ -850,6 +931,7 @@ export function NoteSheet({
                 </button>
               </>
             )}
+            </div>
           </div>
         </div>
 
@@ -868,27 +950,107 @@ export function NoteSheet({
           </span>
         </div>
       </div>
+      </div>
 
-      {/* Lightbox Preview Modal */}
+      {/* Lightbox Preview Modal with Zoom & Holding-Mouse Pan */}
       {previewImage && (
         <div
-          onClick={() => setPreviewImage(null)}
-          className="fixed inset-0 z-[100] flex items-center justify-center bg-black/85 backdrop-blur-md p-6 cursor-zoom-out"
+          onClick={() => {
+            setPreviewImage(null);
+            setZoomLevel(1);
+            setImagePan({ x: 0, y: 0 });
+          }}
+          className="fixed inset-0 z-[100] flex flex-col items-center justify-center bg-black/90 backdrop-blur-md p-4 select-none"
         >
-          <div className="relative max-w-[90vw] max-h-[88vh] flex items-center justify-center" onClick={(e) => e.stopPropagation()}>
+          {/* Zoom & Action Controls Bar */}
+          <div
+            className="flex items-center gap-2 mb-2 z-20 bg-black/80 px-3.5 py-1.5 rounded-full border border-white/20 shadow-xl"
+            onClick={(e) => e.stopPropagation()}
+          >
+            <button
+              type="button"
+              onClick={() => setZoomLevel((z) => Math.max(0.5, Number((z - 0.25).toFixed(2))))}
+              className="grid size-6 place-items-center rounded text-white/70 hover:text-white hover:bg-white/10 text-[14px] font-bold cursor-pointer"
+              title="Zoom out"
+            >
+              -
+            </button>
+            <span className="font-mono text-[10px] text-white/90 min-w-[36px] text-center font-semibold">
+              {Math.round(zoomLevel * 100)}%
+            </span>
+            <button
+              type="button"
+              onClick={() => setZoomLevel((z) => Math.min(4, Number((z + 0.25).toFixed(2))))}
+              className="grid size-6 place-items-center rounded text-white/70 hover:text-white hover:bg-white/10 text-[14px] font-bold cursor-pointer"
+              title="Zoom in"
+            >
+              +
+            </button>
+            <button
+              type="button"
+              onClick={() => {
+                setZoomLevel(1);
+                setImagePan({ x: 0, y: 0 });
+              }}
+              className="ml-1 text-[9.5px] font-mono uppercase px-1.5 py-0.5 rounded bg-white/10 hover:bg-white/20 text-white/90 cursor-pointer"
+              title="Reset Zoom (100%)"
+            >
+              1:1
+            </button>
+            <span className="mx-0.5 h-3 w-px bg-white/20" />
+            <button
+              type="button"
+              onClick={() => {
+                setPreviewImage(null);
+                setZoomLevel(1);
+                setImagePan({ x: 0, y: 0 });
+              }}
+              className="grid size-6 place-items-center rounded-full text-white/70 hover:text-white hover:bg-white/10 cursor-pointer"
+              title="Close preview"
+            >
+              <X size={13} strokeWidth={2.4} />
+            </button>
+          </div>
+
+          {/* Interactive Zoomable & Pannable Viewport */}
+          <div
+            className="relative flex-1 w-full overflow-hidden flex items-center justify-center p-2 cursor-grab active:cursor-grabbing select-none"
+            onClick={(e) => e.stopPropagation()}
+            onPointerDown={handleImagePointerDown}
+            onPointerMove={handleImagePointerMove}
+            onPointerUp={handleImagePointerUp}
+            onPointerCancel={handleImagePointerUp}
+            onWheel={(e) => {
+              e.preventDefault();
+              if (e.deltaY < 0) {
+                setZoomLevel((z) => Math.min(4, Number((z + 0.25).toFixed(2))));
+              } else {
+                setZoomLevel((z) => Math.max(0.5, Number((z - 0.25).toFixed(2))));
+              }
+            }}
+          >
             <img
               src={previewImage}
               alt="Preview"
-              className="max-w-[90vw] max-h-[85vh] object-contain rounded-xl border border-white/15 shadow-2xl"
+              draggable={false}
+              style={{
+                transform: `translate3d(${imagePan.x}px, ${imagePan.y}px, 0) scale(${zoomLevel})`,
+                transformOrigin: "center center",
+                transition: isPanningImage.current ? "none" : "transform 0.1s ease-out",
+              }}
+              onClick={(e) => {
+                e.stopPropagation();
+                if (!panStartRef.current.moved) {
+                  setZoomLevel((z) => {
+                    if (z === 1) return 2;
+                    setImagePan({ x: 0, y: 0 });
+                    return 1;
+                  });
+                }
+              }}
+              className="max-w-[90vw] max-h-[82vh] object-contain rounded-xl border border-white/20 shadow-2xl select-none"
+              title="Hold and drag to move · Click to toggle 2x zoom · Scroll to zoom"
             />
-            <button
-              type="button"
-              onClick={() => setPreviewImage(null)}
-              className="absolute -top-3 -right-3 grid size-8 place-items-center rounded-full bg-black/90 text-white/90 hover:text-white hover:bg-black border border-white/20 shadow-lg cursor-pointer"
-              title="Close preview"
-            >
-              <X size={16} strokeWidth={2.4} />
-            </button>
           </div>
         </div>
       )}

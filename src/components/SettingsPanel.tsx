@@ -304,6 +304,18 @@ export function SettingsPanel({ onBack, onStoragePathChanged, onThemeChanged }: 
               <FolderSearch size={14} />
               <span>Browse</span>
             </button>
+            <button
+              type="button"
+              onClick={async () => {
+                const def = await tauriApi.getDefaultStoragePath();
+                if (def) setPathInput(def);
+              }}
+              className="flex h-10 items-center gap-1.5 rounded-xl border border-white/10 bg-white/[0.03] px-3 text-[12px] text-ink-3 hover:bg-white/[0.08] hover:text-white transition-colors shrink-0"
+              title="Reset to default Documents/DoIT folder"
+            >
+              <RotateCcw size={12} />
+              <span>Default</span>
+            </button>
           </div>
         </section>
 
@@ -421,7 +433,7 @@ export function SettingsPanel({ onBack, onStoragePathChanged, onThemeChanged }: 
             <div className="rounded-xl bg-white/[0.03] p-3 border border-white/[0.06] flex items-center justify-between">
               <div>
                 <div className="text-[12.5px] font-medium text-ink-2">Create New Note</div>
-                <div className="text-[10.5px] text-ink-4">Spawns a note in Architecture</div>
+                <div className="text-[10.5px] text-ink-4">Spawns a new note in current view</div>
               </div>
               <input
                 type="text"

@@ -135,6 +135,17 @@ export const tauriApi = {
     return readLocal<CategoryInfo[]>(CATS_KEY, DEFAULT_CATEGORIES);
   },
 
+  async getDefaultStoragePath(): Promise<string> {
+    if (isTauri()) {
+      try {
+        return await invoke<string>("get_default_storage_path");
+      } catch (err) {
+        console.warn("get_default_storage_path failed", err);
+      }
+    }
+    return "Documents/DoIT";
+  },
+
   async getSettings(): Promise<AppSettings> {
     if (isTauri()) {
       try {
@@ -275,6 +286,42 @@ export const tauriApi = {
     }
   },
 
+  async syncTrayWindowHeight(logicalHeight: number): Promise<void> {
+    if (!isTauri()) return;
+    try {
+      await invoke("sync_tray_window_height", { logicalHeight });
+    } catch (err) {
+      console.warn("sync_tray_window_height failed", err);
+    }
+  },
+
+  async syncTrayWindowBounds(logicalWidth: number, logicalHeight: number): Promise<void> {
+    if (!isTauri()) return;
+    try {
+      await invoke("sync_tray_window_bounds", { logicalWidth, logicalHeight });
+    } catch (err) {
+      console.warn("sync_tray_window_bounds failed", err);
+    }
+  },
+
+  async snapTrayWindow(logicalWidth: number, logicalHeight: number): Promise<void> {
+    if (!isTauri()) return;
+    try {
+      await invoke("snap_tray_window", { logicalWidth, logicalHeight });
+    } catch (err) {
+      console.warn("snap_tray_window failed", err);
+    }
+  },
+
+  async setTrayMinimized(minimized: boolean): Promise<void> {
+    if (!isTauri()) return;
+    try {
+      await invoke("set_tray_minimized", { minimized });
+    } catch (err) {
+      console.warn("set_tray_minimized failed", err);
+    }
+  },
+
   async setMiniMode(mini: boolean): Promise<void> {
     if (!isTauri()) return;
     try {
@@ -299,6 +346,24 @@ export const tauriApi = {
       await invoke("open_canvas_mode");
     } catch (err) {
       console.warn("open_canvas_mode failed", err);
+    }
+  },
+
+  async collapseTrayToPill(): Promise<void> {
+    if (!isTauri()) return;
+    try {
+      await invoke("collapse_tray_to_pill");
+    } catch (err) {
+      console.warn("collapse_tray_to_pill failed", err);
+    }
+  },
+
+  async expandTrayFromPill(): Promise<void> {
+    if (!isTauri()) return;
+    try {
+      await invoke("expand_tray_from_pill");
+    } catch (err) {
+      console.warn("expand_tray_from_pill failed", err);
     }
   },
 
@@ -375,6 +440,27 @@ export const tauriApi = {
     if (!isTauri()) return;
     try {
       await invoke("restart_app");
+    } catch {
+      /* ignore */
+    }
+  },
+
+  async quitApp(): Promise<void> {
+    if (isTauri()) {
+      try {
+        await invoke("quit_app");
+        return;
+      } catch {
+        /* ignore */
+      }
+    }
+    window.close();
+  },
+
+  async showTrayContextMenu(): Promise<void> {
+    if (!isTauri()) return;
+    try {
+      await invoke("show_tray_context_menu");
     } catch {
       /* ignore */
     }

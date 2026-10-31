@@ -1,6 +1,8 @@
-import { useEffect, useMemo, useRef, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { getCurrentWindow } from "@tauri-apps/api/window";
+import { AnimatePresence, motion } from "motion/react";
 import { Mark } from "./Mark";
+import { TaskLineInput } from "./TaskLineInput";
 import {
   AlignLeft,
   ArrowLeft,
@@ -26,16 +28,32 @@ import {
   tauriApi,
 } from "../api/tauriBridge";
 import { useWorkspace } from "../hooks/useWorkspace";
+import { useUndoStack } from "../hooks/useUndoStack";
+import {
+  convertContentMode,
+  handleRichEditorKeyDown,
+  htmlToMarkdown,
+  isRichBoldActive,
+  isRichItalicActive,
+  markdownToHtml,
+} from "../lib/format";
 import { accentFor, cleanText, cx, relativeShort, uid } from "../lib/text";
+
+const NO_CONTENT: ContentItem[] = [];
 
 export function TrayCompanion() {
   const { notes, categories, patch, create, remove } = useWorkspace();
-  const [expanded, setExpanded] = useState(false);
+  const [shown, setShown] = useState(false);
+  const shownRef = useRef(false);
+  const hideTimerRef = useRef<number | null>(null);
+  const suppressCollapseRef = useRef(false);
   const [drawerOpen, setDrawerOpen] = useState(true);
   const [filter, setFilter] = useState("");
   const [selectedShelf, setSelectedShelf] = useState<string | null>(null);
   const [activeNoteId, setActiveNoteId] = useState<string | null>(null);
   const [historyStack, setHistoryStack] = useState<string[]>([]);
+  const visibilityLockRef = useRef<number>(0);
+  const panelRef = useRef<HTMLDivElement | null>(null);
 
   // Navigation helpers with proper history stack
   const openNoteById = (id: string) => {
@@ -67,16 +85,31 @@ export function TrayCompanion() {
     }
   }, [notes, activeNoteId]);
 
-  // Transition debouncing lock to eliminate click-through re-expansion loops
+  // Transition debouncing lock
   const isTransitioning = useRef(false);
 
   // Formatting popovers
   const [fontOpen, setFontOpen] = useState(false);
   const [shelfOpen, setShelfOpen] = useState(false);
   const [previewImage, setPreviewImage] = useState<string | null>(null);
+  const [zoomLevel, setZoomLevel] = useState<number>(1);
+  const [imagePan, setImagePan] = useState({ x: 0, y: 0 });
+  const isPanningImage = useRef(false);
+  const panStartRef = useRef({ x: 0, y: 0, panX: 0, panY: 0, moved: false });
   const fileInputRef = useRef<HTMLInputElement | null>(null);
   const grabScrollRef = useRef<HTMLDivElement | null>(null);
   const dragScrollState = useRef({ isDown: false, startX: 0, scrollLeft: 0, moved: false });
+
+  // Rich text formatting state
+  const editorRef = useRef<HTMLDivElement | null>(null);
+  const [isBoldActive, setIsBoldActive] = useState<boolean>(false);
+  const [isItalicActive, setIsItalicActive] = useState<boolean>(false);
+  const lastActiveNoteIdRef = useRef<string | null>(null);
+
+  const updateActiveFormatting = () => {
+    setIsBoldActive(isRichBoldActive());
+    setIsItalicActive(isRichItalicActive());
+  };
 
   const activeNote = useMemo(
     () => notes.find((n) => n.id === activeNoteId) ?? null,
@@ -85,28 +118,59 @@ export function TrayCompanion() {
 
   const shelves = useMemo(() => categories.map((c) => c.name), [categories]);
 
-  // Synchronize window size with expanded state
-  useEffect(() => {
-    isTransitioning.current = true;
-    void tauriApi.resizeTrayWindow(expanded);
-    const timer = window.setTimeout(() => {
-      isTransitioning.current = false;
-    }, 320);
-    return () => window.clearTimeout(timer);
-  }, [expanded]);
+  // Static 380x480 window; open/close is a pure opacity fade, then native hide().
+  const hideNow = useCallback(() => {
+    if (hideTimerRef.current) window.clearTimeout(hideTimerRef.current);
+    hideTimerRef.current = null;
+    if (suppressCollapseRef.current) {
+      suppressCollapseRef.current = false;
+      return;
+    }
+    if (!shownRef.current) void tauriApi.collapseTrayToPill();
+  }, []);
 
-  // Synchronize with external Tauri expansion events (e.g. from open_tray_mode or window manager)
+  const openTray = useCallback(() => {
+    if (hideTimerRef.current) window.clearTimeout(hideTimerRef.current);
+    hideTimerRef.current = null;
+    suppressCollapseRef.current = false;
+    requestAnimationFrame(() =>
+      requestAnimationFrame(() => {
+        shownRef.current = true;
+        setShown(true);
+      }),
+    );
+  }, []);
+
+  const closeTray = useCallback(() => {
+    if (!shownRef.current) return;
+    shownRef.current = false;
+    setShown(false);
+    // Fallback in case transitionend never fires
+    hideTimerRef.current = window.setTimeout(hideNow, 260);
+  }, [hideNow]);
+
+  const toggleMinimize = useCallback(() => {
+    if (Date.now() < visibilityLockRef.current) return;
+    visibilityLockRef.current = Date.now() + 350;
+    closeTray();
+  }, [closeTray]);
+
+  // Synchronize with external Tauri expansion events
   useEffect(() => {
     let unlistenFn: (() => void) | null = null;
+
     getCurrentWindow()
       .listen<boolean>("set-expanded", (event) => {
-        setExpanded((prev) => {
-          if (prev === event.payload) return prev;
-          if (!event.payload) {
-            setDrawerOpen(false);
-          }
-          return event.payload;
-        });
+        if (event.payload) {
+          openTray();
+        } else {
+          // Canvas took over: fade out silently, never spawn the pill
+          if (hideTimerRef.current) window.clearTimeout(hideTimerRef.current);
+          hideTimerRef.current = null;
+          suppressCollapseRef.current = true;
+          shownRef.current = false;
+          setShown(false);
+        }
       })
       .then((unlisten) => {
         unlistenFn = unlisten;
@@ -115,7 +179,7 @@ export function TrayCompanion() {
     return () => {
       if (unlistenFn) unlistenFn();
     };
-  }, []);
+  }, [openTray]);
 
   // Load theme mode for tray window
   useEffect(() => {
@@ -126,29 +190,37 @@ export function TrayCompanion() {
     });
   }, []);
 
-  // Global key navigation (Escape to minimize/step-back, Cmd/Ctrl+J to toggle)
+
+  // Global key navigation (Escape to toggle-minimize/step-back, Cmd/Ctrl+J to toggle)
   useEffect(() => {
     const handleKeyDown = (e: KeyboardEvent) => {
       if (e.key === "Escape") {
         e.preventDefault();
-        if (drawerOpen) {
-          setDrawerOpen(false);
-        } else if (expanded && !isTransitioning.current) {
-          isTransitioning.current = true;
-          setExpanded(false);
+        if (previewImage) {
+          setPreviewImage(null);
+        } else if (activeNoteId) {
+          handleBack();
+        } else {
+          toggleMinimize();
         }
       }
       const meta = e.ctrlKey || e.metaKey;
       if (meta && e.key.toLowerCase() === "j" && !isTransitioning.current) {
         e.preventDefault();
-        isTransitioning.current = true;
-        setExpanded((prev) => !prev);
+        toggleMinimize();
       }
     };
 
     window.addEventListener("keydown", handleKeyDown);
     return () => window.removeEventListener("keydown", handleKeyDown);
-  }, [expanded, activeNoteId, drawerOpen]);
+  }, [activeNoteId, previewImage, toggleMinimize]);
+
+  // Safety: a fresh webview whose window is already visible should still fade in once
+  useEffect(() => {
+    void getCurrentWindow().isVisible().then((v) => {
+      if (v) openTray();
+    });
+  }, [openTray]);
 
   const filteredNotes = useMemo(() => {
     let list = [...notes].sort((a, b) => b.last_edited - a.last_edited);
@@ -168,7 +240,7 @@ export function TrayCompanion() {
   }, [notes, selectedShelf, filter]);
 
   const handleCreate = () => {
-    const newNote = create(selectedShelf ?? "Architecture", false);
+    const newNote = create(selectedShelf ?? "Uncategorized", false);
     openNoteById(newNote.id);
   };
 
@@ -176,6 +248,36 @@ export function TrayCompanion() {
     if (!activeNote) return;
     const next: NoteItem = { ...activeNote, ...patchData, last_edited: Date.now() };
     patch(next);
+  };
+
+  const syncEditorDom = (content: ContentItem[]) => {
+    if (editorRef.current && !content.some((c) => c.is_todo)) {
+      editorRef.current.innerHTML = markdownToHtml(content.map((c) => c.text).join("\n"));
+    }
+  };
+
+  const titleHistory = useUndoStack<string>(activeNote?.id ?? null, activeNote?.title ?? "", (title) =>
+    editActive({ title }),
+  );
+  const bodyHistory = useUndoStack<ContentItem[]>(activeNote?.id ?? null, activeNote?.content ?? NO_CONTENT, (content) => {
+    editActive({ content });
+    syncEditorDom(content);
+  });
+
+  // Title and body keep separate undo/redo stacks; the focused field decides which one runs.
+  const handleUndoKeys = (e: React.KeyboardEvent) => {
+    if (!(e.ctrlKey || e.metaKey) || !activeNote) return;
+    const k = e.key.toLowerCase();
+    const isUndo = k === "z" && !e.shiftKey;
+    const isRedo = k === "y" || (k === "z" && e.shiftKey);
+    if (!isUndo && !isRedo) return;
+    const zone = (e.target as HTMLElement).closest("[data-undo]")?.getAttribute("data-undo");
+    if (!zone) return;
+    e.preventDefault();
+    e.stopPropagation();
+    const history = zone === "title" ? titleHistory : bodyHistory;
+    if (isUndo) history.undo();
+    else history.redo();
   };
 
   const appendActiveImages = (newUrls: string[]) => {
@@ -252,15 +354,36 @@ export function TrayCompanion() {
     });
   };
 
-  // Convert between text area text and ContentItem[]
-  const fullText = useMemo(() => {
-    if (!activeNote) return "";
-    return activeNote.content.map((c) => c.text).join("\n");
+  // Synchronize HTML into contenteditable when opening or switching notes
+  const initEditor = useCallback((node: HTMLDivElement | null) => {
+    editorRef.current = node;
+    if (node && activeNote) {
+      if (lastActiveNoteIdRef.current !== activeNote.id || !node.innerHTML || node.innerHTML === "<div><br></div>") {
+        lastActiveNoteIdRef.current = activeNote.id;
+        const md = activeNote.content.map((c) => c.text).join("\n");
+        node.innerHTML = markdownToHtml(md);
+      }
+    }
   }, [activeNote]);
 
-  const handleTextChange = (text: string) => {
-    if (!activeNote) return;
-    const lines = text.split("\n");
+  useEffect(() => {
+    if (!activeNote) {
+      lastActiveNoteIdRef.current = null;
+      return;
+    }
+    if (lastActiveNoteIdRef.current !== activeNote.id) {
+      lastActiveNoteIdRef.current = activeNote.id;
+      if (editorRef.current) {
+        const md = activeNote.content.map((c) => c.text).join("\n");
+        editorRef.current.innerHTML = markdownToHtml(md);
+      }
+    }
+  }, [activeNote]);
+
+  const handleEditorInput = () => {
+    if (!editorRef.current || !activeNote) return;
+    const md = htmlToMarkdown(editorRef.current);
+    const lines = md.split("\n");
     const content: ContentItem[] = lines.map((line, idx) => ({
       id: activeNote.content[idx]?.id ?? uid("line"),
       text: line,
@@ -268,6 +391,67 @@ export function TrayCompanion() {
       completed: false,
     }));
     editActive({ content });
+    updateActiveFormatting();
+  };
+
+  const handleToolbarFormat = (style: "bold" | "italic") => {
+    const activeEl = document.activeElement;
+
+    if (activeEl instanceof HTMLInputElement) {
+      const start = activeEl.selectionStart ?? 0;
+      const end = activeEl.selectionEnd ?? 0;
+      if (start !== end) {
+        const val = activeEl.value;
+        const selected = val.slice(start, end);
+        const marker = style === "bold" ? "**" : "*";
+
+        let nextVal: string;
+        let newStart: number;
+        let newEnd: number;
+
+        if (selected.startsWith(marker) && selected.endsWith(marker) && selected.length >= marker.length * 2) {
+          const unwrapped = selected.slice(marker.length, selected.length - marker.length);
+          nextVal = val.slice(0, start) + unwrapped + val.slice(end);
+          newStart = start;
+          newEnd = start + unwrapped.length;
+        } else {
+          const wrapped = `${marker}${selected}${marker}`;
+          nextVal = val.slice(0, start) + wrapped + val.slice(end);
+          newStart = start;
+          newEnd = start + wrapped.length;
+        }
+
+        activeEl.value = nextVal;
+        activeEl.dispatchEvent(new Event("input", { bubbles: true }));
+        requestAnimationFrame(() => {
+          activeEl.setSelectionRange(newStart, newEnd);
+        });
+        return;
+      }
+    }
+
+    if (activeEl instanceof HTMLElement && activeEl.dataset.taskLine) {
+      document.execCommand(style, false);
+      updateActiveFormatting();
+      return;
+    }
+
+    if (editorRef.current) {
+      const sel = window.getSelection();
+      const hasSelection = sel && sel.rangeCount > 0 && !sel.isCollapsed && editorRef.current.contains(sel.anchorNode);
+
+      if (hasSelection) {
+        document.execCommand(style, false);
+        handleEditorInput();
+        updateActiveFormatting();
+      } else {
+        if (!editorRef.current.contains(document.activeElement)) {
+          editorRef.current.focus();
+        }
+        document.execCommand(style, false);
+        updateActiveFormatting();
+      }
+    }
   };
 
   const isTasksMode = useMemo(() => {
@@ -278,193 +462,213 @@ export function TrayCompanion() {
   const toggleMode = () => {
     if (!activeNote) return;
     const nextIsTodo = !isTasksMode;
-    const content = activeNote.content.map((c) => ({ ...c, is_todo: nextIsTodo }));
-    editActive({ content });
+    let source: ContentItem[] = activeNote.content;
+    if (!isTasksMode && editorRef.current) {
+      // Read the live editor DOM so nothing typed since the last sync is lost or merged
+      source = htmlToMarkdown(editorRef.current)
+        .split("\n")
+        .map((text, idx) => ({
+          id: activeNote.content[idx]?.id ?? uid("line"),
+          text,
+          is_todo: false,
+          completed: false,
+        }));
+    }
+    editActive({ content: convertContentMode(source, nextIsTodo) });
   };
 
-  // Pointer down handler for pill: click to expand, click & drag to move window anywhere on screen
-  const pillDragRef = useRef({
-    isDown: false,
-    startX: 0,
-    startY: 0,
-    moved: false,
-  });
+  const handleContextMenu = (e: React.MouseEvent) => {
+    e.preventDefault();
+    e.stopPropagation();
+    void tauriApi.showTrayContextMenu();
+  };
 
-  const handlePillPointerDown = (e: React.PointerEvent) => {
-    if (e.button !== 0 || isTransitioning.current) return;
-    pillDragRef.current = {
-      isDown: true,
-      startX: e.screenX,
-      startY: e.screenY,
+  // Image Lightbox Holding & Dragging Pan Handlers
+  const handleImagePointerDown = (e: React.PointerEvent) => {
+    if (e.button !== 0) return; // Left mouse click
+    e.preventDefault();
+    e.stopPropagation();
+    isPanningImage.current = true;
+    panStartRef.current = {
+      x: e.clientX,
+      y: e.clientY,
+      panX: imagePan.x,
+      panY: imagePan.y,
       moved: false,
     };
+    (e.currentTarget as HTMLElement).setPointerCapture(e.pointerId);
+  };
 
-    const onPointerMove = (ev: PointerEvent) => {
-      if (!pillDragRef.current.isDown) return;
-      const dx = ev.screenX - pillDragRef.current.startX;
-      const dy = ev.screenY - pillDragRef.current.startY;
+  const handleImagePointerMove = (e: React.PointerEvent) => {
+    if (!isPanningImage.current) return;
+    const dx = e.clientX - panStartRef.current.x;
+    const dy = e.clientY - panStartRef.current.y;
+    if (Math.abs(dx) > 3 || Math.abs(dy) > 3) {
+      panStartRef.current.moved = true;
+    }
+    setImagePan({
+      x: panStartRef.current.panX + dx,
+      y: panStartRef.current.panY + dy,
+    });
+  };
+
+  const handleImagePointerUp = (e: React.PointerEvent) => {
+    if (!isPanningImage.current) return;
+    isPanningImage.current = false;
+    try {
+      (e.currentTarget as HTMLElement).releasePointerCapture(e.pointerId);
+    } catch {}
+  };
+
+  // Top bar dragging and minimize handling for desk tray: decoupled 4px threshold
+  const handleTopBarPointerDown = (e: React.PointerEvent) => {
+    if (e.button !== 0) return;
+    if (Date.now() < visibilityLockRef.current) return;
+    const startX = e.screenX;
+    const startY = e.screenY;
+    let isDragging = false;
+
+    const onPointerMove = (moveEv: PointerEvent) => {
+      if (isDragging) return;
+      const dx = moveEv.screenX - startX;
+      const dy = moveEv.screenY - startY;
       if (Math.hypot(dx, dy) > 4) {
-        pillDragRef.current.moved = true;
+        isDragging = true;
         window.removeEventListener("pointermove", onPointerMove);
         window.removeEventListener("pointerup", onPointerUp);
-        void tauriApi.startDrag().then(() => {
+        void tauriApi.beginDrag().then(() => {
           void tauriApi.saveTrayPosition();
         });
       }
     };
 
-    const onPointerUp = () => {
+    const onPointerUp = (upEv: PointerEvent) => {
       window.removeEventListener("pointermove", onPointerMove);
       window.removeEventListener("pointerup", onPointerUp);
-      if (pillDragRef.current.isDown && !pillDragRef.current.moved && !isTransitioning.current) {
-        setExpanded(true);
-      } else if (pillDragRef.current.moved) {
-        void tauriApi.saveTrayPosition();
+      if (!isDragging) {
+        const dist = Math.hypot(upEv.screenX - startX, upEv.screenY - startY);
+        if (dist <= 4) {
+          toggleMinimize();
+        }
       }
-      pillDragRef.current.isDown = false;
     };
 
     window.addEventListener("pointermove", onPointerMove);
     window.addEventListener("pointerup", onPointerUp);
   };
 
-  // ---- RENDER COLLAPSED PILL (CLEAN HORIZONTAL DESIGN) ----
-  if (!expanded) {
-    return (
-      <div className="flex h-full w-full items-center justify-center bg-transparent select-none p-2">
-        <div
-          onPointerDown={handlePillPointerDown}
-          className={cx(
-            "group/pill flex h-10 select-none items-center gap-2.5 rounded-full pl-3 pr-2.5",
-            "cursor-pointer hover:border-white/40 transition-all shadow-2xl",
-          )}
-          style={{
-            backgroundColor: "var(--theme-pill-bg)",
-            backdropFilter: "var(--theme-pill-blur)",
-            WebkitBackdropFilter: "var(--theme-pill-blur)",
-            boxShadow:
-              "inset 0 0 0 1px var(--theme-pill-border), inset 0 1px 0 rgba(255,255,255,0.12), 0 16px 40px -12px rgba(0,0,0,0.95)",
-          }}
-          title="Click to open · Hold and drag to move"
-        >
-          {/* Logo icon instead of circle dot */}
-          <Mark size={16} className="pointer-events-none shrink-0" />
-
-          <span className="text-[13px] font-medium tracking-[0.01em] text-white/90 pointer-events-none">
-            Tray
-          </span>
-
-          <button
-            type="button"
-            onPointerDown={(e) => e.stopPropagation()}
-            onClick={(e) => {
-              e.stopPropagation();
-              if (isTransitioning.current) return;
-              handleCreate();
-              setExpanded(true);
-            }}
-            className="grid size-6 place-items-center rounded-full text-white/50 transition-colors hover:bg-white/10 hover:text-white cursor-pointer ml-auto"
-            title="New Note (⌘N)"
-            aria-label="New Note"
-          >
-            <Plus size={14} strokeWidth={2.2} />
-          </button>
-        </div>
-      </div>
-    );
-  }
-
-  // ---- RENDER EXPANDED DESK TRAY (IMAGE 3) OR IN-TRAY NOTE EDITOR ----
+  // ---- RENDER DESK TRAY WORKSPACE WITH 2D SPRING MORPHING ----
   return (
     <div
-      onPaste={handlePaste}
-      className="box-border flex h-full w-full max-h-full max-w-full flex-col overflow-hidden text-ink-1 rounded-[24px] border border-white/10 select-none p-3 animate-drawer-open"
-      style={{
-        backgroundColor: "var(--theme-tray-bg)",
-        backdropFilter: "var(--theme-tray-blur)",
-        WebkitBackdropFilter: "var(--theme-tray-blur)",
-        boxShadow: "inset 0 0 0 1px var(--theme-tray-border), 0 40px 90px -30px rgba(0,0,0,0.95)",
-      }}
+      className="flex h-screen w-screen items-end justify-end p-0 m-0 overflow-hidden bg-transparent select-none"
+      style={{ background: "transparent", backgroundColor: "transparent" }}
     >
-      {/* 1. Fluid unbordered top bar: Clicking top bar minimizes back to pill without closing active note */}
       <div
-        onClick={() => {
-          if (isTransitioning.current) return;
-          setDrawerOpen(false);
-          setExpanded(false);
+        ref={panelRef}
+        onTransitionEnd={(e) => {
+          if (e.target === e.currentTarget && e.propertyName === "opacity" && !shownRef.current) {
+            hideNow();
+          }
         }}
-        title="Tap top bar to minimize"
-        className="flex h-7 shrink-0 items-center justify-between px-1 mb-2.5 select-none cursor-pointer group/topbar"
+        onPaste={handlePaste}
+        onKeyDownCapture={handleUndoKeys}
+        onContextMenu={handleContextMenu}
+        className="box-border flex h-full w-full flex-col overflow-hidden whitespace-nowrap text-ink-1 rounded-2xl border border-white/10 select-none p-2.5 shadow-none scale-100 transition-opacity duration-200 ease-out"
+        style={{
+          opacity: shown ? 1 : 0,
+          pointerEvents: shown ? "auto" : "none",
+          backgroundColor: "var(--theme-tray-bg)",
+          backdropFilter: "var(--theme-tray-blur)",
+          WebkitBackdropFilter: "var(--theme-tray-blur)",
+          boxShadow: "inset 0 0 0 1px var(--theme-tray-border)",
+        }}
       >
-        <div className="flex flex-1 items-center gap-2 py-1">
-          {activeNote ? (
+        {/* 1. Fluid permanent top bar: Hold and drag to move, click to toggle minimize */}
+        <div
+          onPointerDown={handleTopBarPointerDown}
+          title="Tap to toggle minimize · Hold and drag to move"
+          className="flex h-6 w-full shrink-0 items-center justify-between px-1 select-none cursor-pointer group/topbar scale-100 overflow-hidden"
+        >
+          <div className="flex items-center gap-2 pointer-events-none min-w-0 overflow-hidden h-full whitespace-nowrap">
+            {activeNote ? (
+              <button
+                type="button"
+                onPointerDown={(e) => e.stopPropagation()}
+                onClick={(e) => {
+                  e.stopPropagation();
+                  handleBack();
+                }}
+                className="flex items-center gap-1 h-5 rounded px-1 -ml-1 text-[10px] font-mono text-white/60 hover:bg-white/10 hover:text-white transition-colors cursor-pointer pointer-events-auto shrink-0 whitespace-nowrap"
+                title="Back to notes list"
+              >
+                <ArrowLeft size={11} className="shrink-0" />
+                <span className="whitespace-nowrap overflow-hidden text-ellipsis truncate">Back</span>
+              </button>
+            ) : (
+              <div className="flex items-center justify-center shrink-0 size-3.5">
+                <Mark size={13} className="shrink-0 block" />
+              </div>
+            )}
+            <span
+              className={cx(
+                "font-semibold text-white/70 group-hover/topbar:text-white/95 transition-colors whitespace-nowrap overflow-hidden text-ellipsis truncate select-none leading-none flex items-center",
+                activeNote ? "font-mono text-[9.5px] uppercase tracking-[0.14em]" : "text-[13px] tracking-[0.02em]",
+              )}
+            >
+              {activeNote ? "EDIT NOTE" : "DoIT"}
+            </span>
+          </div>
+
+          <div
+            className="flex items-center gap-1 shrink-0 z-20 h-full"
+            onPointerDown={(e) => e.stopPropagation()}
+            onClick={(e) => e.stopPropagation()}
+          >
+            {(
+              <button
+                type="button"
+                onPointerDown={(e) => e.stopPropagation()}
+                onClick={(e) => {
+                  e.stopPropagation();
+                  void tauriApi.openCanvasMode();
+                }}
+                className="grid size-5 place-items-center rounded text-white/50 hover:bg-white/10 hover:text-white transition-colors cursor-pointer"
+                title="Open Canvas"
+                aria-label="Open Canvas"
+              >
+                <ArrowUpRight size={12} strokeWidth={1.8} />
+              </button>
+            )}
             <button
               type="button"
+              onPointerDown={(e) => e.stopPropagation()}
               onClick={(e) => {
                 e.stopPropagation();
-                handleBack();
+                closeTray();
               }}
-              className="flex items-center gap-1 h-6 rounded-md px-1.5 -ml-1 text-[11px] font-mono text-white/60 hover:bg-white/10 hover:text-white transition-colors cursor-pointer"
-              title="Back to notes list"
+              className="grid size-5 place-items-center rounded text-white/50 hover:bg-white/10 hover:text-white transition-colors cursor-pointer"
+              title="Hide to System Tray (✕)"
+              aria-label="Hide to System Tray"
             >
-              <ArrowLeft size={12} />
-              <span>Back</span>
+              <X size={12} strokeWidth={1.8} />
             </button>
-          ) : (
-            <Mark size={14} className="shrink-0" />
-          )}
-          <span className="font-mono text-[9.5px] font-semibold uppercase tracking-[0.16em] text-white/50 group-hover/topbar:text-white/80 transition-colors">
-            {activeNote ? "EDIT NOTE" : "DESK TRAY"}
-          </span>
+          </div>
         </div>
 
-        <div
-          className="flex items-center gap-1 shrink-0 z-20"
-          onClick={(e) => e.stopPropagation()}
-        >
-          <button
-            type="button"
-            onClick={() => void tauriApi.openCanvasMode()}
-            className="grid size-6 place-items-center rounded-md text-white/40 hover:bg-white/10 hover:text-white transition-colors cursor-pointer"
-            title="Open Canvas"
-            aria-label="Open Canvas"
+        {/* Lower note collection container: smooth fade with 100% scale */}
+        <div className="pt-2 flex flex-1 flex-col overflow-hidden min-h-0 scale-100">
+              <AnimatePresence mode="wait" initial={false}>
+                {activeNote ? (
+          /* ---- IN-TRAY PROPER NOTE EDITOR ---- */
+          <motion.div
+            key={`editor-${activeNote.id}`}
+            initial={{ opacity: 0 }}
+            animate={{ opacity: 1 }}
+            exit={{ opacity: 0 }}
+            className="flex flex-1 flex-col overflow-hidden px-1 scale-100"
           >
-            <ArrowUpRight size={13} strokeWidth={1.8} />
-          </button>
-          <button
-            type="button"
-            onClick={() => {
-              if (isTransitioning.current) return;
-              setDrawerOpen(false);
-              setExpanded(false);
-            }}
-            className="grid size-6 place-items-center rounded-md text-white/40 hover:bg-white/10 hover:text-white transition-colors cursor-pointer"
-            title="Minimize to Pill (—)"
-            aria-label="Minimize to Pill"
-          >
-            <Minus size={13} strokeWidth={2} />
-          </button>
-          <button
-            type="button"
-            onClick={() => {
-              setDrawerOpen(false);
-              setExpanded(false);
-              void getCurrentWindow().hide();
-            }}
-            className="grid size-6 place-items-center rounded-md text-white/40 hover:bg-white/10 hover:text-white transition-colors cursor-pointer"
-            title="Hide to System Tray (✕)"
-            aria-label="Hide to System Tray"
-          >
-            <X size={13} strokeWidth={1.8} />
-          </button>
-        </div>
-      </div>
-
-      {activeNote ? (
-        /* ---- IN-TRAY PROPER NOTE EDITOR ---- */
-        <div className="flex flex-1 flex-col overflow-hidden px-1">
-          {/* Note Toolbar: Type, Bold, Italic, Tasks/Text Mode, Image, Delete */}
-          <div className="flex items-center justify-between gap-1 pb-2 border-b border-white/[0.07]">
+            {/* Note Toolbar: Type, Bold, Italic, Tasks/Text Mode, Image, Delete */}
+            <div className="flex items-center justify-between gap-1 pb-2 border-b border-white/[0.07]">
             {/* Shelf/Category selector */}
             <div className="relative">
               <button
@@ -550,24 +754,18 @@ export function TrayCompanion() {
               <button
                 type="button"
                 onMouseDown={(e) => e.preventDefault()}
-                onClick={() => {
-                  const nextBold = !activeNote.is_bold;
-                  editActive({ is_bold: nextBold });
-                }}
-                className={cx("icon-btn !size-6 cursor-pointer", activeNote.is_bold && "!bg-white/20 !text-white")}
-                title="Toggle Bold"
+                onClick={() => handleToolbarFormat("bold")}
+                className={cx("icon-btn !size-6 cursor-pointer", isBoldActive && "!bg-white/20 !text-white")}
+                title="Toggle Bold (Ctrl+B)"
               >
                 <Bold size={11.5} strokeWidth={2.4} />
               </button>
               <button
                 type="button"
                 onMouseDown={(e) => e.preventDefault()}
-                onClick={() => {
-                  const nextItalic = !activeNote.is_italic;
-                  editActive({ is_italic: nextItalic });
-                }}
-                className={cx("icon-btn !size-6 cursor-pointer", activeNote.is_italic && "!bg-white/20 !text-white")}
-                title="Toggle Italic"
+                onClick={() => handleToolbarFormat("italic")}
+                className={cx("icon-btn !size-6 cursor-pointer", isItalicActive && "!bg-white/20 !text-white")}
+                title="Toggle Italic (Ctrl+I)"
               >
                 <Italic size={11.5} strokeWidth={2.4} />
               </button>
@@ -628,22 +826,24 @@ export function TrayCompanion() {
           {/* Title Input */}
           <input
             type="text"
-            value={cleanText(activeNote.title)}
+            value={activeNote.title ?? ""}
             onChange={(e) => editActive({ title: e.target.value })}
+            onKeyDown={(e) => e.stopPropagation()}
+            data-undo="title"
             placeholder="Untitled"
             className="w-full mt-2.5 bg-transparent text-[16px] font-semibold text-ink-1 outline-none placeholder:text-ink-4/60"
             style={{
               fontFamily: fontStack(activeNote.font_family),
-              fontWeight: activeNote.is_bold ? 700 : 560,
-              fontStyle: activeNote.is_italic ? "italic" : "normal",
+              fontWeight: 560,
             }}
           />
 
           {/* Media preview if present */}
           {(() => {
-            const images = (activeNote.media_urls && activeNote.media_urls.length > 0)
+            const rawImages = (activeNote.media_urls && activeNote.media_urls.length > 0)
               ? activeNote.media_urls
               : (activeNote.media_url ? [activeNote.media_url] : []);
+            const images = rawImages.filter((img) => img && typeof img === "string" && img.trim().length > 0);
             if (images.length === 0) return null;
             return (
               <div className="mt-2">
@@ -651,15 +851,21 @@ export function TrayCompanion() {
                   {images.map((imgUrl, idx) => (
                     <div
                       key={`tray-img-${idx}`}
-                      onClick={() => setPreviewImage(imgUrl)}
-                      className="relative group aspect-video rounded-lg overflow-hidden bg-black/40 border border-white/10 flex items-center justify-center cursor-pointer hover:border-white/30 transition-all"
-                      title="Click to preview full image"
+                      onClick={() => {
+                        setPreviewImage(imgUrl);
+                        setZoomLevel(1);
+                      }}
+                      className="relative group aspect-video min-h-[80px] rounded-lg overflow-hidden bg-black/50 border border-white/10 flex items-center justify-center cursor-pointer hover:border-white/30 transition-all"
+                      title="Click to zoom & inspect full image"
                     >
                       <img
                         src={imgUrl}
                         alt=""
-                        className="w-full h-full object-cover rounded opacity-95 transition-transform duration-200 group-hover:scale-105"
-                        onError={(e) => (e.currentTarget.style.display = "none")}
+                        className="w-full h-full object-contain rounded opacity-95 transition-transform duration-200 group-hover:scale-105"
+                        onError={(e) => {
+                          const parent = e.currentTarget.parentElement;
+                          if (parent) parent.style.display = "none";
+                        }}
                       />
                       <button
                         type="button"
@@ -680,134 +886,108 @@ export function TrayCompanion() {
           })()}
 
           {/* Editor: Basic Note freeform writing vs Tasks mode */}
-          <div className="flex-1 min-h-0 mt-2 overflow-y-auto scroll">
+          <div data-undo="body" className="flex-1 min-h-0 mt-2 overflow-y-auto scroll">
             {!isTasksMode ? (
-              <textarea
-                value={fullText}
+              <div
+                key="rich-editor"
+                ref={initEditor}
+                contentEditable
+                suppressContentEditableWarning
+                onInput={handleEditorInput}
                 onKeyDown={(e) => {
                   const meta = e.ctrlKey || e.metaKey;
                   if (meta && e.key.toLowerCase() === "b") {
                     e.preventDefault();
-                    editActive({ is_bold: !activeNote.is_bold });
-                  } else if (meta && e.key.toLowerCase() === "i") {
+                    handleToolbarFormat("bold");
+                    return;
+                  }
+                  if (meta && e.key.toLowerCase() === "i") {
                     e.preventDefault();
-                    editActive({ is_italic: !activeNote.is_italic });
-                  } else if (e.key === "Enter") {
-                    const textarea = e.currentTarget;
-                    const val = textarea.value;
-                    const selStart = textarea.selectionStart;
-                    const selEnd = textarea.selectionEnd;
-
-                    const lineStart = val.lastIndexOf("\n", selStart - 1) + 1;
-                    const currentLine = val.substring(lineStart, selStart);
-                    const match = currentLine.match(/^(\s*[-*•]\s+)/);
-
-                    if (match) {
-                      const bulletPrefix = match[1];
-                      const lineContent = currentLine.substring(bulletPrefix.length).trim();
-
-                      if (lineContent === "") {
-                        e.preventDefault();
-                        const nextVal = val.substring(0, lineStart) + val.substring(selEnd);
-                        handleTextChange(nextVal);
-                        requestAnimationFrame(() => {
-                          textarea.value = nextVal;
-                          textarea.setSelectionRange(lineStart, lineStart);
-                        });
-                      } else {
-                        e.preventDefault();
-                        const insertion = "\n" + bulletPrefix;
-                        const nextVal = val.substring(0, selStart) + insertion + val.substring(selEnd);
-                        const nextPos = selStart + insertion.length;
-                        handleTextChange(nextVal);
-                        requestAnimationFrame(() => {
-                          textarea.value = nextVal;
-                          textarea.setSelectionRange(nextPos, nextPos);
-                        });
-                      }
-                    }
-                  } else if (e.key === "Backspace") {
-                    const textarea = e.currentTarget;
-                    const val = textarea.value;
-                    const selStart = textarea.selectionStart;
-                    const selEnd = textarea.selectionEnd;
-
-                    if (selStart === selEnd) {
-                      const lineStart = val.lastIndexOf("\n", selStart - 1) + 1;
-                      const currentLine = val.substring(lineStart, selStart);
-                      const match = currentLine.match(/^(\s*[-*•]\s+)$/);
-                      if (match) {
-                        e.preventDefault();
-                        const nextVal = val.substring(0, lineStart) + val.substring(selEnd);
-                        handleTextChange(nextVal);
-                        requestAnimationFrame(() => {
-                          textarea.value = nextVal;
-                          textarea.setSelectionRange(lineStart, lineStart);
-                        });
-                      }
-                    }
+                    handleToolbarFormat("italic");
+                    return;
+                  }
+                  if (editorRef.current && handleRichEditorKeyDown(e, editorRef.current, handleEditorInput)) {
+                    return;
                   }
                 }}
-                onChange={(e) => handleTextChange(e.target.value)}
-                placeholder="Start writing..."
-                className="w-full h-full min-h-[180px] resize-none bg-transparent text-[12.5px] leading-relaxed text-ink-2 outline-none placeholder:text-ink-4/50 scroll"
+                onKeyUp={updateActiveFormatting}
+                onMouseUp={updateActiveFormatting}
+                className="w-full h-full min-h-[180px] whitespace-pre-wrap break-words bg-transparent text-[12.5px] leading-relaxed text-ink-2 outline-none scroll select-text"
                 style={{
                   fontFamily: fontStack(activeNote.font_family),
-                  fontWeight: activeNote.is_bold ? 650 : 420,
-                  fontStyle: activeNote.is_italic ? "italic" : "normal",
                 }}
               />
             ) : (
-              <div className="space-y-1.5">
-                {activeNote.content.map((item, index) => (
-                  <div key={item.id} className="flex items-center gap-2 group">
-                    <button
-                      type="button"
-                      onClick={() => {
-                        const content = activeNote.content.map((c) =>
-                          c.id === item.id ? { ...c, completed: !c.completed } : c,
-                        );
-                        editActive({ content });
-                      }}
-                      className={cx("shrink-0", item.is_todo ? "check" : "size-3 rounded-full bg-white/20")}
-                    >
-                      {item.is_todo && item.completed && <Check size={8} strokeWidth={3} />}
-                    </button>
-                    <input
-                      type="text"
-                      value={item.text}
-                      onChange={(e) => {
-                        const content = activeNote.content.map((c) =>
-                          c.id === item.id ? { ...c, text: e.target.value } : c,
-                        );
-                        editActive({ content });
-                      }}
-                      onKeyDown={(e) => {
-                        if (e.key === "Enter") {
-                          e.preventDefault();
-                          const updated = [...activeNote.content];
-                          updated.splice(index + 1, 0, {
-                            id: uid("line"),
-                            text: "",
-                            is_todo: true,
-                            completed: false,
-                          });
+              <div key="task-list" className="space-y-1">
+                {activeNote.content.map((item, index) => {
+                  const cleanItemText = item.text.replace(/^\s*[-*•]\s+/, "");
+                  return (
+                    <div key={item.id} className="flex items-start gap-3 w-full py-1 group">
+                      <button
+                        type="button"
+                        onClick={() => {
+                          const content = activeNote.content.map((c) =>
+                            c.id === item.id ? { ...c, completed: !c.completed } : c,
+                          );
+                          editActive({ content });
+                        }}
+                        className={cx(
+                          "border rounded-md w-4 h-4 mt-[2px] bg-transparent cursor-pointer check-indicator-layer flex items-center justify-center shrink-0 transition-all duration-200 outline-none select-none",
+                          item.completed
+                            ? "border-white bg-white text-black"
+                            : "border-white/20 hover:border-white/50 text-transparent",
+                        )}
+                      >
+                        <Check size={11} strokeWidth={3.5} className={cx(item.completed ? "opacity-100" : "opacity-0")} />
+                      </button>
+                      <TaskLineInput
+                        value={cleanItemText}
+                        onChange={(text) => {
+                          const content = activeNote.content.map((c) =>
+                            c.id === item.id ? { ...c, text: text.replace(/^\s*[-*•]\s+/, "") } : c,
+                          );
+                          editActive({ content });
+                        }}
+                        onKeyDown={(e) => {
+                          if (e.key === "Enter") {
+                            e.preventDefault();
+                            const updated = [...activeNote.content];
+                            updated.splice(index + 1, 0, {
+                              id: uid("line"),
+                              text: "",
+                              is_todo: true,
+                              completed: false,
+                            });
+                            editActive({ content: updated });
+                          }
+                          if (e.key === "Backspace" && cleanItemText === "" && activeNote.content.length > 1) {
+                            e.preventDefault();
+                            const updated = activeNote.content.filter((c) => c.id !== item.id);
+                            editActive({ content: updated });
+                          }
+                        }}
+                        placeholder="Task item..."
+                        className={cx(
+                          "flex-1 bg-transparent text-[12.5px] leading-[1.5] transition-all duration-150",
+                          item.completed ? "line-through text-ink-4 opacity-50" : "text-ink-1 opacity-90",
+                        )}
+                        style={{
+                          fontFamily: fontStack(activeNote.font_family),
+                        }}
+                      />
+                      <button
+                        type="button"
+                        onClick={() => {
+                          const updated = activeNote.content.filter((c) => c.id !== item.id);
                           editActive({ content: updated });
-                        }
-                      }}
-                      placeholder="Task item..."
-                      className={cx(
-                        "flex-1 bg-transparent text-[12px] text-ink-2 outline-none",
-                        item.completed && "line-through text-ink-4",
-                      )}
-                      style={{
-                        fontFamily: fontStack(activeNote.font_family),
-                        fontWeight: activeNote.is_bold ? 620 : 420,
-                        fontStyle: activeNote.is_italic ? "italic" : "normal",
-                      }}
-                    />
-                  </div>
-                ))}
+                        }}
+                        className="grid size-4 shrink-0 place-items-center rounded text-white/30 opacity-0 group-hover:opacity-100 hover:text-white"
+                      >
+                        <X size={10} strokeWidth={2} />
+                      </button>
+                    </div>
+                  );
+                })}
                 <button
                   type="button"
                   onClick={() => {
@@ -826,38 +1006,48 @@ export function TrayCompanion() {
               </div>
             )}
           </div>
-        </div>
+        </motion.div>
       ) : (
         /* ---- DESK TRAY MAIN MENU (SCREENSHOT 3: CLEAN, UNCLUTTERED, OPEN PROFILE) ---- */
-        <div className="flex flex-1 flex-col overflow-hidden px-1 space-y-2">
+        <motion.div
+          key="main-menu"
+          initial={{ opacity: 0 }}
+          animate={{ opacity: 1 }}
+          exit={{ opacity: 0 }}
+          className="flex flex-1 flex-col overflow-hidden px-1 space-y-2 scale-100"
+        >
           {/* + New note button matching Screenshot 3 */}
           <button
             type="button"
             onClick={handleCreate}
-            className="flex h-11 w-full items-center gap-2.5 rounded-[14px] bg-white/[0.07] px-3.5 text-[13px] font-medium text-white/90 shadow-[inset_0_0_0_1px_rgba(255,255,255,0.08)] transition-all hover:bg-white/[0.12] active:scale-[0.99]"
+            className="flex h-11 w-full items-center gap-2.5 rounded-[14px] bg-white/[0.07] px-3.5 text-[13px] font-medium text-white/90 shadow-[inset_0_0_0_1px_rgba(255,255,255,0.08)] transition-all hover:bg-white/[0.12] active:scale-[0.99] scale-100 cursor-pointer whitespace-nowrap overflow-hidden text-ellipsis truncate"
           >
-            <Plus size={15} strokeWidth={2} className="text-white/80" />
-            <span>New note</span>
-            <span className="ml-auto rounded-md bg-white/[0.06] px-1.5 py-0.5 font-mono text-[10px] text-white/40 border border-white/[0.08]">
+            <span className="inline-flex shrink-0">
+              <Plus size={15} strokeWidth={2} className="text-white/80 shrink-0" />
+            </span>
+            <span className="whitespace-nowrap overflow-hidden text-ellipsis truncate">New note</span>
+            <span className="ml-auto shrink-0 whitespace-nowrap rounded-md bg-white/[0.06] px-1.5 py-0.5 font-mono text-[10px] text-white/40 border border-white/[0.08]">
               ⌘N
             </span>
           </button>
 
           {/* Pull up an old note input matching Screenshot 3 */}
-          <div className="relative flex items-center h-11 w-full rounded-[14px] bg-white/[0.035] px-3.5 shadow-[inset_0_0_0_1px_rgba(255,255,255,0.06)] transition-all focus-within:bg-white/[0.06] focus-within:shadow-[inset_0_0_0_1px_rgba(255,255,255,0.14)]">
+          <div
+            className="relative flex items-center h-11 w-full rounded-[14px] bg-white/[0.035] px-3.5 shadow-[inset_0_0_0_1px_rgba(255,255,255,0.06)] transition-all focus-within:bg-white/[0.06] focus-within:shadow-[inset_0_0_0_1px_rgba(255,255,255,0.14)] scale-100 whitespace-nowrap overflow-hidden"
+          >
             <Search size={14} className="text-white/35 mr-2.5 pointer-events-none shrink-0" />
             <input
               type="text"
               value={filter}
               onChange={(e) => setFilter(e.target.value)}
               placeholder="Pull up an old note"
-              className="flex-1 bg-transparent text-[13px] text-white/90 placeholder:text-white/30 outline-none min-w-0"
+              className="flex-1 bg-transparent text-[13px] text-white/90 placeholder:text-white/30 outline-none min-w-0 whitespace-nowrap overflow-hidden text-ellipsis truncate"
             />
             {filter ? (
               <button
                 type="button"
                 onClick={() => setFilter("")}
-                className="text-white/40 hover:text-white p-1"
+                className="text-white/40 hover:text-white p-1 shrink-0"
               >
                 <X size={12} />
               </button>
@@ -866,85 +1056,97 @@ export function TrayCompanion() {
                 type="button"
                 onClick={() => setDrawerOpen((prev) => !prev)}
                 className={cx(
-                  "ml-auto flex items-center gap-1 rounded-md px-1.5 py-0.5 font-mono text-[9.5px] uppercase tracking-wider transition-colors border",
+                  "ml-auto flex items-center gap-1 rounded-md px-1.5 py-0.5 font-mono text-[9.5px] uppercase tracking-wider transition-colors border scale-100 cursor-pointer shrink-0 whitespace-nowrap",
                   drawerOpen || selectedShelf
                     ? "bg-white/15 text-white border-white/25"
                     : "bg-white/[0.04] text-white/40 border-white/[0.06] hover:text-white/70 hover:bg-white/[0.08]",
                 )}
                 title="Toggle Category Filter Drawer"
               >
-                <span>{selectedShelf ? selectedShelf : "FIND"}</span>
-                <ChevronDown
-                  size={10}
-                  className={cx("transition-transform duration-200", drawerOpen && "rotate-180")}
-                />
+                <span className="whitespace-nowrap overflow-hidden text-ellipsis truncate">{selectedShelf ? selectedShelf : "FIND"}</span>
+                <span
+                  className="inline-flex transition-transform duration-200 shrink-0"
+                  style={{ transform: drawerOpen ? "rotate(180deg)" : "rotate(0deg)" }}
+                >
+                  <ChevronDown size={10} />
+                </span>
               </button>
             )}
           </div>
 
-          {/* Category Filter Drawer Container (Always visible, smoothly scrollable, clean) */}
-          <div className="py-1">
-            <div
-              ref={grabScrollRef}
-              onPointerDown={onPointerDownGrab}
-              onPointerMove={onPointerMoveGrab}
-              onPointerUp={onPointerUpGrab}
-              onPointerLeave={onPointerUpGrab}
-              className="flex items-center gap-1.5 overflow-x-auto scrollbar-none no-scrollbar cursor-grab active:cursor-grabbing select-none"
-              style={{ scrollbarWidth: "none", msOverflowStyle: "none" }}
-            >
-              <button
-                type="button"
-                onClick={() => {
-                  if (!dragScrollState.current.moved) setSelectedShelf(null);
-                }}
-                className={cx(
-                  "shrink-0 px-2.5 py-1 rounded-full text-[10.5px] font-mono uppercase tracking-wider transition-all",
-                  selectedShelf === null
-                    ? "bg-white/20 text-white font-medium border border-white/25 shadow-sm"
-                    : "bg-white/[0.04] text-white/50 hover:bg-white/[0.08] hover:text-white/80 border border-white/[0.06]",
-                )}
+          {/* Category Filter Drawer Container */}
+          <AnimatePresence initial={false}>
+            {drawerOpen && (
+              <motion.div
+                key="category-drawer-content"
+                initial={{ opacity: 0, height: 0 }}
+                animate={{ opacity: 1, height: "auto" }}
+                exit={{ opacity: 0, height: 0 }}
+                className="overflow-hidden py-1 scale-100"
               >
-                All
-              </button>
-              {shelves.map((shelf) => {
-                const accent = accentFor(shelf, shelves);
-                const active = selectedShelf?.toLowerCase() === shelf.toLowerCase();
-                return (
+                <div
+                  ref={grabScrollRef}
+                  onPointerDown={onPointerDownGrab}
+                  onPointerMove={onPointerMoveGrab}
+                  onPointerUp={onPointerUpGrab}
+                  onPointerLeave={onPointerUpGrab}
+                  className="flex items-center gap-1.5 overflow-x-auto scrollbar-none no-scrollbar cursor-grab active:cursor-grabbing select-none"
+                  style={{ scrollbarWidth: "none", msOverflowStyle: "none" }}
+                >
                   <button
-                    key={shelf}
                     type="button"
                     onClick={() => {
-                      if (!dragScrollState.current.moved) {
-                        setSelectedShelf(active ? null : shelf);
-                      }
+                      if (!dragScrollState.current.moved) setSelectedShelf(null);
                     }}
                     className={cx(
-                      "shrink-0 flex items-center gap-1.5 px-2.5 py-1 rounded-full text-[10.5px] font-mono uppercase tracking-wider transition-all",
-                      active
+                      "shrink-0 px-2.5 py-1 rounded-full text-[10.5px] font-mono uppercase tracking-wider transition-all cursor-pointer whitespace-nowrap overflow-hidden text-ellipsis truncate",
+                      selectedShelf === null
                         ? "bg-white/20 text-white font-medium border border-white/25 shadow-sm"
                         : "bg-white/[0.04] text-white/50 hover:bg-white/[0.08] hover:text-white/80 border border-white/[0.06]",
                     )}
                   >
-                    <span className="size-1.5 rounded-full" style={{ backgroundColor: accent }} />
-                    <span>{shelf}</span>
+                    All
                   </button>
-                );
-              })}
-            </div>
-          </div>
+                  {shelves.map((shelf) => {
+                    const accent = accentFor(shelf, shelves);
+                    const active = selectedShelf?.toLowerCase() === shelf.toLowerCase();
+                    return (
+                      <button
+                        key={shelf}
+                        type="button"
+                        onClick={() => {
+                          if (!dragScrollState.current.moved) {
+                            setSelectedShelf(active ? null : shelf);
+                          }
+                        }}
+                        className={cx(
+                          "shrink-0 flex items-center gap-1.5 px-2.5 py-1 rounded-full text-[10.5px] font-mono uppercase tracking-wider transition-all cursor-pointer whitespace-nowrap overflow-hidden text-ellipsis truncate",
+                          active
+                            ? "bg-white/20 text-white font-medium border border-white/25 shadow-sm"
+                            : "bg-white/[0.04] text-white/50 hover:bg-white/[0.08] hover:text-white/80 border border-white/[0.06]",
+                        )}
+                      >
+                        <span className="size-1.5 rounded-full shrink-0" style={{ backgroundColor: accent }} />
+                        <span className="whitespace-nowrap overflow-hidden text-ellipsis truncate">{shelf}</span>
+                      </button>
+                    );
+                  })}
+                </div>
+              </motion.div>
+            )}
+          </AnimatePresence>
 
           {/* RECENT Label matching Screenshot 3 */}
-          <div className="pt-1.5 px-1">
-            <span className="font-mono text-[9.5px] uppercase tracking-[0.16em] text-white/30">
+          <div className="pt-1.5 px-1 scale-100 whitespace-nowrap overflow-hidden">
+            <span className="font-mono text-[9.5px] uppercase tracking-[0.16em] text-white/30 whitespace-nowrap overflow-hidden text-ellipsis truncate">
               RECENT
             </span>
           </div>
 
           {/* Recent Notes List matching Screenshot 3 */}
-          <div className="flex-1 overflow-y-auto space-y-0.5 scroll pr-0.5">
+          <div className="flex-1 overflow-y-auto space-y-0.5 scroll pr-0.5 scale-100">
             {filteredNotes.length === 0 ? (
-              <p className="py-6 text-center text-[11.5px] text-white/35">
+              <p className="py-6 text-center text-[11.5px] text-white/35 whitespace-nowrap overflow-hidden text-ellipsis truncate">
                 No matching notes found.
               </p>
             ) : (
@@ -954,20 +1156,20 @@ export function TrayCompanion() {
                     key={note.id}
                     type="button"
                     onClick={() => openNoteById(note.id)}
-                    className="flex w-full items-center gap-3 rounded-[12px] px-2 py-2 text-left transition-colors hover:bg-white/[0.05] group"
+                    className="flex w-full items-center gap-3 rounded-[12px] px-2 py-2 text-left transition-colors hover:bg-white/[0.05] group scale-100 cursor-pointer whitespace-nowrap overflow-hidden"
                   >
                     <span
                       className="h-7 w-[2px] shrink-0 rounded-full bg-white/70 group-hover:bg-white transition-colors"
                     />
-                    <div className="min-w-0 flex-1">
-                      <span className="block truncate text-[13px] font-medium text-white/90">
+                    <div className="min-w-0 flex-1 whitespace-nowrap overflow-hidden text-ellipsis truncate">
+                      <span className="block text-[13px] font-medium text-white/90 whitespace-nowrap overflow-hidden text-ellipsis truncate">
                         {cleanText(note.title) || "Untitled"}
                       </span>
-                      <span className="block truncate font-mono text-[8.5px] uppercase tracking-[0.12em] text-white/35">
+                      <span className="block font-mono text-[8.5px] uppercase tracking-[0.12em] text-white/35 whitespace-nowrap overflow-hidden text-ellipsis truncate">
                         {cleanText(note.category)}
                       </span>
                     </div>
-                    <span className="shrink-0 font-mono text-[10px] tabular-nums text-white/35">
+                    <span className="shrink-0 font-mono text-[10px] tabular-nums text-white/35 whitespace-nowrap">
                       {relativeShort(note.last_edited)}
                     </span>
                   </button>
@@ -976,43 +1178,137 @@ export function TrayCompanion() {
             )}
           </div>
 
-          {/* Back to the canvas link matching Screenshot 3 */}
-          <div className="pt-1 border-t border-white/[0.06]">
+          {/* Bottom Action Footer: Minimize to Pill and Open Canvas */}
+          <div className="pt-1.5 border-t border-white/[0.08] flex items-center justify-between px-2 scale-100 whitespace-nowrap overflow-hidden">
             <button
               type="button"
-              onClick={() => tauriApi.openCanvasMode()}
-              className="flex h-8 w-full items-center justify-between px-2 text-[12px] text-white/40 hover:text-white transition-colors"
+              onClick={() => {
+                toggleMinimize();
+              }}
+              className="flex items-center gap-1.5 text-[11.5px] font-mono text-white/50 hover:text-white transition-colors cursor-pointer shrink-0 whitespace-nowrap"
+              title="Minimize tray"
             >
-              <span>Back to the canvas</span>
-              <ArrowUpRight size={13} />
+              <Minus size={12} strokeWidth={2.4} className="shrink-0" />
+              <span className="whitespace-nowrap overflow-hidden text-ellipsis truncate">Minimize</span>
+            </button>
+
+            <button
+              type="button"
+              onClick={() => void tauriApi.openCanvasMode()}
+              className="flex items-center gap-1 text-[11.5px] font-mono text-white/50 hover:text-white transition-colors cursor-pointer shrink-0 whitespace-nowrap"
+              title="Maximize back to full canvas"
+            >
+              <span className="whitespace-nowrap overflow-hidden text-ellipsis truncate">Canvas</span>
+              <ArrowUpRight size={12} strokeWidth={2} className="shrink-0" />
             </button>
           </div>
-        </div>
+        </motion.div>
       )}
+      </AnimatePresence>
+      </div>
 
-      {/* Lightbox Preview Modal */}
+      {/* Lightbox Preview Modal with Full Interactive Zoom */}
       {previewImage && (
         <div
-          onClick={() => setPreviewImage(null)}
-          className="fixed inset-0 z-[100] flex items-center justify-center bg-black/85 backdrop-blur-md p-4 cursor-zoom-out"
+          onClick={() => {
+            setPreviewImage(null);
+            setZoomLevel(1);
+          }}
+          className="fixed inset-0 z-[100] flex flex-col items-center justify-center bg-black/90 backdrop-blur-md p-2 select-none"
         >
-          <div className="relative max-w-[90vw] max-h-[85vh] flex items-center justify-center" onClick={(e) => e.stopPropagation()}>
+          {/* Zoom & Action Controls Bar */}
+          <div
+            className="flex items-center gap-2 mb-2 z-20 bg-black/80 px-3 py-1.5 rounded-full border border-white/20 shadow-xl"
+            onClick={(e) => e.stopPropagation()}
+          >
+            <button
+              type="button"
+              onClick={() => setZoomLevel((z) => Math.max(0.5, Number((z - 0.25).toFixed(2))))}
+              className="grid size-6 place-items-center rounded text-white/70 hover:text-white hover:bg-white/10 text-[14px] font-bold cursor-pointer"
+              title="Zoom out"
+            >
+              -
+            </button>
+            <span className="font-mono text-[10px] text-white/90 min-w-[36px] text-center font-semibold">
+              {Math.round(zoomLevel * 100)}%
+            </span>
+            <button
+              type="button"
+              onClick={() => setZoomLevel((z) => Math.min(4, Number((z + 0.25).toFixed(2))))}
+              className="grid size-6 place-items-center rounded text-white/70 hover:text-white hover:bg-white/10 text-[14px] font-bold cursor-pointer"
+              title="Zoom in"
+            >
+              +
+            </button>
+            <button
+              type="button"
+              onClick={() => {
+                setZoomLevel(1);
+                setImagePan({ x: 0, y: 0 });
+              }}
+              className="ml-1 text-[9.5px] font-mono uppercase px-1.5 py-0.5 rounded bg-white/10 hover:bg-white/20 text-white/90 cursor-pointer"
+              title="Reset Zoom (100%)"
+            >
+              1:1
+            </button>
+            <span className="mx-0.5 h-3 w-px bg-white/20" />
+            <button
+              type="button"
+              onClick={() => {
+                setPreviewImage(null);
+                setZoomLevel(1);
+                setImagePan({ x: 0, y: 0 });
+              }}
+              className="grid size-6 place-items-center rounded-full text-white/70 hover:text-white hover:bg-white/10 cursor-pointer"
+              title="Close preview"
+            >
+              <X size={13} strokeWidth={2.4} />
+            </button>
+          </div>
+
+          {/* Interactive Zoomable & Pannable Viewport */}
+          <div
+            className="relative flex-1 w-full overflow-hidden flex items-center justify-center p-2 cursor-grab active:cursor-grabbing select-none"
+            onClick={(e) => e.stopPropagation()}
+            onPointerDown={handleImagePointerDown}
+            onPointerMove={handleImagePointerMove}
+            onPointerUp={handleImagePointerUp}
+            onPointerCancel={handleImagePointerUp}
+            onWheel={(e) => {
+              e.preventDefault();
+              if (e.deltaY < 0) {
+                setZoomLevel((z) => Math.min(4, Number((z + 0.25).toFixed(2))));
+              } else {
+                setZoomLevel((z) => Math.max(0.5, Number((z - 0.25).toFixed(2))));
+              }
+            }}
+          >
             <img
               src={previewImage}
               alt="Preview"
-              className="max-w-[90vw] max-h-[82vh] object-contain rounded-xl border border-white/15 shadow-2xl"
+              draggable={false}
+              style={{
+                transform: `translate3d(${imagePan.x}px, ${imagePan.y}px, 0) scale(${zoomLevel})`,
+                transformOrigin: "center center",
+                transition: isPanningImage.current ? "none" : "transform 0.1s ease-out",
+              }}
+              onClick={(e) => {
+                e.stopPropagation();
+                if (!panStartRef.current.moved) {
+                  setZoomLevel((z) => {
+                    if (z === 1) return 2;
+                    setImagePan({ x: 0, y: 0 });
+                    return 1;
+                  });
+                }
+              }}
+              className="max-w-[90vw] max-h-[75vh] object-contain rounded-xl border border-white/20 shadow-2xl select-none"
+              title="Hold and drag to move · Click to toggle 2x zoom · Scroll to zoom"
             />
-            <button
-              type="button"
-              onClick={() => setPreviewImage(null)}
-              className="absolute -top-2.5 -right-2.5 grid size-7 place-items-center rounded-full bg-black/90 text-white hover:bg-black border border-white/20 shadow-lg cursor-pointer"
-              title="Close preview"
-            >
-              <X size={14} strokeWidth={2.4} />
-            </button>
           </div>
         </div>
       )}
+      </div>
     </div>
   );
 }

@@ -8,7 +8,7 @@ use tauri::{
     image::Image,
     menu::{Menu, MenuItem},
     tray::{MouseButton, MouseButtonState, TrayIconBuilder, TrayIconEvent},
-    Emitter, Manager,
+    Manager,
 };
 
 const TRAY_ICON_BYTES: &[u8] = include_bytes!("../icons/tray_rgba.bin");
@@ -23,9 +23,24 @@ pub fn run() {
         .plugin(tauri_plugin_updater::Builder::new().build())
         .on_window_event(|window, event| {
             let label = window.label().to_string();
-            if label == "tray" {
-                if let tauri::WindowEvent::Moved(pos) = event {
-                    *commands::TRAY_WINDOW_CUSTOM_POSITION.lock().unwrap() = Some(*pos);
+
+            if let tauri::WindowEvent::Moved(pos) = event {
+                if label == "tray" {
+                    crate::commands::track_tray_window_moved(window, *pos);
+                }
+            }
+
+            if let tauri::WindowEvent::Resized(_) = event {
+                if label == "main" {
+                    if let Ok(is_min) = window.is_minimized() {
+                        if !is_min {
+                            if let Ok(is_max) = window.is_maximized() {
+                                let app = window.app_handle();
+                                let storage = app.state::<StorageManager>();
+                                let _ = storage.set_is_maximized(is_max);
+                            }
+                        }
+                    }
                 }
             }
 
@@ -50,6 +65,9 @@ pub fn run() {
                                 .flatten()
                                 .and_then(|m| m.name().cloned());
 
+                            let storage = app.state::<StorageManager>();
+                            let _ = storage.set_is_maximized(is_maximized);
+
                             *SAVED_MAIN_WINDOW_STATE.lock().unwrap() = Some(MainWindowState {
                                 is_maximized,
                                 is_fullscreen,
@@ -60,43 +78,47 @@ pub fn run() {
                         }
 
                         // X button on main → switch to floating tray companion on the same monitor
-                        if let Some(tray_win) = app.get_webview_window("tray") {
-                            let target_mon = app
-                                .get_webview_window("main")
-                                .and_then(|w| w.current_monitor().ok().flatten())
-                                .or_else(|| tray_win.current_monitor().ok().flatten())
-                                .or_else(|| tray_win.primary_monitor().ok().flatten());
-
-                            if let Some(mon) = target_mon {
-                                position_tray_on_monitor(&tray_win, &mon, false);
-                            }
-
-                            let _ = tray_win.emit("set-expanded", false);
-                            let _ = tray_win.show();
-                            let _ = tray_win.set_always_on_top(true);
-                            // Small delay then focus so the window manager registers it
-                            std::thread::sleep(std::time::Duration::from_millis(60));
-                            let _ = tray_win.set_focus();
-                        }
-                        if let Some(main_win) = app.get_webview_window("main") {
-                            let _ = main_win.hide();
-                        }
+                        let _ = open_tray_mode(app.clone());
                     } else {
-                        // X button on tray companion → just hide it
-                        if let Some(tray_win) = app.get_webview_window("tray") {
-                            let _ = tray_win.hide();
+                        // X button on tray companion / pill → just hide it
+                        if let Some(win) = app.get_webview_window(&label) {
+                            let _ = win.hide();
                         }
                     }
                 });
             }
         })
-        .setup(|app| {
-            // Pre-position the tray companion off-screen before first use
-            if let Some(tray_win) = app.get_webview_window("tray") {
-                let app_handle = app.handle().clone();
-                position_tray_window(&app_handle, &tray_win, false);
+        .on_menu_event(|app, event| {
+            match event.id.as_ref() {
+                "maximize" | "show" => {
+                    let _ = open_canvas_mode(app.clone());
+                }
+                "quit" => {
+                    if let Some(main_win) = app.get_webview_window("main") {
+                        if let Ok(is_max) = main_win.is_maximized() {
+                            let storage = app.state::<StorageManager>();
+                            let _ = storage.set_is_maximized(is_max);
+                        }
+                    }
+                    app.exit(0);
+                }
+                _ => {}
             }
-
+        })
+        .setup(|app| {
+            // Force absolute transparency on window background wrapper layer
+            if let Some(tray_win) = app.get_webview_window("tray") {
+                let _ = tray_win.set_decorations(false);
+                let _ = tray_win.set_shadow(false);
+            }
+            // Launch Window State Persistence Engine: Restore maximize state
+            if let Some(main_win) = app.get_webview_window("main") {
+                let _ = main_win.set_decorations(false);
+                let storage = app.state::<StorageManager>();
+                if storage.get_is_maximized() {
+                    let _ = main_win.maximize();
+                }
+            }
             // Native Windows taskbar notification tray icon
             let show_item = MenuItem::with_id(app, "show", "Open Canvas", true, None::<&str>)?;
             let tray_item = MenuItem::with_id(app, "tray", "Switch to Desk Tray", true, None::<&str>)?;
@@ -157,6 +179,7 @@ pub fn run() {
             delete_category,
             toggle_category_collapse,
             get_settings,
+            get_default_storage_path,
             update_settings,
             select_storage_directory,
             export_data,
@@ -169,9 +192,17 @@ pub fn run() {
             open_tray_mode,
             open_canvas_mode,
             resize_tray_window,
+            sync_tray_window_height,
+            sync_tray_window_bounds,
+            snap_tray_window,
+            set_tray_minimized,
+            collapse_tray_to_pill,
+            expand_tray_from_pill,
             start_drag,
             save_tray_position,
-            restart_app
+            restart_app,
+            quit_app,
+            show_tray_context_menu
         ])
         .run(tauri::generate_context!())
         .expect("error while running DoIT tauri application");

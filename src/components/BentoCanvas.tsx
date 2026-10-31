@@ -1,6 +1,6 @@
 import type { PointerEvent as ReactPointerEvent } from "react";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
-import { Plus } from "lucide-react";
+import { Check, FolderPlus, Plus, X } from "lucide-react";
 import type { NoteItem } from "../api/tauriBridge";
 import { cx, longDate, noteMatches, relativeShort } from "../lib/text";
 import { CategoryShelf } from "./CategoryShelf";
@@ -16,6 +16,7 @@ interface BentoCanvasProps {
   onToggleCollapse: (shelf: string) => void;
   onOpen: (note: NoteItem, rect: DOMRect) => void;
   onNewNote: (shelf?: string) => void;
+  onNewCategory?: (name: string) => void;
   onToggleItem: (note: NoteItem, itemId: string) => void;
   onMoveCategory: (id: string, category: string) => void;
   onDeleteCategory?: (shelf: string) => void;
@@ -56,12 +57,15 @@ export function BentoCanvas({
   onToggleCollapse,
   onOpen,
   onNewNote,
+  onNewCategory,
   onToggleItem,
   onMoveCategory,
   onDeleteCategory,
   onReorderNotes,
   onContextMenu,
 }: BentoCanvasProps) {
+  const [isAddingCategory, setIsAddingCategory] = useState(false);
+  const [newCatName, setNewCatName] = useState("");
   const [drag, setDrag] = useState<DragState | null>(null);
   const [over, setOver] = useState<string | null>(null);
   const [pressed, setPressed] = useState<string | null>(null);
@@ -275,11 +279,71 @@ export function BentoCanvas({
             </p>
           </div>
 
-          <button type="button" onClick={() => onNewNote()} className="btn mt-1 shrink-0">
-            <Plus size={14} strokeWidth={1.9} />
-            <span>New note</span>
-            <span className="kbd ml-1">⌘N</span>
-          </button>
+          <div className="flex items-center gap-2 mt-1 shrink-0">
+            {isAddingCategory ? (
+              <div className="flex items-center gap-1 rounded-xl bg-white/[0.06] border border-white/20 p-1">
+                <input
+                  type="text"
+                  autoFocus
+                  value={newCatName}
+                  onChange={(e) => setNewCatName(e.target.value)}
+                  onKeyDown={(e) => {
+                    if (e.key === "Enter" && newCatName.trim()) {
+                      onNewCategory?.(newCatName.trim());
+                      setNewCatName("");
+                      setIsAddingCategory(false);
+                    } else if (e.key === "Escape") {
+                      setIsAddingCategory(false);
+                      setNewCatName("");
+                    }
+                  }}
+                  placeholder="Category name..."
+                  className="h-7 w-32 rounded-lg bg-black/40 px-2 text-[12px] text-white outline-none placeholder:text-white/30"
+                />
+                <button
+                  type="button"
+                  onClick={() => {
+                    if (newCatName.trim()) {
+                      onNewCategory?.(newCatName.trim());
+                      setNewCatName("");
+                      setIsAddingCategory(false);
+                    }
+                  }}
+                  className="grid size-7 place-items-center rounded-lg bg-white/10 hover:bg-white/20 text-white cursor-pointer"
+                  title="Confirm"
+                >
+                  <Check size={12} strokeWidth={2.5} />
+                </button>
+                <button
+                  type="button"
+                  onClick={() => {
+                    setIsAddingCategory(false);
+                    setNewCatName("");
+                  }}
+                  className="grid size-7 place-items-center rounded-lg hover:bg-white/10 text-white/50 hover:text-white cursor-pointer"
+                  title="Cancel"
+                >
+                  <X size={12} strokeWidth={2.5} />
+                </button>
+              </div>
+            ) : (
+              <button
+                type="button"
+                onClick={() => setIsAddingCategory(true)}
+                className="flex h-9 items-center gap-1.5 rounded-xl border border-white/10 bg-white/[0.04] px-3 text-[12.5px] font-medium text-ink-2 hover:bg-white/[0.09] hover:text-white transition-all cursor-pointer"
+                title="Create a new shelf/category"
+              >
+                <FolderPlus size={13.5} strokeWidth={1.8} />
+                <span>New category</span>
+              </button>
+            )}
+
+            <button type="button" onClick={() => onNewNote()} className="btn">
+              <Plus size={14} strokeWidth={1.9} />
+              <span>New note</span>
+              <span className="kbd ml-1">⌘N</span>
+            </button>
+          </div>
         </header>
 
         <div className="mt-8 space-y-5">

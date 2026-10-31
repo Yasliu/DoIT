@@ -27,8 +27,22 @@
         "title": "DoIT Companion",
         "label": "tray",
         "url": "index.html?window=tray",
-        "width": 160,
-        "height": 64,
+        "width": 380,
+        "height": 480,
+        "decorations": false,
+        "transparent": true,
+        "shadow": false,
+        "alwaysOnTop": true,
+        "resizable": false,
+        "visible": false,
+        "skipTaskbar": true
+      },
+      {
+        "title": "DoIT Pill",
+        "label": "pill",
+        "url": "index.html?window=pill",
+        "width": 180,
+        "height": 44,
         "decorations": false,
         "transparent": true,
         "shadow": false,
@@ -54,8 +68,8 @@
   },
   "bundle": {
     "active": true,
-    "targets": "all",
-    "resources": ["../WebView2Loader.dll"],
+    "targets": ["nsis"],
+    "resources": [],
     "windows": {
       "nsis": {
         "installerHooks": "hooks.nsh"

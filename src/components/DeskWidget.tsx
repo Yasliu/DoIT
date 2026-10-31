@@ -1,6 +1,8 @@
 import { useEffect, useRef, useState } from "react";
 import { ArrowUpRight, Plus, Search, X } from "lucide-react";
 import type { NoteItem } from "../api/tauriBridge";
+import { tauriApi } from "../api/tauriBridge";
+import { Mark } from "./Mark";
 import { springTo } from "../lib/spring";
 import { accentFor, cx, relativeShort } from "../lib/text";
 
@@ -399,8 +401,13 @@ export function DeskWidget({
             else show();
           }
         }}
+        onContextMenu={(e) => {
+          e.preventDefault();
+          e.stopPropagation();
+          void tauriApi.showTrayContextMenu();
+        }}
         className={cx(
-          "glass flex h-10 select-none items-center gap-2.5 rounded-full pl-3 pr-2",
+          "glass flex h-10 select-none items-center gap-2.5 rounded-xl pl-3 pr-2",
           "cursor-grab active:cursor-grabbing",
         )}
         style={{
@@ -408,10 +415,7 @@ export function DeskWidget({
             "inset 0 0 0 1px rgba(255,255,255,0.1), inset 0 1px 0 rgba(255,255,255,0.09), 0 22px 40px -22px rgba(0,0,0,0.95)",
         }}
       >
-        <span className="relative grid size-[15px] place-items-center">
-          <span className="absolute size-[15px] rounded-full border border-white/25" />
-          <span className="size-[5px] rounded-full bg-white" />
-        </span>
+        <Mark size={16} className="pointer-events-none shrink-0" />
         <span className="text-[11.5px] font-medium tracking-[0.005em] text-ink-2">Tray</span>
         <span className="grid size-6 place-items-center rounded-full text-ink-4 transition-colors hover:bg-white/10 hover:text-ink-1">
           {open ? <X size={11} strokeWidth={2} /> : <Plus size={12} strokeWidth={2} />}

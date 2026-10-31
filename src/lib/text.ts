@@ -77,22 +77,21 @@ export function uid(prefix: string): string {
 export function cleanText(str: string | null | undefined): string {
   if (!str) return "";
   let s = str.trim();
-  for (let i = 0; i < 5; i++) {
+  // Remove escaped quotes and backslashes
+  s = s.replace(/\\+"/g, "").replace(/\\+/g, "");
+  for (let i = 0; i < 10; i++) {
     const prev = s;
     s = s.trim();
-    if (
+    while (
       (s.startsWith('"') && s.endsWith('"') && s.length >= 2) ||
       (s.startsWith("'") && s.endsWith("'") && s.length >= 2)
     ) {
       s = s.slice(1, -1).trim();
     }
-    if (s.startsWith('\\"') && s.endsWith('\\"') && s.length >= 4) {
-      s = s.slice(2, -2).trim();
-    }
     s = s.replace(/^["'\\]+|["'\\]+$/g, "").trim();
     if (s === prev) break;
   }
-  return s.replace(/\\"/g, '"').replace(/\\\\/g, "\\");
+  return s.replace(/\\"/g, "").replace(/\\\\/g, "").replace(/^["'\\]+|["'\\]+$/g, "").trim();
 }
 
 /** Recent edits are opaque; older notes fade toward the chassis. */

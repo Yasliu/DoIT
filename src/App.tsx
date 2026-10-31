@@ -151,7 +151,7 @@ export default function App() {
 
   const newNote = useCallback(
     (shelf?: string) => {
-      const target = shelf ?? active ?? (shelves.includes("Architecture") ? "Architecture" : shelves[0] ?? "Architecture");
+      const target = shelf ?? active ?? shelves[0] ?? "Uncategorized";
       const created = create(target);
       setOpenNote({ note: created, origin: originFromCanvas() });
       if (shelf) setActive(shelf);
@@ -332,6 +332,10 @@ export default function App() {
                 onToggleCollapse={toggleCollapse}
                 onOpen={openTile}
                 onNewNote={newNote}
+                onNewCategory={(name) => {
+                  void createCategory(name);
+                  setActive(name);
+                }}
                 onToggleItem={toggleItem}
                 onMoveCategory={(id, shelf) => void moveCategory(id, shelf)}
                 onDeleteCategory={(cat) => void deleteCategory(cat)}

@@ -73,6 +73,8 @@ pub struct AppSettings {
     pub hotkey_open_file: String,
     #[serde(default = "default_theme_mode")]
     pub theme_mode: String,
+    #[serde(default)]
+    pub is_maximized: bool,
 }
 
 fn default_hotkey_open_file() -> String {
@@ -83,25 +85,40 @@ fn default_theme_mode() -> String {
     "glass".to_string()
 }
 
+pub fn default_note_storage_path() -> String {
+    if let Some(profile) = std::env::var_os("USERPROFILE") {
+        let mut p = std::path::PathBuf::from(profile);
+        p.push("Documents");
+        p.push("DoIT");
+        p.push("Notes");
+        p.to_string_lossy().to_string()
+    } else if let Some(home) = std::env::var_os("HOME") {
+        let mut p = std::path::PathBuf::from(home);
+        p.push("Documents");
+        p.push("DoIT");
+        p.push("Notes");
+        p.to_string_lossy().to_string()
+    } else if let Some(app_data) = std::env::var_os("APPDATA") {
+        let mut p = std::path::PathBuf::from(app_data);
+        p.push("DoIT");
+        p.push("Notes");
+        p.to_string_lossy().to_string()
+    } else {
+        "./DoIT/Notes".to_string()
+    }
+}
+
 impl Default for AppSettings {
     fn default() -> Self {
-        let default_path = if let Some(app_data) = std::env::var_os("APPDATA") {
-            let mut p = std::path::PathBuf::from(app_data);
-            p.push("DoIT");
-            p.push("notes");
-            p.to_string_lossy().to_string()
-        } else {
-            "./doit_notes".to_string()
-        };
-
         Self {
-            storage_path: default_path,
+            storage_path: default_note_storage_path(),
             hotkey_new_note: "Ctrl+N".to_string(),
             hotkey_toggle_tray: "Ctrl+J".to_string(),
             hotkey_search: "Ctrl+F".to_string(),
             hotkey_settings: "Ctrl+,".to_string(),
             hotkey_open_file: "Ctrl+O".to_string(),
             theme_mode: "glass".to_string(),
+            is_maximized: false,
         }
     }
 }
@@ -129,26 +146,39 @@ pub fn format_date(timestamp_ms: i64) -> String {
     format!("{year:04}-{m:02}-{d:02}")
 }
 
+/// Parses "- [ ] text" / "- [x] text" (also the bare "- [ ]" an empty checklist item is written as).
+fn parse_todo_line(trimmed: &str) -> Option<(bool, String)> {
+    for (prefix, completed) in [("- [x]", true), ("- [X]", true), ("- [ ]", false)] {
+        if let Some(rest) = trimmed.strip_prefix(prefix) {
+            if rest.is_empty() {
+                return Some((completed, String::new()));
+            }
+            if let Some(text) = rest.strip_prefix(' ') {
+                return Some((completed, text.to_string()));
+            }
+        }
+    }
+    None
+}
+
 pub fn clean_yaml_scalar(s: &str) -> String {
     let mut val = s.trim();
+    let unescaped = val.replace("\\\"", "").replace("\\\\", "").replace('\\', "");
+    val = unescaped.trim();
     for _ in 0..10 {
         let prev = val;
         val = val.trim();
-        if (val.starts_with('"') && val.ends_with('"') && val.len() >= 2)
+        while (val.starts_with('"') && val.ends_with('"') && val.len() >= 2)
             || (val.starts_with('\'') && val.ends_with('\'') && val.len() >= 2)
         {
-            val = &val[1..val.len() - 1];
-        }
-        val = val.trim();
-        if val.starts_with("\\\"") && val.ends_with("\\\"") && val.len() >= 4 {
-            val = &val[2..val.len() - 2];
+            val = val[1..val.len() - 1].trim();
         }
         val = val.trim_matches(|c| c == '"' || c == '\'' || c == '\\');
         if val == prev {
             break;
         }
     }
-    val.replace("\\\"", "\"").replace("\\\\", "\\").trim_matches(|c| c == '"' || c == '\'').to_string()
+    val.trim_matches(|c| c == '"' || c == '\'' || c == '\\').to_string()
 }
 pub fn sanitize_filename(name: &str) -> String {
     let cleaned_name = clean_yaml_scalar(name);
@@ -176,13 +206,13 @@ pub fn compute_markdown_filename(
     timestamp: i64,
     repeated_num: usize,
 ) -> String {
-    let cat_clean = sanitize_filename(if category.trim().is_empty() { "Architecture" } else { category.trim() });
+    let cat_clean = sanitize_filename(if category.trim().is_empty() { "Uncategorized" } else { category.trim() });
     let title_clean = sanitize_filename(if title.trim().is_empty() { "Untitled" } else { title.trim() });
     let date_str = format_date(timestamp);
     format!("{cat_clean} - {title_clean} - {date_str} - {repeated_num}.md")
 }
 
-pub const MAX_FILE_SIZE_BYTES: u64 = 2 * 1024 * 1024; // 2 MB
+pub const MAX_FILE_SIZE_BYTES: u64 = 30 * 1024 * 1024; // 30 MB
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct ScanSummary {
@@ -215,7 +245,8 @@ impl NoteItem {
         md.push_str(&format!("last_edited: {}\n", self.last_edited));
         md.push_str(&format!("repeated_num: {}\n", repeated_num));
         if let Some(ref font) = self.font_family {
-            md.push_str(&format!("font_family: \"{}\"\n", font));
+            let font_clean = clean_yaml_scalar(font);
+            md.push_str(&format!("font_family: \"{}\"\n", font_clean));
         }
         if let Some(bold) = self.is_bold {
             md.push_str(&format!("is_bold: {}\n", bold));
@@ -263,15 +294,13 @@ impl NoteItem {
 
         let mut frontmatter_map: std::collections::HashMap<String, String> = std::collections::HashMap::new();
         let mut closed = false;
-        let mut scanned_chars = first_line.len() + 1;
         let mut line_count = 1usize;
 
-        // Bounded scanning: maximum 20 lines or 1000 characters for frontmatter
+        // Bounded scanning: maximum 60 lines for frontmatter
         for line in lines.by_ref() {
             line_count += 1;
-            scanned_chars += line.len() + 1;
-            if line_count > 20 || scanned_chars > 1000 {
-                return Err("Invalid DoIT note: Frontmatter header exceeds boundary limit (maximum 20 lines or 1000 characters without closing '---').".to_string());
+            if line_count > 60 {
+                return Err("Invalid DoIT note: Frontmatter header exceeds boundary limit (maximum 60 lines without closing '---').".to_string());
             }
 
             let trimmed = line.trim();
@@ -364,7 +393,7 @@ impl NoteItem {
         let is_italic = frontmatter_map.get("is_italic").map(|s| clean_yaml_scalar(s).eq_ignore_ascii_case("true")).or(Some(false));
         let is_pinned = frontmatter_map.get("is_pinned").map(|s| clean_yaml_scalar(s).eq_ignore_ascii_case("true")).or(Some(false));
 
-        // Media URLs parsing
+        // Media URLs parsing (Uses strict '|||' delimiter to preserve base64 data URIs)
         let mut media_urls: Vec<String> = Vec::new();
         if let Some(urls_str) = frontmatter_map.get("media_urls").filter(|s| !s.trim().is_empty()) {
             let cleaned_urls = clean_yaml_scalar(urls_str);
@@ -374,6 +403,11 @@ impl NoteItem {
                     if !trimmed.is_empty() && !media_urls.contains(&trimmed) {
                         media_urls.push(trimmed);
                     }
+                }
+            } else if cleaned_urls.contains("data:") || cleaned_urls.contains(";base64,") {
+                // Single base64 data URI must never be split on commas
+                if !media_urls.contains(&cleaned_urls) {
+                    media_urls.push(cleaned_urls);
                 }
             } else {
                 for u in cleaned_urls.split(',') {
@@ -420,22 +454,16 @@ impl NoteItem {
 
         for (idx, line) in body_lines.into_iter().enumerate() {
             let trimmed = line.trim();
-            if trimmed.starts_with("- [x] ") || trimmed.starts_with("- [X] ") {
+            if let Some((completed, text)) = parse_todo_line(trimmed) {
                 content_items.push(ContentItem {
                     id: format!("item_{idx}"),
-                    text: trimmed[6..].to_string(),
+                    text,
                     is_todo: true,
-                    completed: true,
-                });
-            } else if trimmed.starts_with("- [ ] ") {
-                content_items.push(ContentItem {
-                    id: format!("item_{idx}"),
-                    text: trimmed[6..].to_string(),
-                    is_todo: true,
-                    completed: false,
+                    completed,
                 });
             } else {
-                if note_type == "checkbox" && trimmed.is_empty() {
+                // Blank lines are real content in text notes; only checklist notes drop them
+                if trimmed.is_empty() && note_type == "checkbox" {
                     continue;
                 }
                 let is_todo = note_type == "checkbox";
@@ -483,7 +511,7 @@ impl NoteItem {
     fn parse_legacy_doit_markdown(content: &str, fallback_id: &str) -> Option<Self> {
         let mut id = fallback_id.to_string();
         let mut title = "Untitled".to_string();
-        let mut category = "Architecture".to_string();
+        let mut category = "Uncategorized".to_string();
         let mut last_edited = 0i64;
         let mut font_family = Some("Instrument Sans".to_string());
         let mut is_bold = Some(false);
@@ -550,19 +578,12 @@ impl NoteItem {
         let mut content_items = Vec::new();
         for (idx, line) in body_lines.into_iter().enumerate() {
             let trimmed = line.trim();
-            if trimmed.starts_with("- [x] ") || trimmed.starts_with("- [X] ") {
+            if let Some((completed, text)) = parse_todo_line(trimmed) {
                 content_items.push(ContentItem {
                     id: format!("item_{idx}"),
-                    text: trimmed[6..].to_string(),
+                    text,
                     is_todo: true,
-                    completed: true,
-                });
-            } else if trimmed.starts_with("- [ ] ") {
-                content_items.push(ContentItem {
-                    id: format!("item_{idx}"),
-                    text: trimmed[6..].to_string(),
-                    is_todo: true,
-                    completed: false,
+                    completed,
                 });
             } else {
                 content_items.push(ContentItem {
@@ -690,9 +711,9 @@ Hello world from standard markdown
 
     #[test]
     fn test_strict_validation_boundary_limits() {
-        // Exceeds 20 lines before closing delimiter
+        // Exceeds 60 lines before closing delimiter
         let mut excessive_lines = String::from("---\n");
-        for i in 0..25 {
+        for i in 0..65 {
             excessive_lines.push_str(&format!("field_{i}: value\n"));
         }
         excessive_lines.push_str("---\nbody\n");

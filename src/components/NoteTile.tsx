@@ -89,9 +89,10 @@ export function NoteTile({
       </span>
 
       {(() => {
-        const images = (note.media_urls && note.media_urls.length > 0)
+        const rawImages = (note.media_urls && note.media_urls.length > 0)
           ? note.media_urls
           : (note.media_url ? [note.media_url] : []);
+        const images = rawImages.filter((img) => img && typeof img === "string" && img.trim().length > 0);
         if (images.length === 0) return null;
 
         if (images.length === 1) {
@@ -235,29 +236,34 @@ export function NoteTile({
         ) : (
           <div className="mt-2.5 space-y-[7px]">
             {visible.map((item) => (
-              <div key={item.id} className="flex items-start gap-2">
+              <div key={item.id} className="flex items-center gap-2.5 w-full py-0.5 group">
                 {item.is_todo ? (
                   <button
                     type="button"
                     aria-label={item.completed ? "Mark as open" : "Mark as done"}
                     data-done={item.completed || undefined}
-                    className="check mt-[3px]"
-                  onPointerDown={(event) => event.stopPropagation()}
-                  onKeyDown={(event) => event.stopPropagation()}
-                  onClick={(event) => {
+                    className={cx(
+                      "border rounded-md w-3.5 h-3.5 bg-transparent cursor-pointer check-indicator-layer flex items-center justify-center shrink-0 transition-all duration-200 outline-none select-none",
+                      item.completed
+                        ? "border-white bg-white text-black"
+                        : "border-white/20 hover:border-white/50 text-transparent",
+                    )}
+                    onPointerDown={(event) => event.stopPropagation()}
+                    onKeyDown={(event) => event.stopPropagation()}
+                    onClick={(event) => {
                       event.stopPropagation();
                       onToggleItem(note, item.id);
                     }}
                   >
-                    <Check size={10} strokeWidth={3} />
+                    <Check size={9} strokeWidth={3.5} className={cx(item.completed ? "opacity-100" : "opacity-0")} />
                   </button>
                 ) : (
-                  <span className="mt-[9px] size-[3px] shrink-0 rounded-full bg-white/25" />
+                  <span className="size-[3px] rounded-full bg-white/25 shrink-0 ml-0.5" />
                 )}
                 <span
                   className={cx(
                     "min-w-0 flex-1 text-[12.5px] leading-[1.5]",
-                    item.is_todo && item.completed ? "done-line" : "text-ink-2",
+                    item.is_todo && item.completed ? "line-through text-ink-4 opacity-50" : "text-ink-2",
                   )}
                   style={{
                     display: "-webkit-box",
@@ -268,7 +274,7 @@ export function NoteTile({
                     maxHeight: density.weight === "square" ? 22 : 44,
                   }}
                 >
-                  {renderFormattedText(item.text)}
+                  {renderFormattedText(item.text.replace(/^\s*[-*•]\s+/, ""))}
                 </span>
               </div>
             ))}

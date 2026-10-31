@@ -96,7 +96,20 @@ impl StorageManager {
                         let mut content = String::new();
                         if f.read_to_string(&mut content).is_ok() {
                             let filename = path.file_stem().and_then(|s| s.to_str()).unwrap_or("note");
-                            if let Some(note) = NoteItem::from_markdown(&content, filename) {
+                            if let Some(mut note) = NoteItem::from_markdown(&content, filename) {
+                                // Eliminate all pre-made categories across versions/updates
+                                if note.category.eq_ignore_ascii_case("Architecture") || note.category.eq_ignore_ascii_case("Ideas") {
+                                    note.category = "Uncategorized".to_string();
+                                }
+                                note.title = crate::models::clean_yaml_scalar(&note.title);
+                                note.category = crate::models::clean_yaml_scalar(&note.category);
+                                if note.category.trim().is_empty() {
+                                    note.category = "Uncategorized".to_string();
+                                }
+                                if let Some(ref f) = note.font_family {
+                                    note.font_family = Some(crate::models::clean_yaml_scalar(f));
+                                }
+                                note.content.retain(|c| !(c.text.trim().eq_ignore_ascii_case("Line") && !c.is_todo));
                                 file_map.insert(note.id.clone(), path.clone());
                                 notes.push(note);
                             }
@@ -142,6 +155,26 @@ impl StorageManager {
     pub fn get_settings(&self) -> Result<AppSettings, String> {
         let lock = self.settings.read().map_err(|e| e.to_string())?;
         Ok((*lock).clone())
+    }
+
+    pub fn get_is_maximized(&self) -> bool {
+        self.settings.read().map(|s| s.is_maximized).unwrap_or(false)
+    }
+
+    pub fn set_is_maximized(&self, is_maximized: bool) -> Result<(), String> {
+        let changed = {
+            let mut lock = self.settings.write().map_err(|e| e.to_string())?;
+            if lock.is_maximized != is_maximized {
+                lock.is_maximized = is_maximized;
+                true
+            } else {
+                false
+            }
+        };
+        if changed {
+            self.persist_settings()?;
+        }
+        Ok(())
     }
 
     pub fn update_settings(&self, new_settings: AppSettings) -> Result<AppSettings, String> {
@@ -240,6 +273,16 @@ impl StorageManager {
     }
 
     pub fn upsert_note(&self, note: NoteItem) -> Result<NoteItem, String> {
+        let mut note = note;
+        note.title = crate::models::clean_yaml_scalar(&note.title);
+        note.category = crate::models::clean_yaml_scalar(&note.category);
+        if note.category.trim().is_empty() {
+            note.category = "Uncategorized".to_string();
+        }
+        if let Some(ref f) = note.font_family {
+            note.font_family = Some(crate::models::clean_yaml_scalar(f));
+        }
+
         let mut lock = self.data.write().map_err(|e| e.to_string())?;
 
         // Auto-register category if not present
@@ -324,7 +367,7 @@ impl StorageManager {
     pub fn update_category(&self, id: &str, new_category: &str) -> Result<NoteItem, String> {
         let mut lock = self.data.write().map_err(|e| e.to_string())?;
         let cat_clean = if new_category.trim().is_empty() {
-            "Architecture".to_string()
+            "Uncategorized".to_string()
         } else {
             new_category.trim().to_string()
         };
