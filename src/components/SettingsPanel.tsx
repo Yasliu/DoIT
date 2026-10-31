@@ -17,6 +17,7 @@ import {
   Square,
 } from "lucide-react";
 import { AppSettings, DEFAULT_SETTINGS, tauriApi } from "../api/tauriBridge";
+import { applyShortcutSettings, comboFromEvent, DEFAULT_MD_SHORTCUTS } from "../lib/shortcuts";
 import { cx } from "../lib/text";
 
 interface SettingsPanelProps {
@@ -24,6 +25,17 @@ interface SettingsPanelProps {
   onStoragePathChanged: () => void;
   onThemeChanged?: (theme: "glass" | "monochrome") => void;
 }
+
+const MD_SHORTCUT_ROWS = [
+  { key: "hotkey_h1", label: "Heading 1", hint: "Toggle H1 on the current line", def: DEFAULT_MD_SHORTCUTS.h1 },
+  { key: "hotkey_h2", label: "Heading 2", hint: "Toggle H2 on the current line", def: DEFAULT_MD_SHORTCUTS.h2 },
+  { key: "hotkey_h3", label: "Heading 3", hint: "Toggle H3 on the current line", def: DEFAULT_MD_SHORTCUTS.h3 },
+  { key: "hotkey_bold", label: "Bold", hint: "Wrap selection in **bold**", def: DEFAULT_MD_SHORTCUTS.bold },
+  { key: "hotkey_italic", label: "Italic", hint: "Wrap selection in *italic*", def: DEFAULT_MD_SHORTCUTS.italic },
+  { key: "hotkey_table", label: "Insert Table", hint: "Drop a markdown table at the cursor", def: DEFAULT_MD_SHORTCUTS.table },
+  { key: "hotkey_table_col", label: "Table: Add Column", hint: "Inside a table cell: new column on every row", def: DEFAULT_MD_SHORTCUTS.tableCol },
+  { key: "hotkey_table_row", label: "Table: Add Row", hint: "Inside a table cell: new row at the bottom", def: DEFAULT_MD_SHORTCUTS.tableRow },
+] as const;
 
 export function SettingsPanel({ onBack, onStoragePathChanged, onThemeChanged }: SettingsPanelProps) {
   const [settings, setSettings] = useState<AppSettings>(DEFAULT_SETTINGS);
@@ -38,6 +50,7 @@ export function SettingsPanel({ onBack, onStoragePathChanged, onThemeChanged }: 
 
   useEffect(() => {
     void tauriApi.getSettings().then((res) => {
+      applyShortcutSettings(res);
       setSettings(res);
       setPathInput(res.storage_path);
       setLoading(false);
@@ -86,7 +99,7 @@ export function SettingsPanel({ onBack, onStoragePathChanged, onThemeChanged }: 
       const res = await tauriApi.pickAndScanFolder();
       setIngestStatus({
         type: "info",
-        message: `Scanned ${res.total_scanned} files: ${res.imported_count} DoIT notes verified and imported (${res.skipped_count} non-DoIT files safely ignored).`,
+        message: `Scanned ${res.total_scanned} files: ${res.imported_count} notes imported (${res.skipped_count} files skipped).`,
       });
       onStoragePathChanged();
     } catch (err: any) {
@@ -109,7 +122,7 @@ export function SettingsPanel({ onBack, onStoragePathChanged, onThemeChanged }: 
       const res = await tauriApi.scanMarkdownFolder();
       setIngestStatus({
         type: "info",
-        message: `Current Repository: ${res.imported_count} DoIT notes verified (${res.skipped_count} non-DoIT files safely skipped).`,
+        message: `Current Repository: ${res.imported_count} notes indexed (${res.skipped_count} files skipped).`,
       });
       onStoragePathChanged();
     } catch (err: any) {
@@ -129,6 +142,7 @@ export function SettingsPanel({ onBack, onStoragePathChanged, onThemeChanged }: 
     };
     const pathChanged = nextSettings.storage_path !== settings.storage_path;
     const res = await tauriApi.updateSettings(nextSettings);
+    applyShortcutSettings(res);
     setSettings(res);
     setSaved(true);
     setTimeout(() => setSaved(false), 2000);
@@ -143,6 +157,7 @@ export function SettingsPanel({ onBack, onStoragePathChanged, onThemeChanged }: 
       ...DEFAULT_SETTINGS,
       storage_path: settings.storage_path, // Keep path, reset hotkeys
     });
+    applyShortcutSettings(res);
     setSettings(res);
     setSaved(true);
     setTimeout(() => setSaved(false), 2000);
@@ -319,7 +334,7 @@ export function SettingsPanel({ onBack, onStoragePathChanged, onThemeChanged }: 
           </div>
         </section>
 
-        {/* SECTION 3: Portability & Markdown Ingestion Engine */}
+        {/* SECTION 3: Markdown & Text Import */}
         <section className="glass rounded-[20px] p-5 shadow-[0_20px_50px_-20px_rgba(0,0,0,0.8)] border border-white/10">
           <div className="flex items-start gap-3">
             <div className="grid size-9 shrink-0 place-items-center rounded-xl bg-white/[0.06] text-white">
@@ -327,22 +342,11 @@ export function SettingsPanel({ onBack, onStoragePathChanged, onThemeChanged }: 
             </div>
             <div className="flex-1 min-w-0">
               <h2 className="text-[14px] font-semibold text-ink-1">
-                Portability & Markdown Ingestion Engine
+                Markdown & Text Import
               </h2>
               <p className="mt-1 text-[12px] leading-relaxed text-ink-3">
-                Import, validate, and scan Markdown notes across devices. Notes require the strict YAML frontmatter signature:
+                Import and scan any <code className="text-white font-mono text-[11px] bg-white/10 px-1 py-0.5 rounded">.md</code> or <code className="text-white font-mono text-[11px] bg-white/10 px-1 py-0.5 rounded">.txt</code> file across devices. No special header or metadata is needed.
               </p>
-              <div className="mt-2.5 rounded-lg bg-black/40 border border-white/10 p-2.5 font-mono text-[10.5px] text-ink-3 leading-relaxed">
-                <span className="text-white/40">---</span><br />
-                <span className="text-white">app:</span> &quot;DoIT&quot;<br />
-                <span className="text-white">version:</span> &quot;1.0.0&quot;<br />
-                <span className="text-white">id:</span> &quot;[UNIQUE_ID]&quot;<br />
-                <span className="text-white">category:</span> &quot;[CATEGORY_NAME]&quot;<br />
-                <span className="text-white">date:</span> &quot;[YYYY-MM-DD]&quot;<br />
-                <span className="text-white">order:</span> [NUMBER]<br />
-                <span className="text-white">type:</span> &quot;text&quot; | &quot;checkbox&quot;<br />
-                <span className="text-white/40">---</span>
-              </div>
             </div>
           </div>
 
@@ -508,6 +512,47 @@ export function SettingsPanel({ onBack, onStoragePathChanged, onThemeChanged }: 
                 className="w-24 h-7 text-center rounded-lg bg-black/40 border border-white/15 text-[11.5px] font-mono text-white outline-none focus:border-white/40"
               />
             </div>
+          </div>
+
+          <div className="mt-5 pb-2 text-[11px] font-mono uppercase tracking-[0.12em] text-ink-4">
+            Markdown editor - click a field, then press the new combination (Backspace restores default)
+          </div>
+          <div className="grid grid-cols-1 md:grid-cols-2 gap-3.5">
+            {MD_SHORTCUT_ROWS.map((row) => (
+              <div
+                key={row.key}
+                className="rounded-xl bg-white/[0.03] p-3 border border-white/[0.06] flex items-center justify-between"
+              >
+                <div>
+                  <div className="text-[12.5px] font-medium text-ink-2">{row.label}</div>
+                  <div className="text-[10.5px] text-ink-4">{row.hint}</div>
+                </div>
+                <input
+                  type="text"
+                  readOnly
+                  value={(settings[row.key] as string | undefined) || row.def}
+                  onKeyDown={(e) => {
+                    if (e.key === "Tab") return;
+                    e.preventDefault();
+                    if (e.key === "Backspace" || e.key === "Delete") {
+                      setSettings({ ...settings, [row.key]: row.def });
+                      return;
+                    }
+                    const combo = comboFromEvent(e);
+                    if (combo && combo.includes("+")) setSettings({ ...settings, [row.key]: combo });
+                  }}
+                  title="Click, then press the new key combination"
+                  className="w-24 h-7 cursor-pointer text-center rounded-lg bg-black/40 border border-white/15 text-[11.5px] font-mono text-white outline-none focus:border-white/40"
+                />
+              </div>
+            ))}
+          </div>
+
+          <div className="mt-3 rounded-xl border border-white/[0.06] bg-white/[0.02] p-3 text-[11px] leading-relaxed text-ink-4">
+            <span className="font-mono uppercase tracking-[0.1em] text-ink-3">Table keys (fixed)</span>
+            <br />
+            Tab / Shift+Tab move between cells - Tab in the last header cell adds a column - Tab in the last cell adds a
+            row - Enter moves down a row - right-click a table for Add Column / Add Row / Delete Column / Delete Row.
           </div>
         </section>
       </div>

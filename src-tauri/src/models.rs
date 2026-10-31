@@ -52,6 +52,15 @@ pub struct NoteItem {
     pub is_collapsed: Option<bool>,
     #[serde(default)]
     pub is_pinned: Option<bool>,
+    /// Source file format: "md" (default) or "txt"
+    #[serde(default)]
+    pub format: Option<String>,
+    /// Absolute path when the note is an external file opened in place (never copied into the repository)
+    #[serde(default)]
+    pub source_path: Option<String>,
+    /// Verbatim YAML frontmatter of an external .md file, re-written untouched on save
+    #[serde(default)]
+    pub external_header: Option<String>,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -71,6 +80,22 @@ pub struct AppSettings {
     pub hotkey_settings: String,
     #[serde(default = "default_hotkey_open_file")]
     pub hotkey_open_file: String,
+    #[serde(default = "default_hotkey_h1")]
+    pub hotkey_h1: String,
+    #[serde(default = "default_hotkey_h2")]
+    pub hotkey_h2: String,
+    #[serde(default = "default_hotkey_h3")]
+    pub hotkey_h3: String,
+    #[serde(default = "default_hotkey_bold")]
+    pub hotkey_bold: String,
+    #[serde(default = "default_hotkey_italic")]
+    pub hotkey_italic: String,
+    #[serde(default = "default_hotkey_table")]
+    pub hotkey_table: String,
+    #[serde(default = "default_hotkey_table_col")]
+    pub hotkey_table_col: String,
+    #[serde(default = "default_hotkey_table_row")]
+    pub hotkey_table_row: String,
     #[serde(default = "default_theme_mode")]
     pub theme_mode: String,
     #[serde(default)]
@@ -79,6 +104,32 @@ pub struct AppSettings {
 
 fn default_hotkey_open_file() -> String {
     "Ctrl+O".to_string()
+}
+
+fn default_hotkey_h1() -> String {
+    "Ctrl+1".to_string()
+}
+fn default_hotkey_h2() -> String {
+    "Ctrl+2".to_string()
+}
+fn default_hotkey_h3() -> String {
+    "Ctrl+3".to_string()
+}
+fn default_hotkey_bold() -> String {
+    "Ctrl+B".to_string()
+}
+fn default_hotkey_italic() -> String {
+    "Ctrl+I".to_string()
+}
+fn default_hotkey_table() -> String {
+    "Ctrl+T".to_string()
+}
+
+fn default_hotkey_table_col() -> String {
+    "Ctrl+Alt+ArrowRight".to_string()
+}
+fn default_hotkey_table_row() -> String {
+    "Ctrl+Alt+ArrowDown".to_string()
 }
 
 fn default_theme_mode() -> String {
@@ -117,6 +168,14 @@ impl Default for AppSettings {
             hotkey_search: "Ctrl+F".to_string(),
             hotkey_settings: "Ctrl+,".to_string(),
             hotkey_open_file: "Ctrl+O".to_string(),
+            hotkey_h1: default_hotkey_h1(),
+            hotkey_h2: default_hotkey_h2(),
+            hotkey_h3: default_hotkey_h3(),
+            hotkey_bold: default_hotkey_bold(),
+            hotkey_italic: default_hotkey_italic(),
+            hotkey_table: default_hotkey_table(),
+            hotkey_table_col: default_hotkey_table_col(),
+            hotkey_table_row: default_hotkey_table_row(),
             theme_mode: "glass".to_string(),
             is_maximized: false,
         }
@@ -200,6 +259,21 @@ pub fn sanitize_filename(name: &str) -> String {
 
 /// Strict structural naming pattern:
 /// Category_Name - Title - Date - Repeated_Title_Num.md
+pub fn compute_note_filename(
+    category: &str,
+    title: &str,
+    timestamp: i64,
+    repeated_num: usize,
+    ext: &str,
+) -> String {
+    let md = compute_markdown_filename(category, title, timestamp, repeated_num);
+    if ext == "md" {
+        md
+    } else {
+        format!("{}.{ext}", md.trim_end_matches(".md"))
+    }
+}
+
 pub fn compute_markdown_filename(
     category: &str,
     title: &str,
@@ -224,8 +298,6 @@ pub struct ScanSummary {
 
 impl NoteItem {
     pub fn to_markdown(&self, repeated_num: usize) -> String {
-        let is_checkbox = self.content.iter().any(|c| c.is_todo);
-        let note_type = if is_checkbox { "checkbox" } else { "text" };
         let order_val = self.grid_coordinates.x as i64;
         let date_str = format_date(self.last_edited);
 
@@ -234,13 +306,10 @@ impl NoteItem {
 
         let mut md = String::new();
         md.push_str("---\n");
-        md.push_str("app: \"DoIT\"\n");
-        md.push_str("version: \"1.0.0\"\n");
         md.push_str(&format!("id: \"{}\"\n", self.id));
         md.push_str(&format!("category: \"{}\"\n", cat_clean.replace('\n', " ")));
         md.push_str(&format!("date: \"{}\"\n", date_str));
         md.push_str(&format!("order: {}\n", order_val));
-        md.push_str(&format!("type: \"{}\"\n", note_type));
         md.push_str(&format!("title: \"{}\"\n", title_clean.replace('\n', " ")));
         md.push_str(&format!("last_edited: {}\n", self.last_edited));
         md.push_str(&format!("repeated_num: {}\n", repeated_num));
@@ -282,365 +351,251 @@ impl NoteItem {
         md
     }
 
-    /// Strict parser and validator for DoIT Markdown notes with robust boundary checks
-    pub fn parse_and_validate_doit_markdown(content: &str, fallback_id: &str) -> Result<Self, String> {
-        let mut lines = content.lines();
-        let first_line = lines.next().ok_or_else(|| "File is empty".to_string())?;
-
-        // 1. Check opening delimiter
-        if first_line.trim() != "---" {
-            return Err("Invalid DoIT note: File must begin with '---' YAML frontmatter block.".to_string());
-        }
-
-        let mut frontmatter_map: std::collections::HashMap<String, String> = std::collections::HashMap::new();
-        let mut closed = false;
-        let mut line_count = 1usize;
-
-        // Bounded scanning: maximum 60 lines for frontmatter
-        for line in lines.by_ref() {
-            line_count += 1;
-            if line_count > 60 {
-                return Err("Invalid DoIT note: Frontmatter header exceeds boundary limit (maximum 60 lines without closing '---').".to_string());
-            }
-
-            let trimmed = line.trim();
-            if trimmed == "---" {
-                closed = true;
-                break;
-            }
-            if let Some((k, v)) = trimmed.split_once(':') {
-                let key = k.trim().to_lowercase();
-                let mut val = v.trim();
-                if (val.starts_with('"') && val.ends_with('"') && val.len() >= 2)
-                    || (val.starts_with('\'') && val.ends_with('\'') && val.len() >= 2)
-                {
-                    val = &val[1..val.len() - 1];
-                }
-                frontmatter_map.insert(key, val.to_string());
-            }
-        }
-
-        if !closed {
-            return Err("Invalid DoIT note: Unclosed frontmatter block (missing terminating '---').".to_string());
-        }
-
-        // 2. Strict Validation Rule: File header must contain exactly app: "DoIT"
-        let app_val = frontmatter_map.get("app").map(|s| s.as_str()).unwrap_or("");
-        if app_val != "DoIT" {
-            return Err(format!(
-                "Invalid DoIT note format: Missing or invalid 'app' signature (expected 'app: \"DoIT\"', found '{app_val}')."
-            ));
-        }
-
-        // 3. Validate version format: version must not be empty
-        let version_val = frontmatter_map.get("version").map(|s| s.trim()).unwrap_or("");
-        if version_val.is_empty() {
-            return Err("Invalid DoIT note: Missing required 'version' field in header.".to_string());
-        }
-
-        // 4. Reject files missing critical identifiers: id and category must be non-empty strings
-        let id = match frontmatter_map.get("id").map(|s| clean_yaml_scalar(s)).filter(|s| !s.is_empty()) {
-            Some(val) => val,
-            None => {
-                if fallback_id.trim().is_empty() {
-                    return Err("Invalid DoIT note: Missing required 'id' field in header.".to_string());
-                }
-                clean_yaml_scalar(fallback_id)
-            }
-        };
-
-        let category = match frontmatter_map.get("category").map(|s| clean_yaml_scalar(s)).filter(|s| !s.is_empty()) {
-            Some(val) => val,
-            None => return Err("Invalid DoIT note: Missing required 'category' field in header.".to_string()),
-        };
-
-        // 5. Validate order: order must parse to a valid integer
-        let order_val: i64 = match frontmatter_map.get("order") {
-            Some(s) => match clean_yaml_scalar(s).parse::<i64>() {
-                Ok(n) => n,
-                Err(_) => return Err(format!("Invalid DoIT note: 'order' must be a valid integer, found '{s}'.")),
-            },
-            None => 0, // Fallback gracefully if order is omitted or default
-        };
-
-        // 6. Validate type: type must strictly be either "text" or "checkbox"
-        let note_type = match frontmatter_map.get("type").map(|s| clean_yaml_scalar(s).to_lowercase()) {
-            Some(ref t) if t == "text" || t == "checkbox" => t.clone(),
-            Some(other) => return Err(format!("Invalid DoIT note: 'type' must be 'text' or 'checkbox', found '{other}'.")),
-            None => "text".to_string(),
-        };
-
-        let title = frontmatter_map
-            .get("title")
-            .map(|s| clean_yaml_scalar(s))
-            .filter(|s| !s.is_empty())
-            .unwrap_or_else(|| clean_yaml_scalar(fallback_id));
-
-        let mut last_edited: i64 = frontmatter_map
-            .get("last_edited")
-            .and_then(|s| clean_yaml_scalar(s).parse().ok())
-            .unwrap_or(0);
-
-        if last_edited == 0 {
-            last_edited = std::time::SystemTime::now()
-                .duration_since(std::time::UNIX_EPOCH)
-                .map(|d| d.as_millis() as i64)
-                .unwrap_or(0);
-        }
-
-        let font_family = frontmatter_map.get("font_family").map(|s| clean_yaml_scalar(s)).or_else(|| Some("Instrument Sans".to_string()));
-        let is_bold = frontmatter_map.get("is_bold").map(|s| clean_yaml_scalar(s).eq_ignore_ascii_case("true")).or(Some(false));
-        let is_italic = frontmatter_map.get("is_italic").map(|s| clean_yaml_scalar(s).eq_ignore_ascii_case("true")).or(Some(false));
-        let is_pinned = frontmatter_map.get("is_pinned").map(|s| clean_yaml_scalar(s).eq_ignore_ascii_case("true")).or(Some(false));
-
-        // Media URLs parsing (Uses strict '|||' delimiter to preserve base64 data URIs)
-        let mut media_urls: Vec<String> = Vec::new();
-        if let Some(urls_str) = frontmatter_map.get("media_urls").filter(|s| !s.trim().is_empty()) {
-            let cleaned_urls = clean_yaml_scalar(urls_str);
-            if cleaned_urls.contains("|||") {
-                for u in cleaned_urls.split("|||") {
-                    let trimmed = clean_yaml_scalar(u);
-                    if !trimmed.is_empty() && !media_urls.contains(&trimmed) {
-                        media_urls.push(trimmed);
-                    }
-                }
-            } else if cleaned_urls.contains("data:") || cleaned_urls.contains(";base64,") {
-                // Single base64 data URI must never be split on commas
-                if !media_urls.contains(&cleaned_urls) {
-                    media_urls.push(cleaned_urls);
-                }
-            } else {
-                for u in cleaned_urls.split(',') {
-                    let trimmed = clean_yaml_scalar(u);
-                    if !trimmed.is_empty() && !media_urls.contains(&trimmed) {
-                        media_urls.push(trimmed);
-                    }
-                }
-            }
-        }
-        if let Some(single) = frontmatter_map.get("media_url").filter(|s| !s.trim().is_empty()) {
-            let cleaned_single = clean_yaml_scalar(single);
-            if !cleaned_single.is_empty() && !media_urls.contains(&cleaned_single) {
-                media_urls.insert(0, cleaned_single);
-            }
-        }
-        let media_url = media_urls.first().cloned();
-
-        // 7. Parse content items literally to avoid injections
-        // Skip leading empty lines right below the frontmatter block
-        let mut content_items = Vec::new();
-        let mut body_lines: Vec<&str> = lines.collect();
-        while let Some(first) = body_lines.first() {
-            if first.trim().is_empty() {
-                body_lines.remove(0);
-            } else {
-                break;
-            }
-        }
-        while let Some(last) = body_lines.last() {
-            if last.trim().is_empty() {
-                body_lines.pop();
-            } else {
-                break;
-            }
-        }
-        while let Some(last) = body_lines.last() {
-            if last.trim().is_empty() {
-                body_lines.pop();
-            } else {
-                break;
-            }
-        }
-
-        for (idx, line) in body_lines.into_iter().enumerate() {
-            let trimmed = line.trim();
-            if let Some((completed, text)) = parse_todo_line(trimmed) {
-                content_items.push(ContentItem {
-                    id: format!("item_{idx}"),
-                    text,
-                    is_todo: true,
-                    completed,
-                });
-            } else {
-                // Blank lines are real content in text notes; only checklist notes drop them
-                if trimmed.is_empty() && note_type == "checkbox" {
-                    continue;
-                }
-                let is_todo = note_type == "checkbox";
-                content_items.push(ContentItem {
-                    id: format!("item_{idx}"),
-                    text: line.to_string(),
-                    is_todo,
-                    completed: false,
-                });
-            }
-        }
-
-        if content_items.is_empty() {
-            content_items.push(ContentItem {
-                id: "item_0".to_string(),
-                text: "".to_string(),
-                is_todo: note_type == "checkbox",
-                completed: false,
-            });
-        }
-
-        Ok(NoteItem {
-            id,
-            title,
-            content: content_items,
-            category,
-            last_edited,
-            grid_coordinates: GridCoordinates {
-                x: order_val as f64,
-                y: 0.0,
-                w: 320.0,
-                h: 220.0,
-            },
-            font_family,
-            is_bold,
-            is_italic,
-            media_url,
-            media_urls,
-            is_collapsed: Some(false),
-            is_pinned,
-        })
+    /// Universal ingestion: accepts ANY .md / .txt document (plain markdown, Jekyll posts, notepad text,
+    /// DoIT notes, broken files). No signature or required keys; optional frontmatter is read leniently.
+    pub fn from_file(content: &str, file_stem: &str, ext: &str, modified_ms: i64) -> Self {
+        Self::parse_generic_document(content, file_stem, &ext.to_ascii_lowercase(), modified_ms)
     }
 
-    /// Backwards compatibility fallback for pre-existing markdown files
-    fn parse_legacy_doit_markdown(content: &str, fallback_id: &str) -> Option<Self> {
-        let mut id = fallback_id.to_string();
-        let mut title = "Untitled".to_string();
-        let mut category = "Uncategorized".to_string();
-        let mut last_edited = 0i64;
-        let mut font_family = Some("Instrument Sans".to_string());
-        let mut is_bold = Some(false);
-        let mut is_italic = Some(false);
-        let mut is_pinned = Some(false);
-        let mut media_url = None;
-        let mut order_num = 0.0f64;
-
-        let mut lines = content.lines();
-        let mut body_lines = Vec::new();
-
-        if let Some(first_line) = lines.next() {
-            if first_line.trim() == "---" {
-                for line in lines.by_ref() {
-                    let trimmed = line.trim();
-                    if trimmed == "---" {
-                        break;
-                    }
-                    if let Some((k, v)) = trimmed.split_once(':') {
-                        let key = k.trim();
-                        let val = v.trim();
-                        match key {
-                            "id" => id = clean_yaml_scalar(val),
-                            "title" => title = clean_yaml_scalar(val),
-                            "category" => category = clean_yaml_scalar(val),
-                            "last_edited" => last_edited = clean_yaml_scalar(val).parse().unwrap_or(0),
-                            "font_family" => font_family = Some(clean_yaml_scalar(val)),
-                            "is_bold" => is_bold = Some(clean_yaml_scalar(val).eq_ignore_ascii_case("true")),
-                            "is_italic" => is_italic = Some(clean_yaml_scalar(val).eq_ignore_ascii_case("true")),
-                            "is_pinned" => is_pinned = Some(clean_yaml_scalar(val).eq_ignore_ascii_case("true")),
-                            "order" => order_num = clean_yaml_scalar(val).parse().unwrap_or(0.0),
-                            "media_url" => {
-                                let c = clean_yaml_scalar(val);
-                                if !c.is_empty() { media_url = Some(c); }
-                            },
-                            _ => {}
-                        }
+    pub fn parse_generic_document(content: &str, file_stem: &str, ext: &str, modified_ms: i64) -> Self {
+        let all: Vec<&str> = content.lines().collect();
+        let mut fm: std::collections::HashMap<String, String> = std::collections::HashMap::new();
+        let mut body_idx = 0usize;
+        if ext == "md" && all.first().map(|l| l.trim()) == Some("---") {
+            if let Some(end) = all.iter().skip(1).take(60).position(|l| l.trim() == "---") {
+                for l in &all[1..=end] {
+                    if let Some((k, v)) = l.trim().split_once(':') {
+                        fm.insert(k.trim().to_lowercase(), clean_yaml_scalar(v));
                     }
                 }
-            } else {
-                body_lines.push(first_line);
+                body_idx = end + 2;
             }
         }
 
-        for line in lines {
-            body_lines.push(line);
+        let body = sanitize_markdown_body(&all[body_idx.min(all.len())..].join("\n"));
+        let mut body_lines: Vec<&str> = body.lines().collect();
+        while body_lines.first().map(|l| l.trim().is_empty()).unwrap_or(false) {
+            body_lines.remove(0);
+        }
+        while body_lines.last().map(|l| l.trim().is_empty()).unwrap_or(false) {
+            body_lines.pop();
         }
 
-        while let Some(first) = body_lines.first() {
-            if first.trim().is_empty() {
-                body_lines.remove(0);
-            } else {
-                break;
-            }
-        }
-        while let Some(last) = body_lines.last() {
-            if last.trim().is_empty() {
-                body_lines.pop();
-            } else {
-                break;
-            }
-        }
+        let from_name = split_note_filename(file_stem);
+        let heading = body_lines
+            .iter()
+            .find_map(|l| l.trim().strip_prefix("# ").map(|h| h.trim().to_string()))
+            .filter(|h| !h.is_empty());
 
-        let mut content_items = Vec::new();
-        for (idx, line) in body_lines.into_iter().enumerate() {
-            let trimmed = line.trim();
-            if let Some((completed, text)) = parse_todo_line(trimmed) {
+        let title = fm
+            .get("title")
+            .cloned()
+            .filter(|s| !s.is_empty())
+            .or_else(|| from_name.as_ref().map(|(_, t)| t.clone()))
+            .or(heading)
+            .unwrap_or_else(|| file_stem.to_string());
+        let category = fm
+            .get("category")
+            .cloned()
+            .filter(|s| !s.is_empty())
+            .or_else(|| from_name.as_ref().map(|(c, _)| c.clone()))
+            .unwrap_or_else(|| "Uncategorized".to_string());
+        let id = fm
+            .get("id")
+            .cloned()
+            .filter(|s| !s.is_empty())
+            .unwrap_or_else(|| format!("{ext}_{}", fnv_hex(file_stem)));
+        let last_edited = fm
+            .get("last_edited")
+            .and_then(|s| s.parse::<i64>().ok())
+            .filter(|n| *n > 0)
+            .unwrap_or(if modified_ms > 0 { modified_ms } else { now_ms() });
+        let order = fm.get("order").and_then(|s| s.parse::<f64>().ok()).unwrap_or(0.0);
+
+        // Mixed document: "- [ ]" / "- [x]" lines are tasks wherever they appear, everything else is text.
+        // (A legacy `type: checkbox` key is ignored: it no longer forces other lines into tasks.)
+        let mut content_items: Vec<ContentItem> = Vec::new();
+        for (idx, line) in body_lines.iter().enumerate() {
+            if let Some((completed, text)) = parse_todo_line(line.trim()) {
+                content_items.push(ContentItem { id: format!("item_{idx}"), text, is_todo: true, completed });
+            } else {
                 content_items.push(ContentItem {
                     id: format!("item_{idx}"),
-                    text,
-                    is_todo: true,
-                    completed,
-                });
-            } else {
-                content_items.push(ContentItem {
-                    id: format!("item_{idx}"),
-                    text: line.to_string(),
+                    text: line.trim_end().to_string(),
                     is_todo: false,
                     completed: false,
                 });
             }
         }
-
         if content_items.is_empty() {
-            content_items.push(ContentItem {
-                id: "item_0".to_string(),
-                text: "".to_string(),
-                is_todo: false,
-                completed: false,
-            });
+            content_items.push(ContentItem { id: "item_0".to_string(), text: String::new(), is_todo: false, completed: false });
         }
 
-        if last_edited == 0 {
-            last_edited = std::time::SystemTime::now()
-                .duration_since(std::time::UNIX_EPOCH)
-                .map(|d| d.as_millis() as i64)
-                .unwrap_or(0);
+        let flag = |key: &str| fm.get(key).map(|s| s.eq_ignore_ascii_case("true")).unwrap_or(false);
+
+        // Media URLs use a "|||" delimiter so base64 data URIs survive intact
+        let mut media_urls: Vec<String> = Vec::new();
+        if let Some(raw) = fm.get("media_urls").filter(|s| !s.is_empty()) {
+            let parts: Vec<&str> = if raw.contains("|||") {
+                raw.split("|||").collect()
+            } else if raw.contains("data:") {
+                vec![raw.as_str()]
+            } else {
+                raw.split(',').collect()
+            };
+            for u in parts {
+                let u = clean_yaml_scalar(u);
+                if !u.is_empty() && !media_urls.contains(&u) {
+                    media_urls.push(u);
+                }
+            }
         }
+        if let Some(single) = fm.get("media_url").filter(|s| !s.is_empty()) {
+            if !media_urls.contains(single) {
+                media_urls.insert(0, single.clone());
+            }
+        }
+        let media_url = media_urls.first().cloned();
 
-        let media_urls = if let Some(ref m) = media_url {
-            vec![m.clone()]
-        } else {
-            vec![]
-        };
-
-        Some(NoteItem {
+        NoteItem {
             id,
             title,
             content: content_items,
             category,
             last_edited,
-            grid_coordinates: GridCoordinates { x: order_num, y: 0.0, w: 320.0, h: 220.0 },
-            font_family,
-            is_bold,
-            is_italic,
+            grid_coordinates: GridCoordinates { x: order, y: 0.0, w: 320.0, h: 220.0 },
+            font_family: Some(fm.get("font_family").cloned().filter(|s| !s.is_empty()).unwrap_or_else(|| "Instrument Sans".to_string())),
+            is_bold: Some(flag("is_bold")),
+            is_italic: Some(flag("is_italic")),
             media_url,
             media_urls,
             is_collapsed: Some(false),
-            is_pinned,
-        })
+            is_pinned: Some(flag("is_pinned")),
+            format: Some(ext.to_string()),
+            source_path: None,
+            external_header: None,
+        }
     }
 
-    pub fn from_markdown(content: &str, fallback_id: &str) -> Option<Self> {
-        Self::parse_and_validate_doit_markdown(content, fallback_id)
-            .ok()
-            .or_else(|| Self::parse_legacy_doit_markdown(content, fallback_id))
+    /// Opens an arbitrary .md/.txt file in place: nothing is copied, the path travels with the note.
+    pub fn from_external_file(content: &str, path: &str, modified_ms: i64) -> Self {
+        let p = std::path::Path::new(path);
+        let raw_ext = p.extension().and_then(|e| e.to_str()).unwrap_or("txt").to_ascii_lowercase();
+        let ext = if raw_ext == "md" || raw_ext == "markdown" { "md" } else { "txt" };
+        let stem = p.file_stem().and_then(|s| s.to_str()).unwrap_or("document");
+        let mut note = Self::parse_generic_document(content, stem, ext, modified_ms);
+
+        let all: Vec<&str> = content.lines().collect();
+        let mut header = None;
+        if ext == "md" && all.first().map(|l| l.trim()) == Some("---") {
+            if let Some(end) = all.iter().skip(1).take(60).position(|l| l.trim() == "---") {
+                header = Some(all[..=end + 1].join("\n"));
+            }
+        }
+        note.id = format!("ext_{}", fnv_hex(path));
+        note.source_path = Some(path.to_string());
+        note.external_header = header;
+        note
+    }
+
+    /// Text written back to an external file: original frontmatter untouched + the edited body
+    pub fn to_external_text(&self) -> String {
+        let body = self.to_plain_text();
+        match (&self.external_header, self.file_extension()) {
+            (Some(h), "md") => format!("{h}\n\n{body}"),
+            _ => body,
+        }
+    }
+
+    /// Plain-text serialisation used for .txt notes (no frontmatter)
+    pub fn to_plain_text(&self) -> String {
+        let mut out = String::new();
+        for item in &self.content {
+            if item.is_todo {
+                let mark = if item.completed { "x" } else { " " };
+                out.push_str(&format!("- [{mark}] {}\n", item.text));
+            } else {
+                out.push_str(&format!("{}\n", item.text));
+            }
+        }
+        out
+    }
+
+    pub fn file_extension(&self) -> &'static str {
+        if self.format.as_deref().map(|f| f.eq_ignore_ascii_case("txt")).unwrap_or(false) {
+            "txt"
+        } else {
+            "md"
+        }
     }
 }
 
+fn now_ms() -> i64 {
+    std::time::SystemTime::now()
+        .duration_since(std::time::UNIX_EPOCH)
+        .map(|d| d.as_millis() as i64)
+        .unwrap_or(0)
+}
+
+fn fnv_hex(s: &str) -> String {
+    let mut h: u64 = 0xcbf29ce484222325;
+    for b in s.bytes() {
+        h ^= b as u64;
+        h = h.wrapping_mul(0x100000001b3);
+    }
+    format!("{h:016x}")
+}
+
+/// Recovers "Category - Title - 2026-10-31 - 0" style names written by DoIT
+fn split_note_filename(stem: &str) -> Option<(String, String)> {
+    let parts: Vec<&str> = stem.split(" - ").collect();
+    if parts.len() >= 4 {
+        let n = parts.len();
+        let date = parts[n - 2].trim();
+        let date_ok = date.len() == 10 && date.chars().filter(|c| *c == '-').count() == 2;
+        if date_ok && parts[n - 1].trim().parse::<usize>().is_ok() {
+            let category = parts[0].trim().to_string();
+            let title = parts[1..n - 2].join(" - ").trim().to_string();
+            if !category.is_empty() && !title.is_empty() {
+                return Some((category, title));
+            }
+        }
+    }
+    None
+}
+
+/// Defensive Markdown AST pass (pulldown-cmark). Corrupted / binary-ish text is wrapped in a fenced
+/// code block (rendered as an isolated monospace block); unterminated fences are closed so one broken
+/// token can never swallow or distort the rest of the note.
+pub fn sanitize_markdown_body(body: &str) -> String {
+    use pulldown_cmark::{CodeBlockKind, Event, Options, Parser, Tag};
+
+    let is_bad = |c: char| c == '\u{FFFD}' || (c.is_control() && !matches!(c, '\n' | '\r' | '\t'));
+    if body.chars().any(is_bad) {
+        let cleaned: String = body.chars().map(|c| if is_bad(c) { ' ' } else { c }).collect();
+        let fence = if cleaned.contains("```") { "~~~~" } else { "```" };
+        return format!("{fence}text\n{}\n{fence}", cleaned.trim_end());
+    }
+
+    let opts = Options::ENABLE_TABLES | Options::ENABLE_STRIKETHROUGH | Options::ENABLE_TASKLISTS;
+    let mut dangling: Option<char> = None;
+    for (event, range) in Parser::new_ext(body, opts).into_offset_iter() {
+        if let Event::Start(Tag::CodeBlock(CodeBlockKind::Fenced(_))) = event {
+            let block = body[range].trim_end();
+            let opener = block.lines().next().unwrap_or("").trim();
+            let marker = opener.chars().next().unwrap_or('`');
+            let last = block.lines().last().unwrap_or("").trim();
+            let closed = block.lines().count() > 1 && last.len() >= 3 && last.chars().all(|c| c == marker);
+            if !closed {
+                dangling = Some(marker);
+            }
+        }
+    }
+    match dangling {
+        Some(marker) => format!("{body}\n{}", marker.to_string().repeat(3)),
+        None => body.to_string(),
+    }
+}
 impl Default for AppStateData {
     fn default() -> Self {
         Self {
@@ -684,49 +639,70 @@ mod tests {
             media_urls: vec![],
             is_collapsed: Some(false),
             is_pinned: Some(false),
+            format: None,
+            source_path: None,
+            external_header: None,
         };
 
         let md = note.to_markdown(0);
         assert!(md.starts_with("---\n"));
-        assert!(md.contains("app: \"DoIT\"\n"));
-        assert!(md.contains("version: \"1.0.0\"\n"));
+        assert!(!md.contains("app:") && !md.contains("version:"));
         assert!(md.contains("id: \"test-note-1\"\n"));
         assert!(md.contains("category: \"Architecture\"\n"));
         assert!(md.contains("order: 3\n"));
-        assert!(md.contains("type: \"checkbox\"\n"));
+        assert!(!md.contains("type:"));
     }
 
     #[test]
-    fn test_strict_validation_rejects_non_doit_file() {
-        let non_doit = r#"---
-title: Standard Jekyll Post
-date: 2026-10-29
----
-Hello world from standard markdown
-"#;
-        let res = NoteItem::parse_and_validate_doit_markdown(non_doit, "fallback");
-        assert!(res.is_err());
-        assert!(res.unwrap_err().contains("Missing or invalid 'app' signature"));
+    fn test_universal_ingestion_accepts_non_doit_markdown() {
+        let jekyll = "---\ntitle: Standard Jekyll Post\ndate: 2026-10-29\n---\nHello world from standard markdown\n";
+        let note = NoteItem::from_file(jekyll, "jekyll-post", "md", 0);
+        assert_eq!(note.title, "Standard Jekyll Post");
+        assert_eq!(note.content[0].text, "Hello world from standard markdown");
+        assert_eq!(note.format.as_deref(), Some("md"));
     }
 
     #[test]
-    fn test_strict_validation_boundary_limits() {
-        // Exceeds 60 lines before closing delimiter
-        let mut excessive_lines = String::from("---\n");
+    fn test_mixed_tasks_and_text_roundtrip() {
+        let doc = "# Plan\n\nSome paragraph\n- [ ] first task\n- [x] done task\nmore text\n";
+        let note = NoteItem::from_file(doc, "mixed", "md", 0);
+        let todos: Vec<_> = note.content.iter().filter(|c| c.is_todo).collect();
+        assert_eq!(todos.len(), 2);
+        assert!(todos[1].completed);
+        assert!(note.content.iter().any(|c| !c.is_todo && c.text == "Some paragraph"));
+        let md = note.to_markdown(0);
+        assert!(md.contains("- [ ] first task\n") && md.contains("- [x] done task\n") && md.contains("more text\n"));
+        let again = NoteItem::from_file(&md, "mixed", "md", 0);
+        assert_eq!(again.content.iter().filter(|c| c.is_todo).count(), 2);
+        assert!(again.content.iter().any(|c| !c.is_todo && c.text == "more text"));
+    }
+    #[test]
+    fn test_txt_and_corrupt_input_never_rejected() {
+        let txt = NoteItem::from_file("line one\nline two", "Groceries", "txt", 5);
+        assert_eq!(txt.title, "Groceries");
+        assert_eq!(txt.content.len(), 2);
+        assert_eq!(txt.file_extension(), "txt");
+
+        let broken = NoteItem::from_file("ok\u{0}\u{1}garbage", "bad", "md", 0);
+        assert!(broken.content[0].text.starts_with("```"));
+
+        let dangling = sanitize_markdown_body("# T\n```rust\nfn main() {}\n");
+        assert!(dangling.trim_end().ends_with("```"));
+    }
+    #[test]
+    fn test_overlong_frontmatter_is_just_body_text() {
+        let mut doc = String::from("---\n");
         for i in 0..65 {
-            excessive_lines.push_str(&format!("field_{i}: value\n"));
+            doc.push_str(&format!("field_{i}: value\n"));
         }
-        excessive_lines.push_str("---\nbody\n");
-        let res = NoteItem::parse_and_validate_doit_markdown(&excessive_lines, "fallback");
-        assert!(res.is_err());
-        assert!(res.unwrap_err().contains("boundary limit"));
+        doc.push_str("---\nbody\n");
+        let note = NoteItem::from_file(&doc, "long", "md", 0);
+        assert!(!note.content.is_empty());
     }
 
     #[test]
-    fn test_strict_validation_accepts_doit_file() {
-        let doit_md = r#"---
-app: "DoIT"
-version: "1.0.0"
+    fn test_metadata_roundtrip_without_legacy_keys() {
+        let doc = r#"---
 id: "note-portability-1"
 category: "Projects"
 date: "2026-10-29"
@@ -736,15 +712,23 @@ title: "Portability Test"
 media_urls: "data:image/png;base64,abc|||data:image/png;base64,def"
 ---
 
-This is verified DoIT content.
+This is content.
 "#;
-        let res = NoteItem::parse_and_validate_doit_markdown(doit_md, "fallback");
-        assert!(res.is_ok());
-        let note = res.unwrap();
+        let note = NoteItem::from_file(doc, "fallback", "md", 0);
         assert_eq!(note.id, "note-portability-1");
         assert_eq!(note.title, "Portability Test");
         assert_eq!(note.category, "Projects");
         assert_eq!(note.grid_coordinates.x, 4.0);
         assert_eq!(note.media_urls.len(), 2);
+        assert!(!note.to_markdown(0).contains("app:"));
+    }
+    #[test]
+    fn test_external_file_keeps_path_and_header() {
+        let doc = "---\ntitle: Hello\ncustom: yes\n---\n\nBody line\n- [ ] task\n";
+        let note = NoteItem::from_external_file(doc, "C:\\Users\\me\\Desktop\\hello.md", 5);
+        assert_eq!(note.source_path.as_deref(), Some("C:\\Users\\me\\Desktop\\hello.md"));
+        assert!(note.id.starts_with("ext_"));
+        let out = note.to_external_text();
+        assert!(out.starts_with("---\ntitle: Hello\ncustom: yes\n---\n\nBody line\n- [ ] task"));
     }
 }

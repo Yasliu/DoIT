@@ -1,31 +1,42 @@
 import { useCallback, useEffect, useLayoutEffect, useRef, useState } from "react";
 import {
-  AlignLeft,
   Bold,
   Check,
   ChevronDown,
+  ListChecks,
+  Table as TableIcon,
   CornerDownLeft,
   Image as ImageIcon,
   Italic,
-  ListTodo,
   Plus,
+  Save,
   Trash,
   Type,
   X,
 } from "lucide-react";
-import type { ContentItem, NoteItem } from "../api/tauriBridge";
-import { NOTE_FONTS, fontStack } from "../api/tauriBridge";
+import type { NoteItem } from "../api/tauriBridge";
+import { NOTE_FONTS, fontStack, tauriApi } from "../api/tauriBridge";
 import { useUndoStack } from "../hooks/useUndoStack";
-import { TaskLineInput } from "./TaskLineInput";
+import { HeadingSelect } from "./HeadingSelect";
+import { ModeToggle } from "./ModeToggle";
+import { RawEditor } from "./RawEditor";
+import { TableMenu } from "./TableMenu";
+import { getMarkdownShortcuts, matchesCombo } from "../lib/shortcuts";
 import {
-  convertContentMode,
+  contentToMarkdown,
+  markdownToContent,
+  handleCheckboxClick,
+  applyTask,
   handleRichEditorKeyDown,
   htmlToMarkdown,
   isRichBoldActive,
   isRichItalicActive,
   markdownToHtml,
+  handleMarkdownPaste,
+  normalizeEditor,
+  applyHeading,
+  insertTableAtCaret,
 } from "../lib/format";
-import { springTo } from "../lib/spring";
 import { accentFor, cleanText, cx, fullStamp, uid } from "../lib/text";
 
 interface NoteSheetProps {
@@ -36,6 +47,12 @@ interface NoteSheetProps {
   onCommit: (note: NoteItem) => void;
   onClose: () => void;
   onDelete: (note: NoteItem) => void;
+  /** true when switching notes while the drawer is already open (skip the slide-in) */
+  instant?: boolean;
+  /** fired the moment the exit slide starts so the dashboard can reclaim the space */
+  onClosing?: () => void;
+  /** fired on the exact frame the entry slide begins, so the dashboard can start easing in lockstep */
+  onOpening?: () => void;
 }
 
 export function NoteSheet({
@@ -46,9 +63,18 @@ export function NoteSheet({
   onCommit,
   onClose,
   onDelete,
+  instant = false,
+  onClosing,
+  onOpening,
 }: NoteSheetProps) {
   const frame = useRef<HTMLDivElement | null>(null);
-  const scrim = useRef<HTMLDivElement | null>(null);
+  const [phase, setPhase] = useState<"pre" | "in" | "settled" | "out">(instant ? "settled" : "pre");
+  const phaseTimer = useRef(0);
+  const dirtyRef = useRef(false);
+  const [dirty, setDirty] = useState(false);
+  const [savedFlash, setSavedFlash] = useState(false);
+  const [saveError, setSaveError] = useState<string | null>(null);
+  const [tableMenu, setTableMenu] = useState<{ x: number; y: number; cell: HTMLElement } | null>(null);
   const closing = useRef(false);
   const deleted = useRef(false);
   const commitRef = useRef(onCommit);
@@ -66,8 +92,6 @@ export function NoteSheet({
   const panStartRef = useRef({ x: 0, y: 0, panX: 0, panY: 0, moved: false });
   const fileInputRef = useRef<HTMLInputElement | null>(null);
   const [newShelf, setNewShelf] = useState("");
-  const [focusLine, setFocusLine] = useState<string | null>(null);
-  const lineRefs = useRef(new Map<string, HTMLElement>());
   const titleRef = useRef<HTMLInputElement | null>(null);
   const closeRef = useRef<() => void>(() => {});
   const closeCancel = useRef<() => void>(() => {});
@@ -88,8 +112,7 @@ export function NoteSheet({
     if (node) {
       if (lastNoteIdRef.current !== draft.id || !node.innerHTML || node.innerHTML === "<div><br></div>") {
         lastNoteIdRef.current = draft.id;
-        const md = draft.content.map((c) => c.text).join("\n");
-        node.innerHTML = markdownToHtml(md);
+        node.innerHTML = markdownToHtml(contentToMarkdown(draft.content));
       }
     }
   }, [draft.id, draft.content]);
@@ -98,69 +121,20 @@ export function NoteSheet({
     if (lastNoteIdRef.current !== draft.id) {
       lastNoteIdRef.current = draft.id;
       if (editorRef.current) {
-        const md = draft.content.map((c) => c.text).join("\n");
-        editorRef.current.innerHTML = markdownToHtml(md);
+        editorRef.current.innerHTML = markdownToHtml(contentToMarkdown(draft.content));
       }
     }
   }, [draft.id, draft.content]);
 
   const handleEditorInput = () => {
     if (!editorRef.current) return;
-    const md = htmlToMarkdown(editorRef.current);
-    const lines = md.split("\n");
-    const content = lines.map((line, idx) => ({
-      id: draft.content[idx]?.id ?? uid("line"),
-      text: line,
-      is_todo: false,
-      completed: false,
-    }));
+    normalizeEditor(editorRef.current);
+    const content = markdownToContent(htmlToMarkdown(editorRef.current), draftRef.current.content, () => uid("line"));
     commit({ ...draftRef.current, content, last_edited: Date.now() });
     updateActiveFormatting();
   };
 
   const handleToolbarFormat = (style: "bold" | "italic") => {
-    const activeEl = document.activeElement;
-
-    // 1. Task line input selection formatting
-    if (activeEl instanceof HTMLInputElement && focusLine) {
-      const start = activeEl.selectionStart ?? 0;
-      const end = activeEl.selectionEnd ?? 0;
-      if (start !== end) {
-        const val = activeEl.value;
-        const selected = val.slice(start, end);
-        const marker = style === "bold" ? "**" : "*";
-
-        let nextVal: string;
-        let newStart: number;
-        let newEnd: number;
-
-        if (selected.startsWith(marker) && selected.endsWith(marker) && selected.length >= marker.length * 2) {
-          const unwrapped = selected.slice(marker.length, selected.length - marker.length);
-          nextVal = val.slice(0, start) + unwrapped + val.slice(end);
-          newStart = start;
-          newEnd = start + unwrapped.length;
-        } else {
-          const wrapped = `${marker}${selected}${marker}`;
-          nextVal = val.slice(0, start) + wrapped + val.slice(end);
-          newStart = start;
-          newEnd = start + wrapped.length;
-        }
-
-        patchLine(focusLine, { text: nextVal });
-        requestAnimationFrame(() => {
-          activeEl.setSelectionRange(newStart, newEnd);
-        });
-        return;
-      }
-    }
-
-    // 1b. Rich (contenteditable) task line formatting
-    if (activeEl instanceof HTMLElement && activeEl.dataset.taskLine) {
-      document.execCommand(style, false);
-      updateActiveFormatting();
-      return;
-    }
-
     // 2. Contenteditable freeform editor selection formatting
     if (editorRef.current) {
       const sel = window.getSelection();
@@ -285,23 +259,11 @@ export function NoteSheet({
     });
   };
 
-  const isAllTodos = draft.content.some((c) => c.is_todo);
-  const toggleContentMode = () => {
-    const nextIsTodo = !isAllTodos;
-    let source: NoteItem["content"] = draftRef.current.content;
-    if (!isAllTodos && editorRef.current) {
-      // Read the live editor DOM so nothing typed since the last sync is lost or merged
-      source = htmlToMarkdown(editorRef.current)
-        .split("\n")
-        .map((text, idx) => ({
-          id: draftRef.current.content[idx]?.id ?? uid("line"),
-          text,
-          is_todo: false,
-          completed: false,
-        }));
-    }
-    const content = convertContentMode(source, nextIsTodo, draftRef.current.id);
-    commit({ ...draftRef.current, content, last_edited: Date.now() }, true);
+  const runEditorCommand = (fn: (editor: HTMLElement) => void) => {
+    const ed = editorRef.current;
+    if (!ed) return;
+    fn(ed);
+    handleEditorInput();
   };
 
   const accent = accentFor(draft.category, shelves);
@@ -310,6 +272,14 @@ export function NoteSheet({
     draftRef.current = next;
     setDraft(next);
     window.clearTimeout(saveTimer.current);
+    if (next.source_path) {
+      // External file opened in place: autosave is OFF, only the Save button writes to disk
+      dirtyRef.current = true;
+      setDirty(true);
+      void tauriApi.setExternalDirty(true);
+      setSavedFlash(false);
+      return;
+    }
     if (immediate) {
       commitRef.current(next);
       return;
@@ -321,16 +291,48 @@ export function NoteSheet({
     commit({ ...draftRef.current, ...patch, last_edited: Date.now() });
   };
 
+  const external = !!draft.source_path;
+  const rawMode = draft.format === "txt";
+
+  const saveExternal = async () => {
+    const cur = draftRef.current;
+    if (!cur.source_path) return;
+    try {
+      const saved = await tauriApi.saveExternalFile(cur);
+      draftRef.current = { ...cur, source_path: saved.source_path };
+      setDraft(draftRef.current);
+      dirtyRef.current = false;
+      setDirty(false);
+      void tauriApi.setExternalDirty(false);
+      setSaveError(null);
+      setSavedFlash(true);
+      window.setTimeout(() => setSavedFlash(false), 1800);
+    } catch (err: any) {
+      setSaveError(typeof err === "string" ? err : err?.message || "Could not save the file.");
+    }
+  };
+
+  // MD Mode <-> Text Mode also flips the file extension (.md <-> .txt) on the next write
+  const setMode = (raw: boolean) => {
+    if (raw === (draftRef.current.format === "txt")) return;
+    commit({ ...draftRef.current, format: raw ? "txt" : "md", last_edited: Date.now() }, true);
+  };
+
   const titleHistory = useUndoStack<string>(draft.id, draft.title ?? "", (title) => edit({ title }));
   const bodyHistory = useUndoStack<NoteItem["content"]>(draft.id, draft.content, (content) => {
     edit({ content });
-    if (editorRef.current && !content.some((c) => c.is_todo)) {
-      editorRef.current.innerHTML = markdownToHtml(content.map((c) => c.text).join("\n"));
+    if (editorRef.current) {
+      editorRef.current.innerHTML = markdownToHtml(contentToMarkdown(content));
     }
   });
 
   // Title and body keep separate undo/redo stacks; the focused field decides which one runs.
   const handleUndoKeys = (e: React.KeyboardEvent) => {
+    if ((e.ctrlKey || e.metaKey) && !e.shiftKey && e.key.toLowerCase() === "s") {
+      e.preventDefault();
+      if (draftRef.current.source_path) void saveExternal();
+      return;
+    }
     if (!(e.ctrlKey || e.metaKey)) return;
     const k = e.key.toLowerCase();
     const isUndo = k === "z" && !e.shiftKey;
@@ -345,42 +347,22 @@ export function NoteSheet({
     else history.redo();
   };
 
-  // ---- Organic soft modal bloom transition (Eliminates bubble popping & ghost after-images) ----
+  // ---- Right-side drawer slide-in: single spring-like curve, transform only ----
   useLayoutEffect(() => {
-    const el = frame.current;
-    if (!el) return;
-
-    el.style.transformOrigin = "center center";
-    el.style.transform = "translate3d(0, 10px, 0) scale(0.96)";
-    el.style.opacity = "0";
-    if (scrim.current) scrim.current.style.opacity = "0";
-
-    const cancel = springTo({
-      from: 0,
-      to: 100,
-      tune: 32,
-      onFrame: (value) => {
-        const k = value / 100;
-        el.style.transform = `translate3d(0, ${(10 * (1 - k)).toFixed(2)}px, 0) scale(${(0.96 + 0.04 * k).toFixed(4)})`;
-        el.style.opacity = `${k.toFixed(3)}`;
-        if (scrim.current) scrim.current.style.opacity = `${k.toFixed(3)}`;
-      },
-      onDone: () => {
-        el.style.transform = "none";
-        el.style.opacity = "1";
-        el.style.willChange = "auto";
-        if (scrim.current) scrim.current.style.opacity = "1";
-      },
-    });
-
-    return cancel;
-  }, []);
-
+    if (instant) return;
+    const id = requestAnimationFrame(() =>
+      requestAnimationFrame(() => {
+        setPhase("in");
+        onOpening?.();
+      }),
+    );
+    return () => cancelAnimationFrame(id);
+  }, [instant]);
   useEffect(() => {
     const el = frame.current;
-    el?.focus();
+    el?.focus({ preventScroll: true });
     if (!note.title) {
-      requestAnimationFrame(() => titleRef.current?.focus());
+      requestAnimationFrame(() => titleRef.current?.focus({ preventScroll: true }));
     }
     // run once on mount only: a later save must never pull focus off a line
   }, []);
@@ -396,47 +378,40 @@ export function NoteSheet({
         }
         closeRef.current();
       }
-      if (event.key === "Tab" && frame.current) {
-        const root = frame.current;
-        const nodes = Array.from(
-          root.querySelectorAll<HTMLElement>(
-            'button:not([disabled]), input:not([disabled]), [tabindex]:not([tabindex="-1"])',
-          ),
-        ).filter((node) => node.offsetParent !== null);
-        if (nodes.length === 0) return;
-        const first = nodes[0];
-        const last = nodes[nodes.length - 1];
-        const active = document.activeElement as HTMLElement | null;
-        const inside = active ? root.contains(active) : false;
-
-        if (!inside) {
-          event.preventDefault();
-          (event.shiftKey ? last : first).focus();
-        } else if (!event.shiftKey && active === last) {
-          event.preventDefault();
-          first.focus();
-        } else if (event.shiftKey && active === first) {
-          event.preventDefault();
-          last.focus();
-        }
-      }
     };
     document.addEventListener("keydown", onKey);
     return () => document.removeEventListener("keydown", onKey);
   }, [fontOpen, shelfOpen]);
 
+  // The backend asks for a final flush right before it blanks the canvas (tray mode)
   useEffect(() => {
-    if (!focusLine) return;
-    const input = lineRefs.current.get(focusLine);
-    input?.focus();
-    setFocusLine(null);
-  }, [focusLine, draft.content]);
+    let unlisten: (() => void) | null = null;
+    let disposed = false;
+    void import("@tauri-apps/api/event")
+      .then(({ listen }) =>
+        listen("flush-pending", () => {
+          if (draftRef.current.source_path) return;
+          window.clearTimeout(saveTimer.current);
+          commitRef.current(draftRef.current);
+        }).then((fn) => {
+          if (disposed) fn();
+          else unlisten = fn;
+        }),
+      )
+      .catch(() => undefined);
+    return () => {
+      disposed = true;
+      if (unlisten) unlisten();
+    };
+  }, []);
 
   useEffect(() => {
     return () => {
+      if (draftRef.current.source_path) void tauriApi.setExternalDirty(false);
       window.clearTimeout(saveTimer.current);
+      window.clearTimeout(phaseTimer.current);
       closeCancel.current();
-      if (!deleted.current) {
+      if (!deleted.current && !draftRef.current.source_path) {
         commitRef.current(draftRef.current);
       }
     };
@@ -444,63 +419,31 @@ export function NoteSheet({
 
   const close = () => {
     if (closing.current) return;
+    if (draftRef.current.source_path && dirtyRef.current && !window.confirm("Discard unsaved changes to this file?")) return;
     closing.current = true;
     window.clearTimeout(saveTimer.current);
 
-    // Prune excessive empty items before persisting
+    // Drop trailing empty lines only; blank lines between paragraphs are real content
     const cur = draftRef.current;
-    let prunedContent = cur.content;
-    if (prunedContent.length > 1) {
-      prunedContent = prunedContent.filter(
-        (c, i) =>
-          c.text.trim().length > 0 ||
-          (i === prunedContent.length - 1 && prunedContent.some((other) => other.text.trim().length > 0)),
-      );
-      if (prunedContent.length === 0) {
-        prunedContent = [{ id: uid("line"), text: "", is_todo: cur.content[0]?.is_todo ?? false, completed: false }];
-      }
+    let prunedContent = [...cur.content];
+    while (prunedContent.length > 1 && prunedContent[prunedContent.length - 1].text.trim() === "") {
+      prunedContent.pop();
+    }
+    if (prunedContent.length === 0) {
+      prunedContent = [{ id: uid("line"), text: "", is_todo: cur.content[0]?.is_todo ?? false, completed: false }];
     }
     const cleanFinal = { ...cur, content: prunedContent };
     draftRef.current = cleanFinal;
-    commitRef.current(cleanFinal);
+    if (!cleanFinal.source_path) commitRef.current(cleanFinal);
 
-    if (scrim.current) scrim.current.style.pointerEvents = "none";
+    onClosing?.();
     if (frame.current) frame.current.style.pointerEvents = "none";
-    onClose();
+    // settled -> in (re-enable transition) -> out (slide away), then unmount
+    setPhase("in");
+    requestAnimationFrame(() => requestAnimationFrame(() => setPhase("out")));
+    phaseTimer.current = window.setTimeout(() => onClose(), 320);
   };
-
   closeRef.current = close;
-
-  const addLine = (afterIndex: number) => {
-    const item: ContentItem = {
-      id: uid("line"),
-      text: "",
-      is_todo: draftRef.current.content[afterIndex]?.is_todo ?? true,
-      completed: false,
-    };
-    const content = [...draftRef.current.content];
-    content.splice(afterIndex + 1, 0, item);
-    commit({ ...draftRef.current, content, last_edited: Date.now() }, true);
-    setFocusLine(item.id);
-  };
-
-  const removeLine = (id: string, index: number) => {
-    const content = draftRef.current.content.filter((item) => item.id !== id);
-    const next = content.length
-      ? content
-      : [{ id: uid("line"), text: "", is_todo: true, completed: false }];
-    commit({ ...draftRef.current, content: next, last_edited: Date.now() }, true);
-    const neighbour = next[Math.max(0, index - 1)];
-    if (neighbour) setFocusLine(neighbour.id);
-  };
-
-  const patchLine = (id: string, patch: Partial<ContentItem>) => {
-    const content = draftRef.current.content.map((item) =>
-      item.id === id ? { ...item, ...patch } : item,
-    );
-    commit({ ...draftRef.current, content, last_edited: Date.now() });
-  };
-
 
   const addShelf = () => {
     const name = newShelf.trim();
@@ -515,37 +458,49 @@ export function NoteSheet({
   return (
     <>
       <div
-        ref={scrim}
-        className="sheet-scrim"
-        onPointerDown={(event) => {
-          if (event.target === event.currentTarget) close();
+        ref={frame}
+        role="complementary"
+        aria-label={cleanText(draft.title) || "Untitled note"}
+        tabIndex={-1}
+        onKeyDownCapture={handleUndoKeys}
+        onPaste={handlePaste}
+        onDragOver={(e) => {
+          e.preventDefault();
+          e.dataTransfer.dropEffect = "copy";
         }}
-        aria-hidden="true"
-      />
-
-      <div className="fixed inset-0 z-60 flex items-center justify-center p-4 sm:p-6 md:p-8 pointer-events-none">
-        <div
-          ref={frame}
-          role="dialog"
-          aria-modal="true"
-          aria-label={cleanText(draft.title) || "Untitled note"}
-          tabIndex={-1}
-          onKeyDownCapture={handleUndoKeys}
-          onPaste={handlePaste}
-          onDragOver={(e) => {
-            e.preventDefault();
-            e.dataTransfer.dropEffect = "copy";
-          }}
-          onDrop={handleDrop}
-          className="pointer-events-auto flex flex-col w-[92vw] max-w-[920px] min-h-[380px] max-h-[88vh] h-auto overflow-hidden rounded-[24px] glass-sheet outline-none border border-white/10 shadow-[0_30px_90px_rgba(0,0,0,0.85)]"
-        >
-        <div
+        onDrop={handleDrop}
+        onTransitionEnd={(e) => {
+          if (e.target === e.currentTarget && e.propertyName === "transform" && phase === "in") setPhase("settled");
+        }}
+        style={{
+          transform: phase === "settled" ? "none" : phase === "in" ? "translate3d(0,0,0)" : "translate3d(106%,0,0)",
+          opacity: phase === "pre" ? 0 : 1,
+          // entry: long soft landing + quick fade; exit keeps the plain 300ms ease-out
+          transition:
+            phase === "settled"
+              ? "none"
+              : phase === "out"
+                ? "transform 300ms ease-out"
+                : "transform 460ms cubic-bezier(0.32, 0.72, 0, 1), opacity 240ms ease-out",
+          willChange: phase === "settled" ? "auto" : "transform",
+        }}
+        className="absolute inset-y-0 right-0 z-30 flex w-[clamp(420px,42vw,600px)] flex-col overflow-hidden rounded-[22px] glass-sheet outline-none border border-white/10 shadow-[0_30px_90px_rgba(0,0,0,0.6)]"
+      >        <div
           className="h-[2px] shrink-0 origin-left"
           style={{ backgroundColor: accent, animation: "strip-in 620ms cubic-bezier(0.22,1,0.36,1) both" }}
         />
 
-        <div className="flex h-[52px] shrink-0 items-center justify-between gap-4 px-5">
+        <div className="flex min-h-[52px] shrink-0 flex-wrap items-center justify-between gap-x-4 gap-y-1 px-5 py-1.5">
           <div className="flex min-w-0 items-center gap-2.5">
+            {external ? (
+              <span
+                title={draft.source_path}
+                className="flex h-6 max-w-[220px] items-center gap-1.5 truncate rounded-md px-1.5 font-mono text-[9.5px] tracking-[0.06em] text-ink-3"
+              >
+                <span className="size-[4px] shrink-0 rounded-full bg-white/60" />
+                <span className="truncate">{(draft.source_path || "").split(/[\\/]/).pop()}</span>
+              </span>
+            ) : (
             <div className="relative">
               <button
                 type="button"
@@ -606,6 +561,7 @@ export function NoteSheet({
               )}
             </div>
 
+            )}
           </div>
 
           <div className="flex shrink-0 items-center gap-0.5">
@@ -651,28 +607,8 @@ export function NoteSheet({
 
             <span className="mx-1 h-4 w-px bg-white/[0.08]" />
 
-            <button
-              type="button"
-              onClick={toggleContentMode}
-              title={isAllTodos ? "Switch to Plain Text Mode" : "Switch to Tasks/Checklist Mode"}
-              aria-label="Toggle content mode"
-              className="flex h-7 items-center gap-1.5 rounded-md px-2 text-[11px] font-mono uppercase tracking-wider text-ink-3 transition-colors hover:bg-white/[0.08] hover:text-ink-1"
-            >
-              {isAllTodos ? (
-                <>
-                  <ListTodo size={12.5} className="text-white" />
-                  <span>Tasks</span>
-                </>
-              ) : (
-                <>
-                  <AlignLeft size={12.5} className="text-white" />
-                  <span>Text</span>
-                </>
-              )}
-            </button>
-
-            <span className="mx-1 h-4 w-px bg-white/[0.08]" />
-
+            {!rawMode && (
+            <>
             <button
               type="button"
               onMouseDown={(e) => e.preventDefault()}
@@ -695,6 +631,32 @@ export function NoteSheet({
             >
               <Italic size={12.5} strokeWidth={2.4} />
             </button>
+
+            <span className="mx-1 h-4 w-px bg-white/[0.08]" />
+            <HeadingSelect editorRef={editorRef} onSelect={(level) => runEditorCommand((ed) => applyHeading(ed, level))} />
+            <button
+              type="button"
+              onMouseDown={(e) => e.preventDefault()}
+              onClick={() => runEditorCommand((ed) => insertTableAtCaret(ed))}
+              aria-label="Insert table"
+              title="Insert table (Ctrl+T)"
+              className="icon-btn !size-7 cursor-pointer"
+            >
+              <TableIcon size={13} strokeWidth={1.8} />
+            </button>
+            <button
+              type="button"
+              onMouseDown={(e) => e.preventDefault()}
+              onClick={() => runEditorCommand((ed) => applyTask(ed))}
+              aria-label="Task checkbox"
+              title="Task checkbox (- [ ])"
+              className="icon-btn !size-7 cursor-pointer"
+            >
+              <ListChecks size={13.5} strokeWidth={1.8} />
+            </button>
+            <span className="mx-1 h-4 w-px bg-white/[0.08]" />
+            </>
+            )}
             <input
               ref={fileInputRef}
               type="file"
@@ -735,18 +697,20 @@ export function NoteSheet({
 
             <span className="mx-1 h-4 w-px bg-white/[0.08]" />
 
-            <button
-              type="button"
-              onClick={() => {
-                deleted.current = true;
-                onDelete(draftRef.current);
-              }}
-              aria-label="Delete note"
-              className="icon-btn !size-7 hover:!text-white"
-              title="Delete note"
-            >
-              <Trash size={12.5} strokeWidth={1.7} />
-            </button>
+            {!external && (
+              <button
+                type="button"
+                onClick={() => {
+                  deleted.current = true;
+                  onDelete(draftRef.current);
+                }}
+                aria-label="Delete note"
+                className="icon-btn !size-7 hover:!text-white"
+                title="Delete note"
+              >
+                <Trash size={12.5} strokeWidth={1.7} />
+              </button>
+            )}
             <button
               type="button"
               onClick={close}
@@ -756,6 +720,34 @@ export function NoteSheet({
               <X size={13} strokeWidth={1.8} />
             </button>
           </div>
+        </div>
+
+        <div className="flex shrink-0 items-center justify-between gap-3 px-5 pb-2">
+          <ModeToggle rawMode={rawMode} onChange={setMode} />
+          {external && (
+            <div className="flex min-w-0 items-center gap-2">
+              {saveError && (
+                <span className="max-w-[200px] truncate text-[10.5px] text-red-400" title={saveError}>
+                  {saveError}
+                </span>
+              )}
+              {dirty && !savedFlash && <span className="font-mono text-[9px] uppercase tracking-[0.1em] text-ink-4">Unsaved</span>}
+              <button
+                type="button"
+                onClick={() => void saveExternal()}
+                title="Save to the original file (Ctrl+S)"
+                className={cx(
+                  "flex h-7 items-center gap-1.5 rounded-[8px] border px-3 text-[11.5px] font-medium transition-colors duration-150",
+                  dirty
+                    ? "border-white bg-white text-black hover:bg-white/90"
+                    : "border-white/[0.14] text-ink-3 hover:border-white/30 hover:text-ink-1",
+                )}
+              >
+                <Save size={12.5} strokeWidth={2} />
+                {savedFlash ? "Saved" : "Save"}
+              </button>
+            </div>
+          )}
         </div>
 
         <div className="scroll min-h-0 flex-1 overflow-y-auto px-6">
@@ -822,22 +814,45 @@ export function NoteSheet({
             <div className="rule my-5" />
 
             <div data-undo="body">
-            {!isAllTodos ? (
-              /* Basic Note (Point 4): Freeform multi-line text writing without lists or checkboxes */
+              {rawMode ? (
+                <RawEditor
+                  content={draft.content}
+                  minHeight={300}
+                  className="text-[13px]"
+                  onChange={(content) => commit({ ...draftRef.current, content, last_edited: Date.now() })}
+                />
+              ) : (
               <div className="min-h-[220px]">
                 <div
                   ref={initEditor}
+                  onPaste={(e) => {
+                    if (handleMarkdownPaste(e)) handleEditorInput();
+                  }}
                   contentEditable
                   suppressContentEditableWarning
                   onInput={handleEditorInput}
+                  onContextMenu={(e) => {
+                    const cell = (e.target as HTMLElement).closest("td,th") as HTMLElement | null;
+                    if (cell && editorRef.current?.contains(cell)) {
+                      e.preventDefault();
+                      e.stopPropagation();
+                      setTableMenu({ x: e.clientX, y: e.clientY, cell });
+                    }
+                  }}
+                  onMouseDown={(e) => {
+                    if ((e.target as HTMLElement).closest(".md-cb")) e.preventDefault();
+                  }}
+                  onClick={(e) => {
+                    if (handleCheckboxClick(e, editorRef.current)) handleEditorInput();
+                  }}
                   onKeyDown={(e) => {
-                    const meta = e.ctrlKey || e.metaKey;
-                    if (meta && e.key.toLowerCase() === "b") {
+                    const sc = getMarkdownShortcuts();
+                    if (matchesCombo(e, sc.bold)) {
                       e.preventDefault();
                       handleToolbarFormat("bold");
                       return;
                     }
-                    if (meta && e.key.toLowerCase() === "i") {
+                    if (matchesCombo(e, sc.italic)) {
                       e.preventDefault();
                       handleToolbarFormat("italic");
                       return;
@@ -854,83 +869,7 @@ export function NoteSheet({
                   }}
                 />
               </div>
-            ) : (
-              /* Checklist / Tasks Mode */
-              <>
-                <div className="space-y-1">
-                  {body.map((item, index) => {
-                    const cleanItemText = item.text.replace(/^\s*[-*â€¢]\s+/, "");
-                    return (
-                      <div
-                        key={item.id}
-                        className="flex items-start gap-3 w-full py-1 group rounded-[8px] px-2 transition-colors hover:bg-white/[0.025]"
-                      >
-                        <button
-                          type="button"
-                          onClick={() => patchLine(item.id, { completed: !item.completed })}
-                          aria-label={item.completed ? "Mark incomplete" : "Mark complete"}
-                          className={cx(
-                            "border rounded-md w-4 h-4 mt-[3px] bg-transparent cursor-pointer check-indicator-layer flex items-center justify-center shrink-0 transition-all duration-200 outline-none select-none",
-                            item.completed
-                              ? "border-white bg-white text-black"
-                              : "border-white/20 hover:border-white/50 text-transparent",
-                          )}
-                        >
-                          <Check size={11} strokeWidth={3.5} className={cx(item.completed ? "opacity-100" : "opacity-0")} />
-                        </button>
-
-                        <TaskLineInput
-                          elRef={(node) => {
-                            if (node) lineRefs.current.set(item.id, node);
-                            else lineRefs.current.delete(item.id);
-                          }}
-                          onFocus={() => setFocusLine(item.id)}
-                          value={cleanItemText}
-                          onChange={(text) => patchLine(item.id, { text: text.replace(/^\s*[-*â€¢]\s+/, "") })}
-                          onKeyDown={(event) => {
-                            if (event.key === "Enter") {
-                              event.preventDefault();
-                              addLine(index);
-                            }
-                            if (event.key === "Backspace" && cleanItemText === "" && body.length > 1) {
-                              event.preventDefault();
-                              removeLine(item.id, index);
-                            }
-                          }}
-                          placeholder={index === 0 ? "Task description..." : "Task item..."}
-                          ariaLabel="Note task line"
-                          className={cx(
-                            "line-input flex-1 bg-transparent text-[14.5px] leading-relaxed transition-all duration-150",
-                            item.completed ? "line-through text-ink-4 opacity-50" : "text-ink-1 opacity-90",
-                          )}
-                          style={{
-                            fontFamily: fontStack(draft.font_family),
-                          }}
-                        />
-
-                        <button
-                          type="button"
-                          onClick={() => removeLine(item.id, index)}
-                          aria-label="Remove line"
-                          className="grid size-4 shrink-0 place-items-center rounded text-ink-4 opacity-0 transition-opacity hover:text-ink-1 focus-visible:opacity-100 group-hover:opacity-100"
-                        >
-                          <X size={10} strokeWidth={2} />
-                        </button>
-                      </div>
-                    );
-                  })}
-                </div>
-
-                <button
-                  type="button"
-                  onClick={() => addLine(body.length - 1)}
-                  className="mt-3 flex items-center gap-2 rounded-md px-2 py-1.5 text-[11.5px] text-ink-4 transition-colors hover:bg-white/[0.04] hover:text-ink-2"
-                >
-                  <Plus size={12} strokeWidth={1.8} />
-                  Add item
-                </button>
-              </>
-            )}
+              )}
             </div>
           </div>
         </div>
@@ -950,7 +889,16 @@ export function NoteSheet({
           </span>
         </div>
       </div>
-      </div>
+
+      {tableMenu && (
+        <TableMenu
+          x={tableMenu.x}
+          y={tableMenu.y}
+          cell={tableMenu.cell}
+          onClose={() => setTableMenu(null)}
+          onChanged={handleEditorInput}
+        />
+      )}
 
       {/* Lightbox Preview Modal with Zoom & Holding-Mouse Pan */}
       {previewImage && (

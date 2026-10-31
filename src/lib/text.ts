@@ -171,3 +171,44 @@ export function plainPreview(note: NoteItem, count: number): string[] {
     .slice(0, count)
     .map((item) => item.text.trim());
 }
+
+export interface PreviewLine {
+  kind: "skip" | "h" | "li" | "p";
+  text: string;
+}
+
+/**
+ * Converts one raw markdown source line into clean plain preview text for note cards:
+ * heading hashes, quote markers, bullet markers, table pipes, fences and rules never leak through.
+ */
+export function previewLine(raw: string): PreviewLine {
+  const skip: PreviewLine = { kind: "skip", text: "" };
+  let t = raw.trim();
+  if (!t) return skip;
+  if (/^(```|~~~)/.test(t)) return skip;
+  if (/^\s{0,3}([-*_])(?:\s*\1){2,}\s*$/.test(raw)) return skip;
+  if (/^\|?\s*:?-+:?\s*(\|\s*:?-+:?\s*)+\|?$/.test(t)) return skip;
+
+  t = t.replace(/!\[([^\]]*)\]\([^)]*\)/g, (_m, alt: string) => alt || "Image");
+
+  if (t.includes("|")) {
+    // table rows / stray pipes: drop every pipe and structural dash token, keep the cell words
+    const words = t
+      .replace(/\|/g, " ")
+      .replace(/(^|\s):?-+:?(?=\s|$)/g, " ")
+      .replace(/\s+/g, " ")
+      .trim();
+    return words ? { kind: "p", text: words } : skip;
+  }
+
+  let m = t.match(/^#{1,6}\s+(.*)$/);
+  if (m) {
+    const text = m[1].replace(/\s*#+\s*$/, "").trim();
+    return text ? { kind: "h", text } : skip;
+  }
+  m = t.match(/^[-*\u2022]\s+(.*)$/);
+  if (m) return m[1].trim() ? { kind: "li", text: m[1].trim() } : skip;
+  m = t.match(/^>\s?(.*)$/);
+  if (m) return m[1].trim() ? { kind: "p", text: m[1].trim() } : skip;
+  return { kind: "p", text: t };
+}

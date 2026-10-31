@@ -54,4 +54,4 @@ npm run tauri dev
 ## 📄 Licensing & Safety Metrics
 
 - **License:** Open Source under the permissive MIT standards. 
-- **Security Profile:** Hardened client-side boundaries. The app actively restricts file imports to 2 MB boundaries to guarantee thread stability and completely isolates path operations from administrative elevations.
+- **Security Profile:** Hardened client-side boundaries. The app actively restricts file imports to 30 MB boundaries to guarantee thread stability and completely isolates path operations from administrative elevations.

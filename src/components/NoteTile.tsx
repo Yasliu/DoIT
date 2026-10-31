@@ -1,9 +1,9 @@
 import type { PointerEvent as ReactPointerEvent } from "react";
-import { useState } from "react";
-import { Check } from "lucide-react";
+import { useLayoutEffect, useMemo, useRef, useState } from "react";
 import type { NoteItem } from "../api/tauriBridge";
+import { fontStack } from "../api/tauriBridge";
 import { accentFor, cleanText, cx, densityOf, edgeOpacity, relativeShort, stripDate } from "../lib/text";
-import { renderFormattedText } from "../lib/format";
+import { contentToMarkdown, previewMarkup } from "../lib/format";
 
 interface NoteTileProps {
   note: NoteItem;
@@ -41,10 +41,24 @@ export function NoteTile({
       ? "translate3d(0, -1.5px, 0)"
       : "none";
 
-  const visible = note.content.filter((item) => item.text.trim().length > 0).slice(0, density.lines);
+  const rawMode = note.format === "txt";
+  const empty = note.content.every((item) => item.text.trim().length === 0);
+  const preview = useMemo(() => (rawMode ? null : previewMarkup(note.content)), [note.content, rawMode]);
+  const previewRef = useRef<HTMLElement | null>(null);
+  const [overflowing, setOverflowing] = useState(false);
+  const previewMax = Math.max(40, density.lines * 34);
+  useLayoutEffect(() => {
+    const el = previewRef.current;
+    if (el) setOverflowing(el.scrollHeight > el.clientHeight + 2);
+  }, [note.content, rawMode, previewMax]);
+  const fadeStyle: React.CSSProperties = overflowing
+    ? {
+        WebkitMaskImage: "linear-gradient(to bottom, #000 calc(100% - 28px), transparent)",
+        maskImage: "linear-gradient(to bottom, #000 calc(100% - 28px), transparent)",
+      }
+    : {};
   const total = note.content.filter((item) => item.is_todo).length;
   const done = note.content.filter((item) => item.is_todo && item.completed).length;
-  const empty = visible.length === 0;
 
   return (
     <article
@@ -215,72 +229,35 @@ export function NoteTile({
       <div className="flex min-w-0 flex-1 flex-col">
         {empty ? (
           <p className="mt-2 text-[12px] leading-relaxed text-ink-4">Open to start writing.</p>
-        ) : total === 0 ? (
-          /* Basic Note (Point 4): Clean writing preview without bullet points or checkboxes */
-          <div className="mt-2.5 space-y-1">
-            {visible.map((item) => (
-              <p
-                key={item.id}
-                className="text-[12.5px] leading-[1.5] text-ink-2"
-                style={{
-                  display: "-webkit-box",
-                  WebkitLineClamp: density.weight === "square" ? 1 : 2,
-                  WebkitBoxOrient: "vertical",
-                  overflow: "hidden",
-                }}
-              >
-                {renderFormattedText(item.text)}
-              </p>
-            ))}
-          </div>
+        ) : rawMode ? (
+          /* Text Mode note: the file exactly as the user sees it when the tile is opened */
+          <pre
+            ref={previewRef as React.RefObject<HTMLPreElement>}
+            className="md-preview-raw mt-2.5"
+            style={{ maxHeight: previewMax, ...fadeStyle }}
+          >
+            {contentToMarkdown(note.content)}
+          </pre>
         ) : (
-          <div className="mt-2.5 space-y-[7px]">
-            {visible.map((item) => (
-              <div key={item.id} className="flex items-center gap-2.5 w-full py-0.5 group">
-                {item.is_todo ? (
-                  <button
-                    type="button"
-                    aria-label={item.completed ? "Mark as open" : "Mark as done"}
-                    data-done={item.completed || undefined}
-                    className={cx(
-                      "border rounded-md w-3.5 h-3.5 bg-transparent cursor-pointer check-indicator-layer flex items-center justify-center shrink-0 transition-all duration-200 outline-none select-none",
-                      item.completed
-                        ? "border-white bg-white text-black"
-                        : "border-white/20 hover:border-white/50 text-transparent",
-                    )}
-                    onPointerDown={(event) => event.stopPropagation()}
-                    onKeyDown={(event) => event.stopPropagation()}
-                    onClick={(event) => {
-                      event.stopPropagation();
-                      onToggleItem(note, item.id);
-                    }}
-                  >
-                    <Check size={9} strokeWidth={3.5} className={cx(item.completed ? "opacity-100" : "opacity-0")} />
-                  </button>
-                ) : (
-                  <span className="size-[3px] rounded-full bg-white/25 shrink-0 ml-0.5" />
-                )}
-                <span
-                  className={cx(
-                    "min-w-0 flex-1 text-[12.5px] leading-[1.5]",
-                    item.is_todo && item.completed ? "line-through text-ink-4 opacity-50" : "text-ink-2",
-                  )}
-                  style={{
-                    display: "-webkit-box",
-                    WebkitLineClamp: density.weight === "square" ? 1 : 2,
-                    WebkitBoxOrient: "vertical",
-                    overflow: "hidden",
-                    lineHeight: "22px",
-                    maxHeight: density.weight === "square" ? 22 : 44,
-                  }}
-                >
-                  {renderFormattedText(item.text.replace(/^\s*[-*•]\s+/, ""))}
-                </span>
-              </div>
-            ))}
-          </div>
+          /* MD Mode note: the rendered document (headings, tables, tasks, images) */
+          <div
+            ref={previewRef as React.RefObject<HTMLDivElement>}
+            className="md-preview mt-2.5"
+            style={{ maxHeight: previewMax, fontFamily: fontStack(note.font_family), ...fadeStyle }}
+            onPointerDown={(event) => {
+              if ((event.target as HTMLElement).closest(".md-cb")) event.stopPropagation();
+            }}
+            onClick={(event) => {
+              const cb = (event.target as HTMLElement).closest(".md-cb");
+              if (!cb) return;
+              event.stopPropagation();
+              const boxes = Array.from(event.currentTarget.querySelectorAll(".md-cb"));
+              const id = preview?.taskIds[boxes.indexOf(cb)];
+              if (id) onToggleItem(note, id);
+            }}
+            dangerouslySetInnerHTML={{ __html: preview?.html ?? "" }}
+          />
         )}
-
         <div className="mt-auto flex items-center justify-between gap-3 pt-3.5">
           <span className="font-mono text-[9.5px] uppercase tracking-[0.1em] text-ink-4">
             {total > 0

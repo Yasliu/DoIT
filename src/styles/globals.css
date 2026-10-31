@@ -701,3 +701,125 @@ html[data-theme="monochrome"] .lightscape {
   opacity: 0 !important;
   pointer-events: none !important;
 }
+
+/* ---- Markdown editor: rendered blocks (markers live in data-p, never shown) ---- */
+.md-h1 { font-size: 1.6em; font-weight: 700; line-height: 1.25; margin: 0.4em 0 0.12em; letter-spacing: -0.02em; color: #fff; }
+.md-h2 { font-size: 1.34em; font-weight: 650; line-height: 1.3; margin: 0.35em 0 0.1em; letter-spacing: -0.015em; color: #fff; }
+.md-h3 { font-size: 1.15em; font-weight: 600; line-height: 1.35; margin: 0.3em 0 0.06em; color: #fff; }
+.md-h4, .md-h5, .md-h6 { font-size: 1.04em; font-weight: 600; line-height: 1.4; margin: 0.25em 0 0.05em; }
+.md-li { position: relative; padding-left: 1.4em; }
+.md-li::before { content: "\2022"; position: absolute; left: 0.4em; color: rgba(255, 255, 255, 0.6); }
+.md-quote { border-left: 2px solid rgba(255, 255, 255, 0.28); padding-left: 0.9em; color: rgba(236, 238, 241, 0.72); }
+.md-hr { padding: 0.55em 0; user-select: none; }
+.md-hr hr { border: 0; border-top: 1px solid rgba(255, 255, 255, 0.14); margin: 0; }
+.md-pre {
+  font-family: "JetBrains Mono", ui-monospace, SFMono-Regular, Consolas, monospace;
+  font-size: 0.86em;
+  line-height: 1.55;
+  min-height: 2.6em;
+  margin: 0.45em 0;
+  padding: 0.7em 0.95em;
+  white-space: pre-wrap;
+  word-break: break-word;
+  background: rgba(255, 255, 255, 0.045);
+  border: 1px solid rgba(255, 255, 255, 0.08);
+  border-radius: 10px;
+  outline: none;
+}
+/* Isolated horizontal scroll chassis: wide tables never push the sheet / tray layout sideways */
+.md-tablewrap {
+  display: block;
+  width: 100%;
+  max-width: 100%;
+  min-width: 0;
+  margin: 0.55em 0;
+  overflow-x: auto;
+  overflow-y: hidden;
+  border-radius: 10px;
+  user-select: text;
+  scrollbar-width: thin;
+  scrollbar-color: rgba(255, 255, 255, 0.1) transparent;
+}
+.md-tablewrap::-webkit-scrollbar { height: 6px; }
+.md-tablewrap::-webkit-scrollbar-track { background: transparent; }
+.md-tablewrap::-webkit-scrollbar-thumb { background: rgba(255, 255, 255, 0.1); border-radius: 999px; }
+.md-tablewrap::-webkit-scrollbar-thumb:hover { background: rgba(255, 255, 255, 0.2); }
+.md-tbl { width: max-content; min-width: 100%; border-collapse: collapse; font-size: 0.95em; }
+.md-tbl th,
+.md-tbl td {
+  border: 1px solid rgba(255, 255, 255, 0.1);
+  padding: 6px 12px;
+  min-width: 7em;
+  max-width: 28em;
+  text-align: left;
+  vertical-align: top;
+  white-space: normal;
+  word-break: break-word;
+  outline: none;
+}.md-tbl th { background: rgba(255, 255, 255, 0.02); font-weight: 600; color: #fff; }
+.md-tbl th:focus, .md-tbl td:focus { background: rgba(255, 255, 255, 0.05); }
+.md-img {
+  display: inline-block;
+  max-width: 100%;
+  height: auto;
+  vertical-align: middle;
+  margin: 4px 0;
+  border-radius: 10px;
+  border: 1px solid rgba(255, 255, 255, 0.1);
+}
+/* ---- Interactive task blocks (`- [ ]` / `- [x]`) rendered mid-document ---- */
+.md-task { position: relative; display: block; padding-left: 25px; min-height: 1.6em; }
+.md-cb {
+  position: absolute;
+  left: 0;
+  top: calc((1.6em - 15px) / 2);
+  display: block;
+  width: 15px;
+  height: 15px;
+  border: 1px solid rgba(255, 255, 255, 0.28);
+  border-radius: 5px;
+  background: transparent;
+  cursor: pointer;
+  user-select: none;
+  transition: background-color 160ms ease, border-color 160ms ease;
+}
+.md-cb:hover { border-color: rgba(255, 255, 255, 0.55); }
+.md-task-done .md-cb { background: #ffffff; border-color: #ffffff; }
+.md-task-done .md-cb::after {
+  content: "";
+  position: absolute;
+  left: 4px;
+  top: 1px;
+  width: 4px;
+  height: 8px;
+  border: solid #0b0c0f;
+  border-width: 0 2px 2px 0;
+  transform: rotate(45deg);
+}
+.md-task-done { opacity: 0.55; text-decoration: line-through; }
+/* ---- Card previews: same rendering as the opened note, read-only and clamped ---- */
+.md-preview {
+  font-size: 12.5px;
+  line-height: 1.55;
+  color: var(--color-ink-2, #c3c6cc);
+  overflow: hidden;
+  user-select: none;
+  cursor: inherit;
+  word-break: break-word;
+}
+.md-preview > div { min-height: 1.2em; }
+.md-preview .md-tablewrap { overflow: hidden; margin: 0.35em 0; }
+.md-preview .md-img { max-height: 110px; width: auto; }
+.md-preview .md-pre { margin: 0.3em 0; padding: 0.4em 0.7em; min-height: 0; }
+.md-preview .md-cb { cursor: pointer; }
+.md-preview-raw {
+  margin: 0;
+  overflow: hidden;
+  font-family: "JetBrains Mono", ui-monospace, SFMono-Regular, Consolas, monospace;
+  font-size: 11.5px;
+  line-height: 1.55;
+  white-space: pre-wrap;
+  word-break: break-word;
+  color: var(--color-ink-2, #c3c6cc);
+  user-select: none;
+}

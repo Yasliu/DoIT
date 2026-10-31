@@ -9,6 +9,17 @@ const host = process.env.TAURI_DEV_HOST;
 export default defineConfig(() => ({
   plugins: [react(), tailwindcss()],
 
+  // Lean production bundle for WebView2: no sourcemaps, no module-preload polyfill, no dev logging
+  build: {
+    sourcemap: false,
+    cssMinify: true,
+    minify: true,
+    reportCompressedSize: false,
+    modulePreload: { polyfill: false },
+    chunkSizeWarningLimit: 900,
+  },
+  esbuild: { drop: ["console", "debugger"] },
+
   // Vite options tailored for Tauri development and only applied in `tauri dev` or `tauri build`
   clearScreen: false,
   server: {

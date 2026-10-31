@@ -449,39 +449,191 @@ pub fn position_tray_window(app: &AppHandle, window: &tauri::WebviewWindow, expa
     }
 }
 
+// ---------------------------------------------------------------------------
+// Window lifecycle: ONE live webview at a time.
+//   canvas mode : only "main" renders (full React canvas)
+//   tray mode   : only "tray" renders (single frame that mutates between the 380x480 panel and the
+//                 180x44 floating bar via native set_size); "main" is swapped for a blank document
+//                 so WebView2 can reclaim its whole layout tree.
+// ---------------------------------------------------------------------------
+
+use std::sync::atomic::{AtomicBool, Ordering};
+
+/// Identical browser arguments on EVERY window: WebView2 shares one browser/GPU process tree per
+/// (user-data-folder + arguments) pair, so mismatching args would spawn a second tree.
+pub const WEBVIEW_ARGS: &str = "--disable-features=msWebOOUI,msPdfOOUI,msSmartScreenProtection --js-flags=--expose-gc --disable-background-networking --disk-cache-size=8388608 --in-process-gpu";
+
+pub static MAIN_SUSPENDED: AtomicBool = AtomicBool::new(false);
+pub static MAIN_SHOW_PENDING: AtomicBool = AtomicBool::new(false);
+/// Set by the frontend while an externally opened file has unsaved edits (never blank the canvas then)
+pub static EXTERNAL_DIRTY: AtomicBool = AtomicBool::new(false);
+
+/// Forces a V8 garbage collection inside the page (needs --js-flags=--expose-gc).
+pub fn flush_webview_memory(window: &tauri::WebviewWindow) {
+    let _ = window.eval("try{if(window.gc){window.gc();}}catch(e){}");
+}
+
+/// Asks WebView2 to trim its working set (ICoreWebView2_19::MemoryUsageTargetLevel).
+#[cfg(windows)]
+pub fn set_webview_memory_level(window: &tauri::WebviewWindow, low: bool) {
+    let _ = window.with_webview(move |webview| unsafe {
+        use webview2_com::Microsoft::Web::WebView2::Win32::{
+            ICoreWebView2_19, COREWEBVIEW2_MEMORY_USAGE_TARGET_LEVEL_LOW,
+            COREWEBVIEW2_MEMORY_USAGE_TARGET_LEVEL_NORMAL,
+        };
+        use windows_core::Interface;
+        if let Ok(core) = webview.controller().CoreWebView2() {
+            if let Ok(core19) = core.cast::<ICoreWebView2_19>() {
+                let level = if low {
+                    COREWEBVIEW2_MEMORY_USAGE_TARGET_LEVEL_LOW
+                } else {
+                    COREWEBVIEW2_MEMORY_USAGE_TARGET_LEVEL_NORMAL
+                };
+                let _ = core19.SetMemoryUsageTargetLevel(level);
+            }
+        }
+    });
+}
+
+#[cfg(not(windows))]
+pub fn set_webview_memory_level(_window: &tauri::WebviewWindow, _low: bool) {}
+
+/// Tray mode: the canvas webview is DESTROYED (after the frontend flushed pending saves), so WebView2
+/// reclaims its renderer + whole layout tree. It is rebuilt from the window config on demand.
+pub fn suspend_main(app: &AppHandle) {
+    let Some(main) = app.get_webview_window("main") else {
+        return;
+    };
+    let _ = main.hide();
+    if MAIN_SUSPENDED.load(Ordering::SeqCst) || EXTERNAL_DIRTY.load(Ordering::SeqCst) {
+        return;
+    }
+    let app2 = app.clone();
+    std::thread::spawn(move || {
+        let Some(main) = app2.get_webview_window("main") else {
+            return;
+        };
+        let _ = app2.emit_to("main", "flush-pending", ());
+        std::thread::sleep(std::time::Duration::from_millis(350));
+        // canvas re-opened in the meantime (or an external file has unsaved edits): leave it alone
+        if main.is_visible().unwrap_or(false) || EXTERNAL_DIRTY.load(Ordering::SeqCst) {
+            return;
+        }
+        flush_webview_memory(&main);
+        if main.destroy().is_ok() {
+            MAIN_SUSPENDED.store(true, Ordering::SeqCst);
+        }
+    });
+}
+
+/// Rebuilds the (hidden) canvas window from its config; the page calls `canvas_ready` when mounted.
+fn recreate_main(app: &AppHandle) -> Option<tauri::WebviewWindow> {
+    let cfg = app
+        .config()
+        .app
+        .windows
+        .iter()
+        .find(|w| w.label == "main")?
+        .clone();
+    let window = tauri::WebviewWindowBuilder::from_config(app, &cfg)
+        .ok()?
+        .visible(false)
+        .build()
+        .ok()?;
+    MAIN_SUSPENDED.store(false, Ordering::SeqCst);
+    Some(window)
+}
+/// Shows the canvas and tears the tray webview down completely (frees its renderer).
+fn reveal_canvas(app: &AppHandle) {
+    if let Some(main) = app.get_webview_window("main") {
+        let _ = main.show();
+        let _ = main.unminimize();
+        let _ = main.set_focus();
+    }
+    if let Some(tray) = app.get_webview_window("tray") {
+        let _ = tray.destroy();
+    }
+}
+
+#[tauri::command]
+pub fn canvas_ready(app: AppHandle) {
+    if MAIN_SHOW_PENDING.swap(false, Ordering::SeqCst) {
+        reveal_canvas(&app);
+    }
+}
+
+#[tauri::command]
+pub fn set_external_dirty(dirty: bool) {
+    EXTERNAL_DIRTY.store(dirty, Ordering::SeqCst);
+}
+
+/// Creates the single tray frame on demand (hidden until its page reports ready).
+fn ensure_tray(app: &AppHandle) -> Result<(tauri::WebviewWindow, bool), String> {
+    if let Some(existing) = app.get_webview_window("tray") {
+        return Ok((existing, false));
+    }
+    let window = tauri::WebviewWindowBuilder::new(app, "tray", tauri::WebviewUrl::App("index.html?window=tray".into()))
+        .title("DoIT Companion")
+        .inner_size(380.0, 480.0)
+        .decorations(false)
+        .transparent(true)
+        .shadow(false)
+        .always_on_top(true)
+        .resizable(false)
+        .skip_taskbar(true)
+        .visible(false)
+        .additional_browser_args(WEBVIEW_ARGS)
+        .build()
+        .map_err(|e| e.to_string())?;
+    Ok((window, true))
+}
+
 #[tauri::command]
 pub fn open_tray_mode(app: AppHandle) -> Result<(), String> {
+    // window creation must never run on the main/UI thread of a command
+    std::thread::spawn(move || {
+        let _ = open_tray_mode_inner(&app);
+    });
+    Ok(())
+}
+
+fn open_tray_mode_inner(app: &AppHandle) -> Result<(), String> {
     let main_win_opt = app.get_webview_window("main");
-    let tray_win_opt = app.get_webview_window("tray");
 
     let active_monitor = if let Some(ref main_win) = main_win_opt {
-        let is_fullscreen = main_win.is_fullscreen().unwrap_or(false);
-        let is_maximized = main_win.is_maximized().unwrap_or(false);
-        let size = main_win.outer_size().ok();
-        let position = main_win.outer_position().ok();
-        let mon = get_window_active_monitor(main_win);
-        let monitor_name = mon.as_ref().and_then(|m| m.name().cloned());
+        if main_win.is_visible().unwrap_or(false) {
+            let is_fullscreen = main_win.is_fullscreen().unwrap_or(false);
+            let is_maximized = main_win.is_maximized().unwrap_or(false);
+            let size = main_win.outer_size().ok();
+            let position = main_win.outer_position().ok();
+            let mon = get_window_active_monitor(main_win);
+            let monitor_name = mon.as_ref().and_then(|m| m.name().cloned());
 
-        *SAVED_MAIN_WINDOW_STATE.lock().unwrap() = Some(MainWindowState {
-            is_maximized,
-            is_fullscreen,
-            position,
-            size,
-            monitor_name,
-        });
+            *SAVED_MAIN_WINDOW_STATE.lock().unwrap() = Some(MainWindowState {
+                is_maximized,
+                is_fullscreen,
+                position,
+                size,
+                monitor_name,
+            });
 
-        let storage = app.state::<StorageManager>();
-        let _ = storage.set_is_maximized(is_maximized);
-        mon
+            let storage = app.state::<StorageManager>();
+            let _ = storage.set_is_maximized(is_maximized);
+            mon
+        } else {
+            None
+        }
     } else {
         None
     };
 
+    let (tray, created) = ensure_tray(app)?;
+
     let target_mon = active_monitor
-        .or_else(|| tray_win_opt.as_ref().and_then(get_window_active_monitor))
+        .or_else(|| get_window_active_monitor(&tray))
         .or_else(|| app.primary_monitor().ok().flatten());
 
-    // Mandatory: Entering desk tray mode from canvas/maximized MUST always begin at the bottom right corner
+    // Entering desk tray mode from the canvas always begins at the bottom right corner
     {
         let mut mem = TRAY_POSITION_STATE.lock().unwrap();
         mem.pill_offset = None;
@@ -491,248 +643,63 @@ pub fn open_tray_mode(app: AppHandle) -> Result<(), String> {
         buf.expanded_physical_pos = None;
     }
 
-    if let (Some(tray_win), Some(mon)) = (tray_win_opt, target_mon) {
+    if let Some(mon) = target_mon {
         lock_window_transition(350);
-        position_tray_on_monitor(&tray_win, &mon, true);
-
-        // Pre-lock initial expanded physical coordinates
-        if let Ok(pos) = tray_win.outer_position() {
+        position_tray_on_monitor(&tray, &mon, true);
+        if let Ok(pos) = tray.outer_position() {
             PRE_STATE_BUFFER.lock().unwrap().expanded_physical_pos = Some(pos);
         }
-
-        if let Some(pill) = app.get_webview_window("pill") {
-            let _ = pill.hide();
-        }
-        let _ = tray_win.emit("set-expanded", true);
-        let _ = tray_win.emit("spawn-indicator", ());
-        let _ = tray_win.show();
-        let _ = tray_win.set_always_on_top(true);
-        let _ = tray_win.set_focus();
     }
 
-    if let Some(main_win) = main_win_opt {
-        let _ = main_win.hide();
+    if created {
+        // the page calls `tray_ready` once mounted, which shows the window (no blank flash)
+    } else {
+        let _ = tray.show();
+        let _ = tray.set_always_on_top(true);
+        let _ = tray.set_focus();
+        let _ = tray.emit("set-expanded", true);
     }
 
+    suspend_main(app);
     Ok(())
 }
 
+/// Called by the tray page after mount: reveals the (already positioned) window.
 #[tauri::command]
-pub fn open_canvas_mode(app: AppHandle) -> Result<(), String> {
-    if let (Some(tray_win), Some(main_win)) = (
-        app.get_webview_window("tray"),
-        app.get_webview_window("main"),
-    ) {
-        // Pre-State Lock: Capture tray physical position before hiding
-        if let Ok(tray_pos) = tray_win.outer_position() {
-            let win_size = tray_win.outer_size().unwrap_or(tauri::PhysicalSize::new(160, 64));
-            let scale = get_window_active_monitor(&tray_win).map(|m| m.scale_factor()).unwrap_or(1.0);
-            let small_w = (160.0 * scale).round() as i32;
-            let mut buf = PRE_STATE_BUFFER.lock().unwrap();
-            if (win_size.width as i32) <= small_w + 40 {
-                buf.pill_physical_pos = Some(tray_pos);
-            } else {
-                buf.expanded_physical_pos = Some(tray_pos);
-            }
-        }
+pub fn tray_ready(window: tauri::WebviewWindow) -> String {
+    let _ = window.show();
+    let _ = window.set_always_on_top(true);
+    let _ = window.set_focus();
+    "panel".to_string()
+}
 
-        let target_mon = get_window_active_monitor(&tray_win)
-            .or_else(|| get_window_active_monitor(&main_win))
-            .or_else(|| app.primary_monitor().ok().flatten());
+/// Mutates the one tray frame between "panel" (380x480) and "pill" (180x44), keeping the
+/// bottom-right corner anchored. The frontend hides its content while this runs.
+#[tauri::command]
+pub fn set_tray_mode(app: AppHandle, mode: String) -> Result<(), String> {
+    let tray = app
+        .get_webview_window("tray")
+        .ok_or_else(|| "tray window is not open".to_string())?;
+    let pos = tray.outer_position().map_err(|e| e.to_string())?;
+    let size = tray.outer_size().map_err(|e| e.to_string())?;
+    let scale = tray.scale_factor().unwrap_or(1.0);
 
-        let saved = SAVED_MAIN_WINDOW_STATE.lock().unwrap().clone();
+    let (lw, lh) = if mode == "pill" { (180.0, 44.0) } else { (380.0, 480.0) };
+    let w = (lw * scale).round() as i32;
+    let h = (lh * scale).round() as i32;
+    let right = pos.x + size.width as i32;
+    let bottom = pos.y + size.height as i32;
+    let (x, y) = clamp_to_monitor(&tray, &app, right - w, bottom - h, w, h);
 
-        if let Some(state) = saved {
-            if state.is_fullscreen {
-                if let Some(ref mon) = target_mon {
-                    let m_pos = mon.position();
-                    let _ = main_win.set_position(tauri::PhysicalPosition::new(m_pos.x, m_pos.y));
-                }
-                let _ = main_win.set_fullscreen(true);
-            } else if state.is_maximized {
-                if let Some(ref mon) = target_mon {
-                    let m_pos = mon.position();
-                    let _ = main_win.set_position(tauri::PhysicalPosition::new(m_pos.x, m_pos.y));
-                }
-                let _ = main_win.maximize();
-            } else if let (Some(pos), Some(sz)) = (state.position, state.size) {
-                let tray_mon_name = target_mon.as_ref().and_then(|m| m.name().cloned());
-                if tray_mon_name != state.monitor_name && target_mon.is_some() {
-                    let mon = target_mon.as_ref().unwrap();
-                    let m_pos = mon.position();
-                    let m_size = mon.size();
-                    let w = sz.width.min(m_size.width);
-                    let h = sz.height.min(m_size.height);
-                    let x = m_pos.x + (m_size.width as i32 - w as i32) / 2;
-                    let y = m_pos.y + (m_size.height as i32 - h as i32) / 2;
-                    let _ = main_win.set_size(tauri::PhysicalSize::new(w, h));
-                    let _ = main_win.set_position(tauri::PhysicalPosition::new(x, y));
-                } else {
-                    let _ = main_win.set_size(sz);
-                    let _ = main_win.set_position(pos);
-                }
-            }
-        } else if let Some(mon) = target_mon {
-            if !main_win.is_maximized().unwrap_or(false) && !main_win.is_fullscreen().unwrap_or(false) {
-                let m_pos = mon.position();
-                let m_size = mon.size();
-                let scale = mon.scale_factor();
-                let main_w = (1440.0 * scale).min(m_size.width as f64 * 0.92) as u32;
-                let main_h = (900.0 * scale).min(m_size.height as f64 * 0.90) as u32;
-                let center_x = m_pos.x + (m_size.width as i32 - main_w as i32) / 2;
-                let center_y = m_pos.y + (m_size.height as i32 - main_h as i32) / 2;
-                let _ = main_win.set_size(tauri::PhysicalSize::new(main_w, main_h));
-                let _ = main_win.set_position(tauri::PhysicalPosition::new(center_x, center_y));
-            }
-        }
-
-        let _ = tray_win.emit("set-expanded", false);
-        let _ = tray_win.hide();
-        if let Some(pill) = app.get_webview_window("pill") {
-            let _ = pill.hide();
-        }
-        let _ = main_win.show();
-        let _ = main_win.set_focus();
+    lock_window_transition(250);
+    set_window_bounds_atomic(&tray, x, y, w as u32, h as u32);
+    if mode == "pill" {
+        flush_webview_memory(&tray);
+        set_webview_memory_level(&tray, true);
+    } else {
+        set_webview_memory_level(&tray, false);
     }
     Ok(())
-}
-
-#[tauri::command]
-pub fn resize_tray_window(app: AppHandle, expanded: bool) -> Result<(), String> {
-    if let Some(tray_win) = app.get_webview_window("tray") {
-        // 1. PRE-STATE POSITION LOCK: Capture physical coordinates FIRST before calling any resize or visibility functions
-        let pre_pos = tray_win.outer_position().map_err(|e| e.to_string())?;
-
-        let target_monitor = get_window_active_monitor(&tray_win)
-            .or_else(|| {
-                app.get_webview_window("main")
-                    .and_then(|w| get_window_active_monitor(&w))
-            })
-            .or_else(|| app.primary_monitor().ok().flatten())
-            .ok_or_else(|| "No active monitor found".to_string())?;
-
-        let scale = target_monitor.scale_factor();
-        let m_pos = target_monitor.position();
-        let m_size = target_monitor.size();
-
-        let small_w_phys = (160.0 * scale).round() as u32;
-        let small_h_phys = (64.0 * scale).round() as u32;
-        let expanded_w_phys = (380.0 * scale).round() as u32;
-        let expanded_h_phys = (560.0 * scale).round() as u32;
-
-        let min_x = m_pos.x + 8;
-        let min_y = m_pos.y + 8;
-        let max_small_x = (m_pos.x + m_size.width as i32 - small_w_phys as i32 - 8).max(min_x);
-        let max_small_y = (m_pos.y + m_size.height as i32 - small_h_phys as i32 - 8).max(min_y);
-        let max_expanded_x = (m_pos.x + m_size.width as i32 - expanded_w_phys as i32 - 8).max(min_x);
-        let max_expanded_y = (m_pos.y + m_size.height as i32 - expanded_h_phys as i32 - 8).max(min_y);
-
-        let target_pos = if expanded {
-            // 2. Cache pill position into global thread-safe state mutex BEFORE mutating size
-            {
-                let mut buf = PRE_STATE_BUFFER.lock().unwrap();
-                buf.pill_physical_pos = Some(pre_pos);
-            }
-
-            // 4. Force back to exact pre-locked physical pixels
-            let saved_expanded = PRE_STATE_BUFFER.lock().unwrap().expanded_physical_pos;
-            if let Some(saved) = saved_expanded {
-                tauri::PhysicalPosition::new(
-                    saved.x.clamp(min_x, max_expanded_x),
-                    saved.y.clamp(min_y, max_expanded_y),
-                )
-            } else {
-                let anchor_x = if pre_pos.x + expanded_w_phys as i32 > max_expanded_x {
-                    (pre_pos.x + small_w_phys as i32 - expanded_w_phys as i32).clamp(min_x, max_expanded_x)
-                } else {
-                    pre_pos.x.clamp(min_x, max_expanded_x)
-                };
-                let anchor_y = if pre_pos.y + expanded_h_phys as i32 > max_expanded_y {
-                    (pre_pos.y + small_h_phys as i32 - expanded_h_phys as i32).clamp(min_y, max_expanded_y)
-                } else {
-                    pre_pos.y.clamp(min_y, max_expanded_y)
-                };
-                let pos = tauri::PhysicalPosition::new(anchor_x, anchor_y);
-                PRE_STATE_BUFFER.lock().unwrap().expanded_physical_pos = Some(pos);
-                pos
-            }
-        } else {
-            // 2. Cache expanded panel position into mutex BEFORE mutating size
-            {
-                let mut buf = PRE_STATE_BUFFER.lock().unwrap();
-                buf.expanded_physical_pos = Some(pre_pos);
-            }
-
-            // 4. Force back to exact pre-locked pill physical pixels
-            let saved_pill = PRE_STATE_BUFFER.lock().unwrap().pill_physical_pos;
-            if let Some(saved) = saved_pill {
-                tauri::PhysicalPosition::new(
-                    saved.x.clamp(min_x, max_small_x),
-                    saved.y.clamp(min_y, max_small_y),
-                )
-            } else {
-                let margin_x = (24.0 * scale).round() as i32;
-                let margin_y = (72.0 * scale).round() as i32;
-                let def_x = (m_pos.x + m_size.width as i32 - small_w_phys as i32 - margin_x).clamp(min_x, max_small_x);
-                let def_y = (m_pos.y + m_size.height as i32 - small_h_phys as i32 - margin_y).clamp(min_y, max_small_y);
-                let pos = tauri::PhysicalPosition::new(def_x, def_y);
-                PRE_STATE_BUFFER.lock().unwrap().pill_physical_pos = Some(pos);
-                pos
-            }
-        };
-
-        // 3. ONLY AFTER COORDINATES ARE SAFELY LOCKED IN MEMORY, execute size mutation and set position
-        lock_window_transition(350);
-
-        if expanded {
-            set_window_bounds_atomic(&tray_win, target_pos.x, target_pos.y, expanded_w_phys, expanded_h_phys);
-        } else {
-            set_window_bounds_atomic(&tray_win, target_pos.x, target_pos.y, small_w_phys, small_h_phys);
-        }
-    }
-    Ok(())
-}
-
-#[tauri::command]
-pub fn snap_tray_window(
-    app: AppHandle,
-    logical_width: f64,
-    logical_height: f64,
-) -> Result<(), String> {
-    if let Some(tray_win) = app.get_webview_window("tray") {
-        if let Ok(Some(monitor)) = tray_win.current_monitor() {
-            let scale = monitor.scale_factor();
-            let target_w_phys = (logical_width * scale).round() as u32;
-            let target_h_phys = (logical_height * scale).round() as u32;
-
-            if let (Ok(cur_size), Ok(cur_pos)) = (tray_win.outer_size(), tray_win.outer_position()) {
-                let delta_x = cur_size.width as i32 - target_w_phys as i32;
-                let delta_y = cur_size.height as i32 - target_h_phys as i32;
-
-                if delta_x != 0 || delta_y != 0 {
-                    lock_window_transition(200);
-                    let new_x = cur_pos.x + delta_x;
-                    let new_y = cur_pos.y + delta_y;
-                    set_window_bounds_atomic(&tray_win, new_x, new_y, target_w_phys, target_h_phys);
-                }
-            }
-        }
-    }
-    Ok(())
-}
-
-#[tauri::command]
-pub fn sync_tray_window_bounds(
-    app: AppHandle,
-    logical_width: f64,
-    logical_height: f64,
-) -> Result<(), String> {
-    snap_tray_window(app, logical_width, logical_height)
-}
-
-#[tauri::command]
-pub fn sync_tray_window_height(app: AppHandle, logical_height: f64) -> Result<(), String> {
-    snap_tray_window(app, 380.0, logical_height)
 }
 
 fn clamp_to_monitor(
@@ -756,63 +723,104 @@ fn clamp_to_monitor(
     }
 }
 
-/// Closing the tray: hide it and show the mini floating pill anchored to its bottom-right corner.
 #[tauri::command]
-pub fn collapse_tray_to_pill(app: AppHandle) -> Result<(), String> {
-    let (Some(tray_win), Some(pill)) = (app.get_webview_window("tray"), app.get_webview_window("pill")) else {
-        return Ok(());
-    };
-    // Canvas is up: tray mode is over, never leave a pill behind
-    if app
-        .get_webview_window("main")
-        .map(|w| w.is_visible().unwrap_or(false))
-        .unwrap_or(false)
-    {
-        let _ = tray_win.hide();
-        let _ = pill.hide();
-        return Ok(());
-    }
-    if let (Ok(pos), Ok(tsize), Ok(psize)) = (tray_win.outer_position(), tray_win.outer_size(), pill.outer_size()) {
-        let x = pos.x + tsize.width as i32 - psize.width as i32;
-        let y = pos.y + tsize.height as i32 - psize.height as i32;
-        let (x, y) = clamp_to_monitor(&tray_win, &app, x, y, psize.width as i32, psize.height as i32);
-        lock_window_transition(200);
-        set_window_bounds_atomic(&pill, x, y, psize.width, psize.height);
-    }
-    let _ = pill.show();
-    let _ = pill.set_always_on_top(true);
-    let _ = tray_win.hide();
+pub fn open_canvas_mode(app: AppHandle) -> Result<(), String> {
+    std::thread::spawn(move || {
+        open_canvas_mode_inner(&app);
+    });
     Ok(())
 }
 
-/// Clicking the pill: open the tray with its bottom-right corner where the pill sits.
-#[tauri::command]
-pub fn expand_tray_from_pill(app: AppHandle) -> Result<(), String> {
-    let (Some(tray_win), Some(pill)) = (app.get_webview_window("tray"), app.get_webview_window("pill")) else {
-        return Ok(());
+fn open_canvas_mode_inner(app: &AppHandle) {
+    let (main_win, recreated) = match app.get_webview_window("main") {
+        Some(w) => (w, false),
+        None => match recreate_main(app) {
+            Some(w) => (w, true),
+            None => return,
+        },
     };
-    if let (Ok(pos), Ok(psize), Ok(tsize)) = (pill.outer_position(), pill.outer_size(), tray_win.outer_size()) {
-        let x = pos.x + psize.width as i32 - tsize.width as i32;
-        let y = pos.y + psize.height as i32 - tsize.height as i32;
-        let (x, y) = clamp_to_monitor(&pill, &app, x, y, tsize.width as i32, tsize.height as i32);
-        lock_window_transition(200);
-        set_window_bounds_atomic(&tray_win, x, y, tsize.width, tsize.height);
-    }
-    let _ = tray_win.emit("set-expanded", true);
-    let _ = tray_win.show();
-    let _ = tray_win.set_always_on_top(true);
-    let _ = tray_win.set_focus();
-    let _ = pill.hide();
-    Ok(())
-}
+    let tray_opt = app.get_webview_window("tray");
 
-#[tauri::command]
-pub fn set_tray_minimized(app: AppHandle, minimized: bool) -> Result<(), String> {
-    // Tray window is a static 380x480 box; visibility is driven by the frontend fade.
-    if let Some(tray_win) = app.get_webview_window("tray") {
-        let _ = tray_win.emit("set-expanded", !minimized);
+    // Pre-State Lock: capture the tray position before it is destroyed
+    if let Some(ref tray_win) = tray_opt {
+        if let Ok(tray_pos) = tray_win.outer_position() {
+            let win_size = tray_win.outer_size().unwrap_or(tauri::PhysicalSize::new(180, 44));
+            let scale = get_window_active_monitor(tray_win).map(|m| m.scale_factor()).unwrap_or(1.0);
+            let small_w = (160.0 * scale).round() as i32;
+            let mut buf = PRE_STATE_BUFFER.lock().unwrap();
+            if (win_size.width as i32) <= small_w + 40 {
+                buf.pill_physical_pos = Some(tray_pos);
+            } else {
+                buf.expanded_physical_pos = Some(tray_pos);
+            }
+        }
     }
-    Ok(())
+
+    let target_mon = tray_opt
+        .as_ref()
+        .and_then(get_window_active_monitor)
+        .or_else(|| get_window_active_monitor(&main_win))
+        .or_else(|| app.primary_monitor().ok().flatten());
+
+    let saved = SAVED_MAIN_WINDOW_STATE.lock().unwrap().clone();
+
+    if let Some(state) = saved {
+        if state.is_fullscreen {
+            if let Some(ref mon) = target_mon {
+                let m_pos = mon.position();
+                let _ = main_win.set_position(tauri::PhysicalPosition::new(m_pos.x, m_pos.y));
+            }
+            let _ = main_win.set_fullscreen(true);
+        } else if state.is_maximized {
+            if let Some(ref mon) = target_mon {
+                let m_pos = mon.position();
+                let _ = main_win.set_position(tauri::PhysicalPosition::new(m_pos.x, m_pos.y));
+            }
+            let _ = main_win.maximize();
+        } else if let (Some(pos), Some(sz)) = (state.position, state.size) {
+            let tray_mon_name = target_mon.as_ref().and_then(|m| m.name().cloned());
+            if tray_mon_name != state.monitor_name && target_mon.is_some() {
+                let mon = target_mon.as_ref().unwrap();
+                let m_pos = mon.position();
+                let m_size = mon.size();
+                let w = sz.width.min(m_size.width);
+                let h = sz.height.min(m_size.height);
+                let x = m_pos.x + (m_size.width as i32 - w as i32) / 2;
+                let y = m_pos.y + (m_size.height as i32 - h as i32) / 2;
+                let _ = main_win.set_size(tauri::PhysicalSize::new(w, h));
+                let _ = main_win.set_position(tauri::PhysicalPosition::new(x, y));
+            } else {
+                let _ = main_win.set_size(sz);
+                let _ = main_win.set_position(pos);
+            }
+        }
+    } else if let Some(mon) = target_mon {
+        if !main_win.is_maximized().unwrap_or(false) && !main_win.is_fullscreen().unwrap_or(false) {
+            let m_pos = mon.position();
+            let m_size = mon.size();
+            let scale = mon.scale_factor();
+            let main_w = (1440.0 * scale).min(m_size.width as f64 * 0.92) as u32;
+            let main_h = (900.0 * scale).min(m_size.height as f64 * 0.90) as u32;
+            let center_x = m_pos.x + (m_size.width as i32 - main_w as i32) / 2;
+            let center_y = m_pos.y + (m_size.height as i32 - main_h as i32) / 2;
+            let _ = main_win.set_size(tauri::PhysicalSize::new(main_w, main_h));
+            let _ = main_win.set_position(tauri::PhysicalPosition::new(center_x, center_y));
+        }
+    }
+
+    if recreated {
+        // the canvas page is loading in a fresh webview: reveal it when it reports ready (or after a safety timeout)
+        MAIN_SHOW_PENDING.store(true, Ordering::SeqCst);
+        let app2 = app.clone();
+        std::thread::spawn(move || {
+            std::thread::sleep(std::time::Duration::from_millis(3000));
+            if MAIN_SHOW_PENDING.swap(false, Ordering::SeqCst) {
+                reveal_canvas(&app2);
+            }
+        });
+    } else {
+        reveal_canvas(app);
+    }
 }
 
 #[tauri::command]
@@ -935,4 +943,34 @@ pub fn set_mini_window_mode(window: Window, mini: bool) -> Result<(), String> {
         let _ = window.set_always_on_top(false);
     }
     Ok(())
+}
+
+/// Path passed on the command line when the OS launched DoIT for a .md / .txt file
+pub struct LaunchFile(pub Mutex<Option<String>>);
+
+pub fn file_from_args(args: &[String]) -> Option<String> {
+    args.iter().skip(1).find_map(|a| {
+        let p = std::path::Path::new(a);
+        let ext = p.extension()?.to_str()?.to_ascii_lowercase();
+        if matches!(ext.as_str(), "md" | "markdown" | "txt") && p.is_file() {
+            Some(a.clone())
+        } else {
+            None
+        }
+    })
+}
+
+#[tauri::command]
+pub fn take_launch_file(state: State<'_, LaunchFile>) -> Option<String> {
+    state.0.lock().ok().and_then(|mut g| g.take())
+}
+
+#[tauri::command]
+pub fn open_external_file(path: String, storage: State<'_, StorageManager>) -> Result<NoteItem, String> {
+    storage.open_external(&path)
+}
+
+#[tauri::command]
+pub fn save_external_file(note: NoteItem, storage: State<'_, StorageManager>) -> Result<NoteItem, String> {
+    storage.save_external(note)
 }

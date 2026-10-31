@@ -8,7 +8,7 @@ use tauri::{
     image::Image,
     menu::{Menu, MenuItem},
     tray::{MouseButton, MouseButtonState, TrayIconBuilder, TrayIconEvent},
-    Manager,
+    Emitter, Manager,
 };
 
 const TRAY_ICON_BYTES: &[u8] = include_bytes!("../icons/tray_rgba.bin");
@@ -17,8 +17,36 @@ const TRAY_ICON_BYTES: &[u8] = include_bytes!("../icons/tray_rgba.bin");
 pub fn run() {
     let storage_manager = StorageManager::new();
 
+    let launch_file = file_from_args(&std::env::args().collect::<Vec<_>>());
+
     tauri::Builder::default()
+        // Must be first: a second launch (e.g. double-clicking another .md) is forwarded to this instance
+        .plugin(tauri_plugin_single_instance::init(|app, argv, _cwd| {
+            let main_visible = app
+                .get_webview_window("main")
+                .map(|w| w.is_visible().unwrap_or(false))
+                .unwrap_or(false);
+            let path = file_from_args(&argv);
+            if !main_visible {
+                // canvas may have to be rebuilt: park the path so the fresh page picks it up on mount
+                if let Some(ref p) = path {
+                    if let Ok(mut slot) = app.state::<LaunchFile>().0.lock() {
+                        *slot = Some(p.clone());
+                    }
+                }
+                let _ = open_canvas_mode(app.clone());
+            } else {
+                if let Some(main) = app.get_webview_window("main") {
+                    let _ = main.unminimize();
+                    let _ = main.set_focus();
+                }
+                if let Some(p) = path {
+                    let _ = app.emit("open-external-file", p);
+                }
+            }
+        }))
         .manage(storage_manager)
+        .manage(LaunchFile(std::sync::Mutex::new(launch_file)))
         .plugin(tauri_plugin_opener::init())
         .plugin(tauri_plugin_updater::Builder::new().build())
         .on_window_event(|window, event| {
@@ -107,10 +135,6 @@ pub fn run() {
         })
         .setup(|app| {
             // Force absolute transparency on window background wrapper layer
-            if let Some(tray_win) = app.get_webview_window("tray") {
-                let _ = tray_win.set_decorations(false);
-                let _ = tray_win.set_shadow(false);
-            }
             // Launch Window State Persistence Engine: Restore maximize state
             if let Some(main_win) = app.get_webview_window("main") {
                 let _ = main_win.set_decorations(false);
@@ -178,6 +202,9 @@ pub fn run() {
             add_category,
             delete_category,
             rename_category,
+            take_launch_file,
+            open_external_file,
+            save_external_file,
             toggle_category_collapse,
             get_settings,
             get_default_storage_path,
@@ -192,13 +219,10 @@ pub fn run() {
             set_mini_window_mode,
             open_tray_mode,
             open_canvas_mode,
-            resize_tray_window,
-            sync_tray_window_height,
-            sync_tray_window_bounds,
-            snap_tray_window,
-            set_tray_minimized,
-            collapse_tray_to_pill,
-            expand_tray_from_pill,
+            tray_ready,
+            set_tray_mode,
+            canvas_ready,
+            set_external_dirty,
             start_drag,
             save_tray_position,
             restart_app,

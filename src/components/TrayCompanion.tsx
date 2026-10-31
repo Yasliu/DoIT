@@ -1,18 +1,21 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { getCurrentWindow } from "@tauri-apps/api/window";
-import { AnimatePresence, motion } from "motion/react";
 import { Mark } from "./Mark";
-import { TaskLineInput } from "./TaskLineInput";
+import { HeadingSelect } from "./HeadingSelect";
+import { ModeToggle } from "./ModeToggle";
+import { TrayPill } from "./TrayPill";
+import { RawEditor } from "./RawEditor";
+import { TableMenu } from "./TableMenu";
 import {
-  AlignLeft,
   ArrowLeft,
   ArrowUpRight,
   Bold,
   Check,
   ChevronDown,
+  ListChecks,
+  Table as TableIcon,
   Image as ImageIcon,
   Italic,
-  ListTodo,
   Minus,
   Plus,
   Search,
@@ -29,13 +32,22 @@ import {
 } from "../api/tauriBridge";
 import { useWorkspace } from "../hooks/useWorkspace";
 import { useUndoStack } from "../hooks/useUndoStack";
+import { applyShortcutSettings, getMarkdownShortcuts, matchesCombo } from "../lib/shortcuts";
 import {
-  convertContentMode,
+  contentToMarkdown,
+  markdownToContent,
+  handleCheckboxClick,
+  applyTask,
   handleRichEditorKeyDown,
   htmlToMarkdown,
   isRichBoldActive,
   isRichItalicActive,
   markdownToHtml,
+  handleMarkdownPaste,
+  normalizeEditor,
+  applyHeading,
+  insertTableAtCaret,
+  setMarkdownBaseDir,
 } from "../lib/format";
 import { accentFor, cleanText, cx, relativeShort, uid } from "../lib/text";
 
@@ -46,7 +58,13 @@ export function TrayCompanion() {
   const [shown, setShown] = useState(false);
   const shownRef = useRef(false);
   const hideTimerRef = useRef<number | null>(null);
-  const suppressCollapseRef = useRef(false);
+  const collapsingRef = useRef(false);
+  const modeRef = useRef<"switching" | "panel" | "pill">("switching");
+  const [mode, setMode] = useState<"switching" | "panel" | "pill">("switching");
+  const changeMode = useCallback((next: "switching" | "panel" | "pill") => {
+    modeRef.current = next;
+    setMode(next);
+  }, []);
   const [drawerOpen, setDrawerOpen] = useState(true);
   const [filter, setFilter] = useState("");
   const [selectedShelf, setSelectedShelf] = useState<string | null>(null);
@@ -117,22 +135,32 @@ export function TrayCompanion() {
   );
 
   const shelves = useMemo(() => categories.map((c) => c.name), [categories]);
+  const rawMode = activeNote?.format === "txt";
+  const [tableMenu, setTableMenu] = useState<{ x: number; y: number; cell: HTMLElement } | null>(null);
 
-  // Static 380x480 window; open/close is a pure opacity fade, then native hide().
+  // ONE tray frame for both shapes. Fade the panel out, resize the native frame while nothing is drawn
+  // (blank transparent content), then fade the floating bar in - and the reverse on expand.
+  const wait = (ms: number) => new Promise<void>((resolve) => window.setTimeout(resolve, ms));
+
+  const collapseToPill = useCallback(async () => {
+    if (collapsingRef.current) return;
+    collapsingRef.current = true;
+    changeMode("switching");
+    await tauriApi.setTrayMode("pill");
+    await wait(45);
+    changeMode("pill");
+    collapsingRef.current = false;
+  }, [changeMode]);
+
   const hideNow = useCallback(() => {
     if (hideTimerRef.current) window.clearTimeout(hideTimerRef.current);
     hideTimerRef.current = null;
-    if (suppressCollapseRef.current) {
-      suppressCollapseRef.current = false;
-      return;
-    }
-    if (!shownRef.current) void tauriApi.collapseTrayToPill();
-  }, []);
+    if (!shownRef.current) void collapseToPill();
+  }, [collapseToPill]);
 
   const openTray = useCallback(() => {
     if (hideTimerRef.current) window.clearTimeout(hideTimerRef.current);
     hideTimerRef.current = null;
-    suppressCollapseRef.current = false;
     requestAnimationFrame(() =>
       requestAnimationFrame(() => {
         shownRef.current = true;
@@ -140,6 +168,16 @@ export function TrayCompanion() {
       }),
     );
   }, []);
+
+  const expandFromPill = useCallback(async () => {
+    shownRef.current = false;
+    setShown(false);
+    changeMode("switching");
+    await tauriApi.setTrayMode("panel");
+    await wait(45);
+    changeMode("panel");
+    openTray();
+  }, [changeMode, openTray]);
 
   const closeTray = useCallback(() => {
     if (!shownRef.current) return;
@@ -155,38 +193,47 @@ export function TrayCompanion() {
     closeTray();
   }, [closeTray]);
 
-  // Synchronize with external Tauri expansion events
+  // The page just mounted inside a hidden, pre-positioned frame: reveal it and fade the panel in
+  useEffect(() => {
+    void tauriApi.trayReady().then((start) => {
+      if (start === "pill") {
+        changeMode("pill");
+      } else {
+        changeMode("panel");
+        openTray();
+      }
+    });
+  }, [changeMode, openTray]);
+
+  // Tray menu asked for the panel while the frame already exists
   useEffect(() => {
     let unlistenFn: (() => void) | null = null;
+    let disposed = false;
 
     getCurrentWindow()
       .listen<boolean>("set-expanded", (event) => {
-        if (event.payload) {
-          openTray();
-        } else {
-          // Canvas took over: fade out silently, never spawn the pill
-          if (hideTimerRef.current) window.clearTimeout(hideTimerRef.current);
-          hideTimerRef.current = null;
-          suppressCollapseRef.current = true;
-          shownRef.current = false;
-          setShown(false);
-        }
+        if (!event.payload) return;
+        if (modeRef.current === "pill") void expandFromPill();
+        else openTray();
       })
       .then((unlisten) => {
-        unlistenFn = unlisten;
+        if (disposed) unlisten();
+        else unlistenFn = unlisten;
       });
 
     return () => {
+      disposed = true;
       if (unlistenFn) unlistenFn();
     };
-  }, [openTray]);
-
+  }, [expandFromPill, openTray]);
   // Load theme mode for tray window
   useEffect(() => {
     void tauriApi.getSettings().then((s) => {
       if (s.theme_mode) {
         document.documentElement.dataset.theme = s.theme_mode;
       }
+      setMarkdownBaseDir(s.storage_path);
+      applyShortcutSettings(s);
     });
   }, []);
 
@@ -215,12 +262,7 @@ export function TrayCompanion() {
     return () => window.removeEventListener("keydown", handleKeyDown);
   }, [activeNoteId, previewImage, toggleMinimize]);
 
-  // Safety: a fresh webview whose window is already visible should still fade in once
-  useEffect(() => {
-    void getCurrentWindow().isVisible().then((v) => {
-      if (v) openTray();
-    });
-  }, [openTray]);
+
 
   const filteredNotes = useMemo(() => {
     let list = [...notes].sort((a, b) => b.last_edited - a.last_edited);
@@ -251,8 +293,8 @@ export function TrayCompanion() {
   };
 
   const syncEditorDom = (content: ContentItem[]) => {
-    if (editorRef.current && !content.some((c) => c.is_todo)) {
-      editorRef.current.innerHTML = markdownToHtml(content.map((c) => c.text).join("\n"));
+    if (editorRef.current) {
+      editorRef.current.innerHTML = markdownToHtml(contentToMarkdown(content));
     }
   };
 
@@ -360,8 +402,7 @@ export function TrayCompanion() {
     if (node && activeNote) {
       if (lastActiveNoteIdRef.current !== activeNote.id || !node.innerHTML || node.innerHTML === "<div><br></div>") {
         lastActiveNoteIdRef.current = activeNote.id;
-        const md = activeNote.content.map((c) => c.text).join("\n");
-        node.innerHTML = markdownToHtml(md);
+        node.innerHTML = markdownToHtml(contentToMarkdown(activeNote.content));
       }
     }
   }, [activeNote]);
@@ -374,22 +415,15 @@ export function TrayCompanion() {
     if (lastActiveNoteIdRef.current !== activeNote.id) {
       lastActiveNoteIdRef.current = activeNote.id;
       if (editorRef.current) {
-        const md = activeNote.content.map((c) => c.text).join("\n");
-        editorRef.current.innerHTML = markdownToHtml(md);
+        editorRef.current.innerHTML = markdownToHtml(contentToMarkdown(activeNote.content));
       }
     }
   }, [activeNote]);
 
   const handleEditorInput = () => {
     if (!editorRef.current || !activeNote) return;
-    const md = htmlToMarkdown(editorRef.current);
-    const lines = md.split("\n");
-    const content: ContentItem[] = lines.map((line, idx) => ({
-      id: activeNote.content[idx]?.id ?? uid("line"),
-      text: line,
-      is_todo: false,
-      completed: false,
-    }));
+    normalizeEditor(editorRef.current);
+    const content = markdownToContent(htmlToMarkdown(editorRef.current), activeNote.content, () => uid("line"));
     editActive({ content });
     updateActiveFormatting();
   };
@@ -454,27 +488,11 @@ export function TrayCompanion() {
     }
   };
 
-  const isTasksMode = useMemo(() => {
-    if (!activeNote) return false;
-    return activeNote.content.some((c) => c.is_todo);
-  }, [activeNote]);
-
-  const toggleMode = () => {
-    if (!activeNote) return;
-    const nextIsTodo = !isTasksMode;
-    let source: ContentItem[] = activeNote.content;
-    if (!isTasksMode && editorRef.current) {
-      // Read the live editor DOM so nothing typed since the last sync is lost or merged
-      source = htmlToMarkdown(editorRef.current)
-        .split("\n")
-        .map((text, idx) => ({
-          id: activeNote.content[idx]?.id ?? uid("line"),
-          text,
-          is_todo: false,
-          completed: false,
-        }));
-    }
-    editActive({ content: convertContentMode(source, nextIsTodo, activeNote.id) });
+  const runEditorCommand = (fn: (editor: HTMLElement) => void) => {
+    const ed = editorRef.current;
+    if (!ed) return;
+    fn(ed);
+    handleEditorInput();
   };
 
   const handleContextMenu = (e: React.MouseEvent) => {
@@ -557,7 +575,16 @@ export function TrayCompanion() {
     window.addEventListener("pointerup", onPointerUp);
   };
 
-  // ---- RENDER DESK TRAY WORKSPACE WITH 2D SPRING MORPHING ----
+  // Floating bar / resize-in-progress share the same frame as the panel
+  if (mode !== "panel") {
+    return (
+      <div className="h-screen w-screen bg-transparent" style={{ background: "transparent" }}>
+        {mode === "pill" && <TrayPill onOpen={() => void expandFromPill()} />}
+      </div>
+    );
+  }
+
+  // ---- RENDER DESK TRAY WORKSPACE ----
   return (
     <div
       className="flex h-screen w-screen items-end justify-end p-0 m-0 overflow-hidden bg-transparent select-none"
@@ -657,18 +684,14 @@ export function TrayCompanion() {
 
         {/* Lower note collection container: smooth fade with 100% scale */}
         <div className="pt-2 flex flex-1 flex-col overflow-hidden min-h-0 scale-100">
-              <AnimatePresence mode="wait" initial={false}>
                 {activeNote ? (
           /* ---- IN-TRAY PROPER NOTE EDITOR ---- */
-          <motion.div
+          <div
             key={`editor-${activeNote.id}`}
-            initial={{ opacity: 0 }}
-            animate={{ opacity: 1 }}
-            exit={{ opacity: 0 }}
-            className="flex flex-1 flex-col overflow-hidden px-1 scale-100"
+            className="flex flex-1 flex-col overflow-hidden px-1 scale-100 animate-in fade-in duration-150"
           >
             {/* Note Toolbar: Type, Bold, Italic, Tasks/Text Mode, Image, Delete */}
-            <div className="flex items-center justify-between gap-1 pb-2 border-b border-white/[0.07]">
+            <div className="flex flex-wrap items-center justify-between gap-x-1 gap-y-1 pb-2 border-b border-white/[0.07]">
             {/* Shelf/Category selector */}
             <div className="relative">
               <button
@@ -741,16 +764,8 @@ export function TrayCompanion() {
                 )}
               </div>
 
-              {/* Tasks vs Text mode switch */}
-              <button
-                type="button"
-                onClick={toggleMode}
-                className="icon-btn !size-6"
-                title={isTasksMode ? "Switch to Basic Text Note" : "Switch to Checklist Mode"}
-              >
-                {isTasksMode ? <ListTodo size={11.5} className="text-white" /> : <AlignLeft size={11.5} className="text-white" />}
-              </button>
-
+              {!rawMode && (
+              <>
               <button
                 type="button"
                 onMouseDown={(e) => e.preventDefault()}
@@ -769,6 +784,34 @@ export function TrayCompanion() {
               >
                 <Italic size={11.5} strokeWidth={2.4} />
               </button>
+
+              <span className="mx-0.5 h-3 w-px bg-white/10" />
+              <HeadingSelect
+                editorRef={editorRef}
+                compact
+                onSelect={(level) => runEditorCommand((ed) => applyHeading(ed, level))}
+              />
+              <button
+                type="button"
+                onMouseDown={(e) => e.preventDefault()}
+                onClick={() => runEditorCommand((ed) => insertTableAtCaret(ed))}
+                className="icon-btn !size-6 cursor-pointer"
+                title="Insert table (Ctrl+T)"
+              >
+                <TableIcon size={12} strokeWidth={1.9} />
+              </button>
+              <button
+                type="button"
+                onMouseDown={(e) => e.preventDefault()}
+                onClick={() => runEditorCommand((ed) => applyTask(ed))}
+                className="icon-btn !size-6 cursor-pointer"
+                title="Task checkbox (- [ ])"
+              >
+                <ListChecks size={12.5} strokeWidth={1.9} />
+              </button>
+              <span className="mx-0.5 h-3 w-px bg-white/10" />
+              </>
+              )}
 
               <input
                 ref={fileInputRef}
@@ -823,6 +866,13 @@ export function TrayCompanion() {
             </div>
           </div>
 
+          <div className="mt-2 flex">
+            <ModeToggle
+              compact
+              rawMode={rawMode}
+              onChange={(raw) => editActive({ format: raw ? "txt" : "md" })}
+            />
+          </div>
           {/* Title Input */}
           <input
             type="text"
@@ -887,134 +937,67 @@ export function TrayCompanion() {
 
           {/* Editor: Basic Note freeform writing vs Tasks mode */}
           <div data-undo="body" className="flex-1 min-h-0 mt-2 overflow-y-auto scroll">
-            {!isTasksMode ? (
-              <div
-                key="rich-editor"
-                ref={initEditor}
-                contentEditable
-                suppressContentEditableWarning
-                onInput={handleEditorInput}
-                onKeyDown={(e) => {
-                  const meta = e.ctrlKey || e.metaKey;
-                  if (meta && e.key.toLowerCase() === "b") {
-                    e.preventDefault();
-                    handleToolbarFormat("bold");
-                    return;
-                  }
-                  if (meta && e.key.toLowerCase() === "i") {
-                    e.preventDefault();
-                    handleToolbarFormat("italic");
-                    return;
-                  }
-                  if (editorRef.current && handleRichEditorKeyDown(e, editorRef.current, handleEditorInput)) {
-                    return;
-                  }
-                }}
-                onKeyUp={updateActiveFormatting}
-                onMouseUp={updateActiveFormatting}
-                className="w-full h-full min-h-[180px] whitespace-pre-wrap break-words bg-transparent text-[12.5px] leading-relaxed text-ink-2 outline-none scroll select-text"
-                style={{
-                  fontFamily: fontStack(activeNote.font_family),
-                }}
+            {rawMode ? (
+              <RawEditor
+                content={activeNote.content}
+                minHeight={180}
+                className="text-[11.5px]"
+                onChange={(content) => editActive({ content })}
               />
             ) : (
-              <div key="task-list" className="space-y-1">
-                {activeNote.content.map((item, index) => {
-                  const cleanItemText = item.text.replace(/^\s*[-*â€¢]\s+/, "");
-                  return (
-                    <div key={item.id} className="flex items-start gap-3 w-full py-1 group">
-                      <button
-                        type="button"
-                        onClick={() => {
-                          const content = activeNote.content.map((c) =>
-                            c.id === item.id ? { ...c, completed: !c.completed } : c,
-                          );
-                          editActive({ content });
-                        }}
-                        className={cx(
-                          "border rounded-md w-4 h-4 mt-[2px] bg-transparent cursor-pointer check-indicator-layer flex items-center justify-center shrink-0 transition-all duration-200 outline-none select-none",
-                          item.completed
-                            ? "border-white bg-white text-black"
-                            : "border-white/20 hover:border-white/50 text-transparent",
-                        )}
-                      >
-                        <Check size={11} strokeWidth={3.5} className={cx(item.completed ? "opacity-100" : "opacity-0")} />
-                      </button>
-                      <TaskLineInput
-                        value={cleanItemText}
-                        onChange={(text) => {
-                          const content = activeNote.content.map((c) =>
-                            c.id === item.id ? { ...c, text: text.replace(/^\s*[-*â€¢]\s+/, "") } : c,
-                          );
-                          editActive({ content });
-                        }}
-                        onKeyDown={(e) => {
-                          if (e.key === "Enter") {
-                            e.preventDefault();
-                            const updated = [...activeNote.content];
-                            updated.splice(index + 1, 0, {
-                              id: uid("line"),
-                              text: "",
-                              is_todo: true,
-                              completed: false,
-                            });
-                            editActive({ content: updated });
-                          }
-                          if (e.key === "Backspace" && cleanItemText === "" && activeNote.content.length > 1) {
-                            e.preventDefault();
-                            const updated = activeNote.content.filter((c) => c.id !== item.id);
-                            editActive({ content: updated });
-                          }
-                        }}
-                        placeholder="Task item..."
-                        className={cx(
-                          "flex-1 bg-transparent text-[12.5px] leading-[1.5] transition-all duration-150",
-                          item.completed ? "line-through text-ink-4 opacity-50" : "text-ink-1 opacity-90",
-                        )}
-                        style={{
-                          fontFamily: fontStack(activeNote.font_family),
-                        }}
-                      />
-                      <button
-                        type="button"
-                        onClick={() => {
-                          const updated = activeNote.content.filter((c) => c.id !== item.id);
-                          editActive({ content: updated });
-                        }}
-                        className="grid size-4 shrink-0 place-items-center rounded text-white/30 opacity-0 group-hover:opacity-100 hover:text-white"
-                      >
-                        <X size={10} strokeWidth={2} />
-                      </button>
-                    </div>
-                  );
-                })}
-                <button
-                  type="button"
-                  onClick={() => {
-                    editActive({
-                      content: [
-                        ...activeNote.content,
-                        { id: uid("line"), text: "", is_todo: true, completed: false },
-                      ],
-                    });
-                  }}
-                  className="flex items-center gap-1.5 text-[11px] text-ink-4 hover:text-ink-2 pt-1 font-mono"
-                >
-                  <Plus size={11} />
-                  <span>Add item</span>
-                </button>
-              </div>
+            <div
+              ref={initEditor}
+              onPaste={(e) => {
+                if (handleMarkdownPaste(e)) handleEditorInput();
+              }}
+              contentEditable
+              suppressContentEditableWarning
+              onInput={handleEditorInput}
+              onContextMenu={(e) => {
+                const cell = (e.target as HTMLElement).closest("td,th") as HTMLElement | null;
+                if (cell && editorRef.current?.contains(cell)) {
+                  e.preventDefault();
+                  e.stopPropagation();
+                  setTableMenu({ x: e.clientX, y: e.clientY, cell });
+                }
+              }}
+              onMouseDown={(e) => {
+                if ((e.target as HTMLElement).closest(".md-cb")) e.preventDefault();
+              }}
+              onClick={(e) => {
+                if (handleCheckboxClick(e, editorRef.current)) handleEditorInput();
+              }}
+              onKeyDown={(e) => {
+                const sc = getMarkdownShortcuts();
+                if (matchesCombo(e, sc.bold)) {
+                  e.preventDefault();
+                  handleToolbarFormat("bold");
+                  return;
+                }
+                if (matchesCombo(e, sc.italic)) {
+                  e.preventDefault();
+                  handleToolbarFormat("italic");
+                  return;
+                }
+                if (editorRef.current && handleRichEditorKeyDown(e, editorRef.current, handleEditorInput)) {
+                  return;
+                }
+              }}
+              onKeyUp={updateActiveFormatting}
+              onMouseUp={updateActiveFormatting}
+              className="w-full h-full min-h-[180px] whitespace-pre-wrap break-words bg-transparent text-[12.5px] leading-relaxed text-ink-2 outline-none scroll select-text"
+              style={{
+                fontFamily: fontStack(activeNote.font_family),
+              }}
+            />
             )}
           </div>
-        </motion.div>
+        </div>
       ) : (
         /* ---- DESK TRAY MAIN MENU (SCREENSHOT 3: CLEAN, UNCLUTTERED, OPEN PROFILE) ---- */
-        <motion.div
+        <div
           key="main-menu"
-          initial={{ opacity: 0 }}
-          animate={{ opacity: 1 }}
-          exit={{ opacity: 0 }}
-          className="flex flex-1 flex-col overflow-hidden px-1 space-y-2 scale-100"
+          className="flex flex-1 flex-col overflow-hidden px-1 space-y-2 scale-100 animate-in fade-in duration-150"
         >
           {/* + New note button matching Screenshot 3 */}
           <button
@@ -1075,13 +1058,9 @@ export function TrayCompanion() {
           </div>
 
           {/* Category Filter Drawer Container */}
-          <AnimatePresence initial={false}>
             {drawerOpen && (
-              <motion.div
+              <div
                 key="category-drawer-content"
-                initial={{ opacity: 0, height: 0 }}
-                animate={{ opacity: 1, height: "auto" }}
-                exit={{ opacity: 0, height: 0 }}
                 className="overflow-hidden py-1 scale-100"
               >
                 <div
@@ -1132,9 +1111,8 @@ export function TrayCompanion() {
                     );
                   })}
                 </div>
-              </motion.div>
+              </div>
             )}
-          </AnimatePresence>
 
           {/* RECENT Label matching Screenshot 3 */}
           <div className="pt-1.5 px-1 scale-100 whitespace-nowrap overflow-hidden">
@@ -1202,10 +1180,19 @@ export function TrayCompanion() {
               <ArrowUpRight size={12} strokeWidth={2} className="shrink-0" />
             </button>
           </div>
-        </motion.div>
+        </div>
       )}
-      </AnimatePresence>
       </div>
+
+      {tableMenu && (
+        <TableMenu
+          x={tableMenu.x}
+          y={tableMenu.y}
+          cell={tableMenu.cell}
+          onClose={() => setTableMenu(null)}
+          onChanged={handleEditorInput}
+        />
+      )}
 
       {/* Lightbox Preview Modal with Full Interactive Zoom */}
       {previewImage && (

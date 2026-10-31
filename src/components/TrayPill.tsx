@@ -2,7 +2,7 @@ import { useEffect, useRef, useState } from "react";
 import { Mark } from "./Mark";
 import { tauriApi } from "../api/tauriBridge";
 
-export function TrayPill() {
+export function TrayPill({ onOpen }: { onOpen: () => void }) {
   const [shown, setShown] = useState(false);
   const busy = useRef(false);
 
@@ -33,9 +33,7 @@ export function TrayPill() {
       cleanup();
       if (!dragging) {
         busy.current = true;
-        void tauriApi.expandTrayFromPill().finally(() => {
-          busy.current = false;
-        });
+        onOpen();
       }
     };
     window.addEventListener("pointermove", onMove);

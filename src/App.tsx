@@ -5,6 +5,8 @@ import { tauriApi } from "./api/tauriBridge";
 import { BentoCanvas } from "./components/BentoCanvas";
 import { ContextMenu } from "./components/ContextMenu";
 import { CategoryMenu } from "./components/CategoryMenu";
+import { setMarkdownBaseDir } from "./lib/format";
+import { applyShortcutSettings } from "./lib/shortcuts";
 import { NoteSheet } from "./components/NoteSheet";
 import { SettingsPanel } from "./components/SettingsPanel";
 import { Sidebar } from "./components/Sidebar";
@@ -45,6 +47,9 @@ export default function App() {
   const [openNote, setOpenNote] = useState<OpenNote | null>(null);
   const [contextMenu, setContextMenu] = useState<{ x: number; y: number; note: NoteItem } | null>(null);
   const [categoryMenu, setCategoryMenu] = useState<{ x: number; y: number; shelf: string } | null>(null);
+  const [sheetClosing, setSheetClosing] = useState(false);
+  const [sheetReserve, setSheetReserve] = useState(false);
+  const wasSheetOpen = useRef(false);
   const [isSettings, setIsSettings] = useState(false);
   const [mini] = useState(false);
   const [railOpen, setRailOpen] = useState(true);
@@ -59,39 +64,64 @@ export default function App() {
   useEffect(() => {
     let cancelled = false;
     const checkUpdate = async () => {
+      // Offline: surrender immediately, never touch the network
+      if (typeof navigator !== "undefined" && navigator.onLine === false) return;
       try {
         const { check } = await import("@tauri-apps/plugin-updater");
-        const update = await check();
+        // Hard 3s ceiling: the plugin-level timeout plus a race guard
+        const update = await Promise.race([
+          check({ timeout: 3000 }),
+          new Promise<null>((resolve) => window.setTimeout(() => resolve(null), 3000)),
+        ]);
         if (update && update.available && !cancelled) {
           setAvailableUpdate({
             version: update.version,
             currentVersion: update.currentVersion,
             notes: update.body,
             date: update.date,
-            onInstall: async () => {
-              await update.downloadAndInstall();
+            onInstall: async (onProgress) => {
+              let total = 0;
+              let done = 0;
+              await update.downloadAndInstall((event) => {
+                if (event.event === "Started") {
+                  total = event.data.contentLength ?? 0;
+                  onProgress(total ? 0 : null);
+                } else if (event.event === "Progress") {
+                  done += event.data.chunkLength;
+                  onProgress(total ? Math.min(100, Math.round((done / total) * 100)) : null);
+                } else if (event.event === "Finished") {
+                  onProgress(100);
+                }
+              });
               await tauriApi.restartApp();
             },
             onDismiss: () => setAvailableUpdate(null),
           });
         }
-      } catch (err) {
-        console.info("Update check completed:", err);
+      } catch {
+        /* offline / endpoint unreachable: fail silently */
       }
     };
 
     const timer = window.setTimeout(() => {
       void checkUpdate();
-    }, 2500);
+    }, 1200);
+    // long-running sessions (tray mode) also re-check every 6 hours
+    const interval = window.setInterval(() => {
+      void checkUpdate();
+    }, 6 * 60 * 60 * 1000);
 
     return () => {
       cancelled = true;
       window.clearTimeout(timer);
+      window.clearInterval(interval);
     };
   }, []);
 
   useEffect(() => {
     void tauriApi.getSettings().then((s) => {
+      setMarkdownBaseDir(s.storage_path);
+      applyShortcutSettings(s);
       if (s.theme_mode) {
         setThemeMode(s.theme_mode as "glass" | "monochrome");
         document.documentElement.dataset.theme = s.theme_mode;
@@ -147,7 +177,53 @@ export default function App() {
     if (match) setOpenNote({ note: match, origin: originFromCanvas() });
   }, [notes, openNote, originFromCanvas]);
 
+  useEffect(() => {
+    wasSheetOpen.current = !!openNote;
+    if (!openNote) setSheetReserve(false);
+  }, [openNote]);
+
+  // The canvas can be swapped for a blank page while in tray mode: confirm each (re)load so it is revealed
+  useEffect(() => {
+    void tauriApi.canvasReady();
+  }, []);
+
+  // ---- External files (double-click in Explorer / "Open with DoIT"): opened in place, never copied ----
+  const openExternal = useCallback(
+    async (path: string) => {
+      try {
+        const note = await tauriApi.openExternalFile(path);
+        setIsSettings(false);
+        setSheetClosing(false);
+        setOpenNote({ note, origin: originFromCanvas() });
+      } catch (err: any) {
+        notify(typeof err === "string" ? err : err?.message || "Could not open that file.");
+      }
+    },
+    [notify, originFromCanvas],
+  );
+
+  useEffect(() => {
+    let unlisten: (() => void) | null = null;
+    let cancelled = false;
+    void import("@tauri-apps/api/event").then(({ listen }) =>
+      listen<string>("open-external-file", (event) => {
+        void openExternal(event.payload);
+      }).then((fn) => {
+        if (cancelled) fn();
+        else unlisten = fn;
+      }),
+    ).catch(() => undefined);
+    void tauriApi.takeLaunchFile().then((path) => {
+      if (path && !cancelled) void openExternal(path);
+    });
+    return () => {
+      cancelled = true;
+      if (unlisten) unlisten();
+    };
+  }, [openExternal]);
+
   const openTile = useCallback((note: NoteItem, rect: DOMRect) => {
+    setSheetClosing(false);
     setOpenNote({ note, origin: rect });
   }, []);
 
@@ -155,6 +231,7 @@ export default function App() {
     (shelf?: string) => {
       const target = shelf ?? active ?? shelves[0] ?? "Uncategorized";
       const created = create(target);
+      setSheetClosing(false);
       setOpenNote({ note: created, origin: originFromCanvas() });
       if (shelf) setActive(shelf);
     },
@@ -163,6 +240,7 @@ export default function App() {
 
   const closeSheet = useCallback(() => {
     const id = openNote?.note.id;
+    setSheetClosing(false);
     setOpenNote(null);
     if (!id) return;
     requestAnimationFrame(() => {
@@ -173,6 +251,11 @@ export default function App() {
 
   const commitSheet = useCallback(
     (next: NoteItem) => {
+      // External files are written only by the explicit Save button, never by autosave
+      if (next.source_path) {
+        setOpenNote((prev) => (prev && prev.note.id === next.id ? { ...prev, note: next } : prev));
+        return;
+      }
       patch(next);
       setOpenNote((prev) => (prev && prev.note.id === next.id ? { ...prev, note: next } : prev));
     },
@@ -182,6 +265,7 @@ export default function App() {
   const deleteNote = useCallback(
     (note: NoteItem) => {
       remove(note.id);
+      setSheetClosing(false);
       setOpenNote(null);
       deletedRef.current = [...deletedRef.current, note];
       const count = deletedRef.current.length;
@@ -215,6 +299,7 @@ export default function App() {
     try {
       const imported = await workspace.importNoteFile();
       notify(`Imported: ${imported.title || "Untitled"}`);
+      setSheetClosing(false);
       setOpenNote({ note: imported, origin: originFromCanvas() });
     } catch (err: any) {
       const msg = typeof err === "string" ? err : err?.message || "";
@@ -330,7 +415,7 @@ export default function App() {
                 active={active}
                 query={query}
                 loading={state === "loading"}
-                locked={!!openNote}
+                locked={false}
                 collapsed={collapsed}
                 onToggleCollapse={toggleCollapse}
                 onOpen={openTile}
@@ -349,21 +434,36 @@ export default function App() {
             )}
             </div>
           </main>
+
+          {/* Right-side sliding editor drawer: reserves space so the dashboard stays visible + interactive */}
+          <aside
+            className="relative shrink-0"
+            style={{
+              width: openFresh && openNote && sheetReserve && !sheetClosing ? "clamp(420px, 42vw, 600px)" : 0,
+              marginLeft: openFresh && openNote && sheetReserve && !sheetClosing ? 12 : 0,
+              transition: sheetClosing
+                ? "width 300ms ease-out, margin-left 300ms ease-out"
+                : "width 460ms cubic-bezier(0.32, 0.72, 0, 1), margin-left 460ms cubic-bezier(0.32, 0.72, 0, 1)",
+            }}
+          >
+            {openFresh && openNote && (
+              <NoteSheet
+                key={openFresh.id}
+                note={openFresh}
+                origin={openNote.origin}
+                canvas={canvasRef.current}
+                shelves={shelves}
+                instant={wasSheetOpen.current}
+                onClosing={() => setSheetClosing(true)}
+                onOpening={() => setSheetReserve(true)}
+                onCommit={commitSheet}
+                onClose={closeSheet}
+                onDelete={deleteNote}
+              />
+            )}
+          </aside>
         </div>
       </div>
-
-      {openFresh && openNote && (
-        <NoteSheet
-          key={openFresh.id}
-          note={openFresh}
-          origin={openNote.origin}
-          canvas={canvasRef.current}
-          shelves={shelves}
-          onCommit={commitSheet}
-          onClose={closeSheet}
-          onDelete={deleteNote}
-        />
-      )}
 
       {contextMenu && (
         <ContextMenu

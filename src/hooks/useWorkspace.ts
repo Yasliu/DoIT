@@ -322,7 +322,19 @@ export function useWorkspace() {
       pending.current.clear();
     };
     window.addEventListener("beforeunload", flush);
-    return () => window.removeEventListener("beforeunload", flush);
+    let unlisten: (() => void) | null = null;
+    let disposed = false;
+    getCurrentWindow()
+      .listen("flush-pending", flush)
+      .then((fn) => {
+        if (disposed) fn();
+        else unlisten = fn;
+      });
+    return () => {
+      disposed = true;
+      if (unlisten) unlisten();
+      window.removeEventListener("beforeunload", flush);
+    };
   }, []);
 
   const importNoteFile = useCallback(async (filePath?: string): Promise<NoteItem> => {
