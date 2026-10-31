@@ -157,6 +157,7 @@ export function Sidebar({
             <input
               autoFocus
               value={categoryName}
+                maxLength={24}
               onChange={(e) => setCategoryName(e.target.value)}
               onKeyDown={(e) => {
                 if (e.key === "Enter") {
