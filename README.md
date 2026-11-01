@@ -70,15 +70,25 @@ Drop any `.md` or `.txt` files into your note repository folder, hit **Sync Repo
   <img src="docs/shot-save.jpg" width="700" alt="The Save button for externally opened files">
 </p>
 
-## What's new in v1.1.5
+## What's new in v1.1.6
 
-- The tray companion now checks where it sits on the screen and always expands toward the open space: near the left edge it grows right, near the right edge it grows left, and the same applies up and down
-- Smoother pill-to-panel animation: expanding the tray no longer jumps or snaps
+- Deleting a note now asks for confirmation first, so one stray click can't wipe your work
+- The delete dialog no longer spills text past its edges: it wraps and sizes itself cleanly at any window size
+- Dock mode now scrolls properly: the mouse wheel and a slim, draggable scrollbar handle long notes, with the formatting bar staying put
 
 The full history lives in the release log below.
 
 <details>
 <summary><strong>Release log</strong> (click to expand)</summary>
+
+<details>
+<summary><strong>v1.1.6</strong> — November 1, 2026</summary>
+
+- Deleting a note now asks you to confirm first, so nothing disappears by accident
+- The delete confirmation dialog wraps its text and resizes to fit, instead of overflowing at small or odd window sizes
+- Scrolling works in dock mode again: mouse wheel and a thin, draggable scrollbar handle long notes while the toolbar stays fixed
+
+</details>
 
 <details>
 <summary><strong>v1.1.5</strong> — November 1, 2026</summary>
