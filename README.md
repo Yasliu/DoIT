@@ -13,7 +13,7 @@ No cloud. No accounts. No tracking. Your notes are plain Markdown files on your 
 [![Platform](https://img.shields.io/badge/platform-Windows-blue)]()
 [![Built with](https://img.shields.io/badge/built%20with-Tauri%20%2B%20Rust-2494EA)](https://v2.tauri.app/)
 
-<img src="docs/demo.gif" width="800" alt="DoIT bento grid in motion">
+<img src="5134120678222138702_121.jpg" width="800" alt="The DoIT bento grid: every note as a card">
 
 </div>
 
@@ -31,11 +31,12 @@ Most note apps want an account before they want your thoughts. DoIT doesn't. Eve
 - **Zero cloud, zero accounts, zero tracking.** No remote auth, no telemetry, MIT-licensed source.
 
 <p align="center">
-  <img src="docs/shot-dashboard.jpg" width="800" alt="The DoIT dashboard: every note as a card on the grid">
+  <img src="5134120678222138703_121.jpg" width="800" alt="The note editor in MD mode and text mode side by side">
 </p>
 
+<!-- GIFS: restore these two blocks when demo.gif and tray.gif land in the repo
 <p align="center">
-  <img src="docs/shot-editor.jpg" width="800" alt="The note editor in MD mode and text mode side by side">
+  <img src="docs/demo.gif" width="800" alt="DoIT bento grid in motion">
 </p>
 
 ### The tray companion
@@ -45,6 +46,7 @@ DoIT lives in the system tray as a floating companion — one click expands it i
 <p align="center">
   <img src="docs/tray.gif" width="480" alt="The DoIT tray companion expanding over the desktop">
 </p>
+GIFS -->
 
 ## Getting started
 
@@ -61,13 +63,13 @@ File handling stays sandboxed: imports are capped at 30 MB and path operations a
 DoIT doubles as your external Markdown editor. Right-click any `.md` or `.txt` in Explorer, choose **Open with → DoIT**, and the file opens in place — it is not copied into your DoIT shelf. Edit in MD mode or text mode, then hit **Save** to write it back to the same file. DoIT's own notes autosave as always.
 
 <p align="center">
-  <img src="docs/shot-openwith.jpg" width="480" alt="Opening a file with DoIT from the Windows context menu">
+  <img src="5134120678222138704_120.jpg" width="480" alt="Opening a file with DoIT from the Windows context menu">
 </p>
 
 Drop any `.md` or `.txt` files into your note repository folder, hit **Sync Repository** in Settings, and they re-index into your grid instantly.
 
 <p align="center">
-  <img src="docs/shot-save.jpg" width="700" alt="The Save button for externally opened files">
+  <img src="5134120678222138705_121.jpg" width="700" alt="The Save button for externally opened files">
 </p>
 
 ## What's new in v1.1.4
