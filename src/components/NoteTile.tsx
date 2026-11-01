@@ -1,5 +1,6 @@
 import type { PointerEvent as ReactPointerEvent } from "react";
 import { useLayoutEffect, useMemo, useRef, useState } from "react";
+import { motion } from "motion/react";
 import type { NoteItem } from "../api/tauriBridge";
 import { fontStack } from "../api/tauriBridge";
 import { accentFor, cleanText, cx, densityOf, edgeOpacity, relativeShort, stripDate } from "../lib/text";
@@ -61,7 +62,9 @@ export function NoteTile({
   const done = note.content.filter((item) => item.is_todo && item.completed).length;
 
   return (
-    <article
+    <motion.article
+      layout
+      transition={{ type: "spring", stiffness: 180, damping: 25, mass: 0.8 }}
       role="button"
       tabIndex={0}
       aria-label={`Open note: ${cleanText(note.title) || "Untitled"}`}
@@ -84,7 +87,6 @@ export function NoteTile({
       style={{
         minHeight: density.minHeight,
         transform,
-        transition: "transform 180ms cubic-bezier(0.16, 1, 0.3, 1), box-shadow 180ms ease, background-color 180ms ease",
       }}
       className={cx(
         "card group relative flex flex-col h-full p-[17px] text-left outline-none",
@@ -269,6 +271,6 @@ export function NoteTile({
           </span>
         </div>
       </div>
-    </article>
+    </motion.article>
   );
 }

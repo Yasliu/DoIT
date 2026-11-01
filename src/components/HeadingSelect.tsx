@@ -36,7 +36,8 @@ export function HeadingSelect({ editorRef, onSelect, compact = false, disabled =
     return () => document.removeEventListener("selectionchange", update);
   }, [editorRef]);
 
-  const handleToggle = () => {
+  const handleToggle = (e: React.MouseEvent) => {
+    e.stopPropagation();
     if (!open) {
       const ed = editorRef.current;
       const sel = window.getSelection();
@@ -66,22 +67,28 @@ export function HeadingSelect({ editorRef, onSelect, compact = false, disabled =
     onSelect(selectedLevel);
     setLevel(selectedLevel);
     setOpen(false);
+    if (ed) {
+      ed.focus();
+    }
   };
 
   const current = OPTIONS.find((o) => o.level === level) ?? OPTIONS[0];
 
   return (
-    <div className="relative">
+    <div className="relative pointer-events-auto">
       <button
         type="button"
         disabled={disabled}
-        onMouseDown={(e) => e.preventDefault()}
+        onMouseDown={(e) => {
+          e.preventDefault();
+          e.stopPropagation();
+        }}
         onClick={handleToggle}
         title="Text style"
         aria-haspopup="listbox"
         aria-expanded={open}
         className={cx(
-          "flex items-center gap-1 rounded-md text-ink-3 transition-colors hover:bg-white/[0.08] hover:text-ink-1 disabled:opacity-30 cursor-pointer",
+          "flex items-center gap-1 rounded-md text-ink-3 transition-colors hover:bg-white/[0.08] hover:text-ink-1 disabled:opacity-30 cursor-pointer pointer-events-auto",
           compact ? "h-6 px-1.5 text-[10.5px]" : "h-7 px-2 text-[11.5px]",
           open && "bg-white/[0.08] text-ink-1",
         )}
@@ -94,14 +101,21 @@ export function HeadingSelect({ editorRef, onSelect, compact = false, disabled =
         <>
           <div
             className="fixed inset-0 z-40"
-            onPointerDown={() => setOpen(false)}
-            onClick={() => setOpen(false)}
+            onPointerDown={(e) => {
+              e.stopPropagation();
+              setOpen(false);
+            }}
+            onClick={(e) => {
+              e.stopPropagation();
+              setOpen(false);
+            }}
           />
           <div
             role="listbox"
             onPointerDown={(e) => e.stopPropagation()}
             onMouseDown={(e) => e.stopPropagation()}
-            className="absolute left-0 top-full z-50 mt-1 w-[158px] rounded-xl border border-white/20 bg-[#14151a] p-1.5 shadow-[0_25px_60px_rgba(0,0,0,0.95)]"
+            onClick={(e) => e.stopPropagation()}
+            className="absolute left-0 top-full z-50 mt-1 w-[158px] rounded-xl border border-white/20 bg-[#14151a] p-1.5 shadow-[0_25px_60px_rgba(0,0,0,0.95)] pointer-events-auto"
           >
             {OPTIONS.map((opt) => (
               <button
@@ -109,9 +123,16 @@ export function HeadingSelect({ editorRef, onSelect, compact = false, disabled =
                 type="button"
                 role="option"
                 aria-selected={opt.level === level}
-                onClick={() => handleSelect(opt.level)}
+                onMouseDown={(e) => {
+                  e.preventDefault();
+                  e.stopPropagation();
+                }}
+                onClick={(e) => {
+                  e.stopPropagation();
+                  handleSelect(opt.level);
+                }}
                 className={cx(
-                  "flex h-7 w-full items-center justify-between rounded-md px-2 text-left text-ink-2 transition-colors hover:bg-white/10 hover:text-white cursor-pointer",
+                  "flex h-7 w-full items-center justify-between rounded-md px-2 text-left text-ink-2 transition-colors hover:bg-white/10 hover:text-white cursor-pointer pointer-events-auto",
                   opt.sample,
                   opt.level === level && "bg-white/[0.06] text-white",
                 )}

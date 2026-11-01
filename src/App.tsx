@@ -36,6 +36,23 @@ function readCollapsed(): Record<string, boolean> {
   }
 }
 
+const MIN_DRAWER_WIDTH = 380;
+
+function getStoredDrawerWidth(): number {
+  try {
+    const raw = localStorage.getItem("doit.drawer_width");
+    if (raw) {
+      const parsed = parseInt(raw, 10);
+      if (!isNaN(parsed) && parsed >= MIN_DRAWER_WIDTH) {
+        return Math.min(parsed, window.innerWidth - 100);
+      }
+    }
+  } catch {
+    /* ignore */
+  }
+  return Math.min(Math.max(MIN_DRAWER_WIDTH, Math.round(window.innerWidth * 0.42)), 640);
+}
+
 export default function App() {
   const workspace = useWorkspace();
   const { notes, shelves, state, create, patch, remove, restore, moveCategory, deleteCategory, createCategory, renameCategory, reorderNote } = workspace;
@@ -45,6 +62,7 @@ export default function App() {
   const [query, setQuery] = useState("");
   const [active, setActive] = useState<string | null>(null);
   const [openNote, setOpenNote] = useState<OpenNote | null>(null);
+  const [drawerWidth, setDrawerWidth] = useState<number>(getStoredDrawerWidth);
   const [contextMenu, setContextMenu] = useState<{ x: number; y: number; note: NoteItem } | null>(null);
   const [categoryMenu, setCategoryMenu] = useState<{ x: number; y: number; shelf: string } | null>(null);
   const [sheetClosing, setSheetClosing] = useState(false);
@@ -475,7 +493,7 @@ export default function App() {
           <aside
             className="relative shrink-0"
             style={{
-              width: openFresh && openNote && sheetReserve && !sheetClosing ? "clamp(420px, 42vw, 600px)" : 0,
+              width: openFresh && openNote && sheetReserve && !sheetClosing ? drawerWidth : 0,
               marginLeft: openFresh && openNote && sheetReserve && !sheetClosing ? 12 : 0,
               transition: sheetClosing
                 ? "width 300ms ease-out, margin-left 300ms ease-out"
@@ -490,6 +508,8 @@ export default function App() {
                 canvas={canvasRef.current}
                 shelves={shelves}
                 instant={wasSheetOpen.current}
+                width={drawerWidth}
+                onResizeWidth={setDrawerWidth}
                 onClosing={() => setSheetClosing(true)}
                 onOpening={() => setSheetReserve(true)}
                 onCommit={commitSheet}

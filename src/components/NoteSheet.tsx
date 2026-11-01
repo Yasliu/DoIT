@@ -54,6 +54,8 @@ interface NoteSheetProps {
   onClosing?: () => void;
   /** fired on the exact frame the entry slide begins, so the dashboard can start easing in lockstep */
   onOpening?: () => void;
+  width?: number;
+  onResizeWidth?: (w: number) => void;
 }
 
 export function NoteSheet({
@@ -67,6 +69,8 @@ export function NoteSheet({
   instant = false,
   onClosing,
   onOpening,
+  width,
+  onResizeWidth,
 }: NoteSheetProps) {
   const frame = useRef<HTMLDivElement | null>(null);
   const [phase, setPhase] = useState<"pre" | "in" | "settled" | "out">(instant ? "settled" : "pre");
@@ -94,6 +98,54 @@ export function NoteSheet({
   const titleRef = useRef<HTMLInputElement | null>(null);
   const closeRef = useRef<() => void>(() => {});
   const closeCancel = useRef<() => void>(() => {});
+
+  // Interactive Resizable Right Panel
+  const isResizing = useRef(false);
+  const startX = useRef(0);
+  const startWidth = useRef(width || 520);
+
+  const handleResizeMouseDown = (e: React.MouseEvent) => {
+    e.preventDefault();
+    e.stopPropagation();
+    isResizing.current = true;
+    startX.current = e.clientX;
+    startWidth.current = width || frame.current?.offsetWidth || 520;
+
+    document.body.style.userSelect = "none";
+    document.body.style.cursor = "col-resize";
+
+    const onMouseMove = (moveEvent: MouseEvent) => {
+      if (!isResizing.current) return;
+      const deltaX = startX.current - moveEvent.clientX;
+      const minW = 380;
+      const maxW = Math.max(minW, window.innerWidth - 100);
+      const nextW = Math.round(Math.min(Math.max(startWidth.current + deltaX, minW), maxW));
+      onResizeWidth?.(nextW);
+    };
+
+    const onMouseUp = (upEvent: MouseEvent) => {
+      if (!isResizing.current) return;
+      isResizing.current = false;
+      document.body.style.userSelect = "";
+      document.body.style.cursor = "";
+      window.removeEventListener("mousemove", onMouseMove);
+      window.removeEventListener("mouseup", onMouseUp);
+
+      const deltaX = startX.current - upEvent.clientX;
+      const minW = 380;
+      const maxW = Math.max(minW, window.innerWidth - 100);
+      const finalW = Math.round(Math.min(Math.max(startWidth.current + deltaX, minW), maxW));
+      onResizeWidth?.(finalW);
+      try {
+        localStorage.setItem("doit.drawer_width", String(finalW));
+      } catch {
+        /* storage full or blocked */
+      }
+    };
+
+    window.addEventListener("mousemove", onMouseMove);
+    window.addEventListener("mouseup", onMouseUp);
+  };
 
   // Rich text formatting state
   const editorRef = useRef<HTMLDivElement | null>(null);
@@ -435,24 +487,36 @@ export function NoteSheet({
           if (e.target === e.currentTarget && e.propertyName === "transform" && phase === "in") setPhase("settled");
         }}
         style={{
+          width: width ? `${width}px` : "clamp(420px, 42vw, 600px)",
           transform: phase === "settled" ? "none" : phase === "in" ? "translate3d(0,0,0)" : "translate3d(106%,0,0)",
           opacity: phase === "pre" ? 0 : 1,
           // entry: long soft landing + quick fade; exit keeps the plain 300ms ease-out
           transition:
-            phase === "settled"
+            isResizing.current
               ? "none"
-              : phase === "out"
-                ? "transform 300ms ease-out"
-                : "transform 460ms cubic-bezier(0.32, 0.72, 0, 1), opacity 240ms ease-out",
+              : phase === "settled"
+                ? "none"
+                : phase === "out"
+                  ? "transform 300ms ease-out"
+                  : "transform 460ms cubic-bezier(0.32, 0.72, 0, 1), opacity 240ms ease-out",
           willChange: phase === "settled" ? "auto" : "transform",
         }}
-        className="absolute inset-y-0 right-0 z-30 flex w-[clamp(420px,42vw,600px)] flex-col overflow-hidden rounded-[22px] glass-sheet outline-none border border-white/10 shadow-[0_30px_90px_rgba(0,0,0,0.6)]"
-      >        <div
+        className="absolute inset-y-0 right-0 z-30 flex flex-col overflow-hidden rounded-[22px] glass-sheet outline-none border border-white/10 shadow-[0_30px_90px_rgba(0,0,0,0.6)]"
+      >
+        {/* Interactive Resizable Handle Rail */}
+        <div
+          onMouseDown={handleResizeMouseDown}
+          className="w-1 hover:w-1.5 cursor-col-resize bg-white/10 hover:bg-white/30 transition-all absolute top-0 left-0 h-full z-40 select-none group/resize"
+          title="Drag to resize editor panel"
+        >
+          <div className="absolute top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 w-0.5 h-8 rounded-full bg-white/20 group-hover/resize:bg-white/50 transition-colors" />
+        </div>
+        <div
           className="h-[2px] shrink-0 origin-left"
           style={{ backgroundColor: accent, animation: "strip-in 620ms cubic-bezier(0.22,1,0.36,1) both" }}
         />
 
-        <div className="flex min-h-[52px] shrink-0 flex-nowrap items-center justify-between gap-x-3 px-5 py-1.5">
+        <div className="flex min-h-[52px] shrink-0 flex-nowrap items-center justify-between gap-x-3 px-5 py-1.5 overflow-visible pointer-events-auto">
           <div className="flex min-w-0 max-w-[130px] shrink items-center gap-2.5">
             {external ? (
               <span
@@ -526,12 +590,16 @@ export function NoteSheet({
             )}
           </div>
 
-          <div className="no-scrollbar flex min-w-0 items-center gap-0.5 overflow-x-auto">
-            <div className="relative">
+          <div className="flex min-w-0 items-center gap-0.5 overflow-visible pointer-events-auto">
+            <div className="relative pointer-events-auto">
               <button
                 type="button"
-                onClick={() => setFontOpen((v) => !v)}
-                className="flex h-7 items-center gap-1.5 rounded-md px-2 text-[11.5px] text-ink-3 transition-colors hover:bg-white/[0.06] hover:text-ink-1"
+                onMouseDown={(e) => e.stopPropagation()}
+                onClick={(e) => {
+                  e.stopPropagation();
+                  setFontOpen((v) => !v);
+                }}
+                className="flex h-7 items-center gap-1.5 rounded-md px-2 text-[11.5px] text-ink-3 transition-colors hover:bg-white/[0.06] hover:text-ink-1 cursor-pointer pointer-events-auto"
                 title="Note typeface"
               >
                 <Type size={12} strokeWidth={1.7} />
@@ -542,13 +610,20 @@ export function NoteSheet({
                 <>
                   <div
                     className="fixed inset-0 z-40"
-                    onPointerDown={() => setFontOpen(false)}
-                    onClick={() => setFontOpen(false)}
+                    onPointerDown={(e) => {
+                      e.stopPropagation();
+                      setFontOpen(false);
+                    }}
+                    onClick={(e) => {
+                      e.stopPropagation();
+                      setFontOpen(false);
+                    }}
                   />
                   <div
                     onPointerDown={(e) => e.stopPropagation()}
                     onMouseDown={(e) => e.stopPropagation()}
-                    className="absolute right-0 top-9 z-50 w-[240px] rounded-[14px] bg-[#14151a] border border-white/20 p-2 shadow-[0_25px_60px_rgba(0,0,0,0.95)]"
+                    onClick={(e) => e.stopPropagation()}
+                    className="absolute right-0 top-9 z-50 w-[240px] rounded-[14px] bg-[#14151a] border border-white/20 p-2 shadow-[0_25px_60px_rgba(0,0,0,0.95)] pointer-events-auto"
                   >
                     <div className="text-[10px] font-mono uppercase tracking-[0.12em] text-ink-4 px-2 py-1 select-none">
                       Font Presets
@@ -557,12 +632,21 @@ export function NoteSheet({
                       <button
                         key={font.name}
                         type="button"
-                        onClick={() => {
+                        onMouseDown={(e) => {
+                          e.preventDefault();
+                          e.stopPropagation();
+                        }}
+                        onClick={(e) => {
+                          e.stopPropagation();
                           edit({ font_family: font.name }, true);
+                          if (editorRef.current) {
+                            editorRef.current.style.fontFamily = font.stack;
+                            editorRef.current.focus();
+                          }
                           setFontOpen(false);
                         }}
                         className={cx(
-                          "flex h-8 w-full items-center justify-between rounded-md px-2 text-left text-[13px] cursor-pointer",
+                          "flex h-8 w-full items-center justify-between rounded-md px-2 text-left text-[13px] cursor-pointer pointer-events-auto",
                           font.name === draft.font_family
                             ? "bg-white/[0.08] text-ink-1"
                             : "text-ink-2 hover:bg-white/[0.06] hover:text-ink-1",
@@ -583,10 +667,17 @@ export function NoteSheet({
                           type="text"
                           value={customFontInput}
                           onChange={(e) => setCustomFontInput(e.target.value)}
+                          onMouseDown={(e) => e.stopPropagation()}
+                          onClick={(e) => e.stopPropagation()}
                           onKeyDown={(e) => {
                             e.stopPropagation();
                             if (e.key === "Enter" && customFontInput.trim()) {
-                              edit({ font_family: customFontInput.trim() }, true);
+                              const customName = customFontInput.trim();
+                              edit({ font_family: customName }, true);
+                              if (editorRef.current) {
+                                editorRef.current.style.fontFamily = fontStack(customName);
+                                editorRef.current.focus();
+                              }
                               setFontOpen(false);
                             }
                           }}
@@ -595,13 +686,23 @@ export function NoteSheet({
                         />
                         <button
                           type="button"
-                          onClick={() => {
+                          onMouseDown={(e) => {
+                            e.preventDefault();
+                            e.stopPropagation();
+                          }}
+                          onClick={(e) => {
+                            e.stopPropagation();
                             if (customFontInput.trim()) {
-                              edit({ font_family: customFontInput.trim() }, true);
+                              const customName = customFontInput.trim();
+                              edit({ font_family: customName }, true);
+                              if (editorRef.current) {
+                                editorRef.current.style.fontFamily = fontStack(customName);
+                                editorRef.current.focus();
+                              }
                               setFontOpen(false);
                             }
                           }}
-                          className="h-7 px-2.5 rounded-lg bg-white/10 hover:bg-white/20 text-[11px] font-medium text-white transition-colors shrink-0 cursor-pointer"
+                          className="h-7 px-2.5 rounded-lg bg-white/10 hover:bg-white/20 text-[11px] font-medium text-white transition-colors shrink-0 cursor-pointer pointer-events-auto"
                         >
                           Apply
                         </button>

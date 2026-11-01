@@ -653,13 +653,13 @@ export function TrayCompanion() {
             className="flex flex-1 flex-col overflow-hidden px-1 scale-100 animate-in fade-in duration-150"
           >
             {/* Note Toolbar: Type, Bold, Italic, Tasks/Text Mode, Image, Delete */}
-            <div className="flex flex-wrap items-center justify-between gap-x-1 gap-y-1 pb-2 border-b border-white/[0.07]">
+            <div className="flex flex-wrap items-center justify-between gap-x-1 gap-y-1 pb-2 border-b border-white/[0.07] overflow-visible pointer-events-auto">
             {/* Shelf/Category selector */}
             <div className="relative">
               <button
                 type="button"
                 onClick={() => setShelfOpen((v) => !v)}
-                className="flex h-6 items-center gap-1.5 rounded-md px-1.5 font-mono text-[9.5px] uppercase tracking-[0.11em] text-ink-3 hover:bg-white/[0.08] hover:text-ink-1 transition-colors"
+                className="flex h-6 items-center gap-1.5 rounded-md px-1.5 font-mono text-[9.5px] uppercase tracking-[0.11em] text-ink-3 hover:bg-white/[0.08] hover:text-ink-1 transition-colors pointer-events-auto"
               >
                 <span
                   className="size-[4px] rounded-full"
@@ -671,16 +671,25 @@ export function TrayCompanion() {
               {shelfOpen && (
                 <>
                   <div className="fixed inset-0 z-40" onPointerDown={() => setShelfOpen(false)} />
-                  <div className="absolute left-0 top-7 z-50 w-[170px] rounded-xl bg-[#14151a] border border-white/20 p-1.5 shadow-[0_25px_60px_rgba(0,0,0,0.95)]">
+                  <div
+                    onPointerDown={(e) => e.stopPropagation()}
+                    onMouseDown={(e) => e.stopPropagation()}
+                    className="absolute left-0 top-7 z-50 w-[170px] rounded-xl bg-[#14151a] border border-white/20 p-1.5 shadow-[0_25px_60px_rgba(0,0,0,0.95)] pointer-events-auto"
+                  >
                     {shelves.map((shelf) => (
                       <button
                         key={shelf}
                         type="button"
-                        onClick={() => {
+                        onMouseDown={(e) => {
+                          e.preventDefault();
+                          e.stopPropagation();
+                        }}
+                        onClick={(e) => {
+                          e.stopPropagation();
                           editActive({ category: shelf });
                           setShelfOpen(false);
                         }}
-                        className="flex h-6 w-full items-center justify-between rounded px-2 text-[11px] text-ink-2 hover:bg-white/10 hover:text-white"
+                        className="flex h-6 w-full items-center justify-between rounded px-2 text-[11px] text-ink-2 hover:bg-white/10 hover:text-white cursor-pointer pointer-events-auto"
                       >
                         <span className="truncate">{shelf}</span>
                         {shelf === activeNote.category && <Check size={10} />}
@@ -696,8 +705,12 @@ export function TrayCompanion() {
               <div className="relative">
                 <button
                   type="button"
-                  onClick={() => setFontOpen((v) => !v)}
-                  className="icon-btn !size-6"
+                  onMouseDown={(e) => e.stopPropagation()}
+                  onClick={(e) => {
+                    e.stopPropagation();
+                    setFontOpen((v) => !v);
+                  }}
+                  className="icon-btn !size-6 cursor-pointer pointer-events-auto"
                   title="Typeface"
                 >
                   <Type size={11.5} />
@@ -712,7 +725,7 @@ export function TrayCompanion() {
                     <div
                       onPointerDown={(e) => e.stopPropagation()}
                       onMouseDown={(e) => e.stopPropagation()}
-                      className="absolute right-0 top-7 z-50 w-[210px] rounded-xl bg-[#14151a] border border-white/20 p-2 shadow-[0_25px_60px_rgba(0,0,0,0.95)]"
+                      className="absolute right-0 top-7 z-50 w-[210px] rounded-xl bg-[#14151a] border border-white/20 p-2 shadow-[0_25px_60px_rgba(0,0,0,0.95)] pointer-events-auto"
                     >
                       <div className="text-[9.5px] font-mono uppercase tracking-[0.12em] text-ink-4 px-1.5 py-0.5 select-none">
                         Font Presets
@@ -721,11 +734,20 @@ export function TrayCompanion() {
                         <button
                           key={font.name}
                           type="button"
-                          onClick={() => {
+                          onMouseDown={(e) => {
+                            e.preventDefault();
+                            e.stopPropagation();
+                          }}
+                          onClick={(e) => {
+                            e.stopPropagation();
                             editActive({ font_family: font.name });
+                            if (editorRef.current) {
+                              editorRef.current.style.fontFamily = font.stack;
+                              editorRef.current.focus();
+                            }
                             setFontOpen(false);
                           }}
-                          className="flex h-6 w-full items-center justify-between rounded px-2 text-[11px] text-ink-2 hover:bg-white/10 hover:text-white cursor-pointer"
+                          className="flex h-6 w-full items-center justify-between rounded px-2 text-[11px] text-ink-2 hover:bg-white/10 hover:text-white cursor-pointer pointer-events-auto"
                           style={{ fontFamily: font.stack }}
                         >
                           <span className="truncate">{font.label}</span>
@@ -742,25 +764,42 @@ export function TrayCompanion() {
                             type="text"
                             value={customFontInput}
                             onChange={(e) => setCustomFontInput(e.target.value)}
+                            onMouseDown={(e) => e.stopPropagation()}
+                            onClick={(e) => e.stopPropagation()}
                             onKeyDown={(e) => {
                               e.stopPropagation();
                               if (e.key === "Enter" && customFontInput.trim()) {
-                                editActive({ font_family: customFontInput.trim() });
+                                const customName = customFontInput.trim();
+                                editActive({ font_family: customName });
+                                if (editorRef.current) {
+                                  editorRef.current.style.fontFamily = fontStack(customName);
+                                  editorRef.current.focus();
+                                }
                                 setFontOpen(false);
                               }
                             }}
                             placeholder="Font name..."
-                            className="flex-1 min-w-0 h-6 rounded bg-white/[0.05] border border-white/15 px-1.5 text-[10.5px] text-ink-1 placeholder:text-ink-4 outline-none focus:border-white/30"
+                            className="flex-1 min-w-0 h-6 rounded bg-white/[0.05] border border-white/15 px-1.5 text-[10.5px] text-ink-1 placeholder:text-ink-4 outline-none focus:border-white/30 pointer-events-auto"
                           />
                           <button
                             type="button"
-                            onClick={() => {
+                            onMouseDown={(e) => {
+                              e.preventDefault();
+                              e.stopPropagation();
+                            }}
+                            onClick={(e) => {
+                              e.stopPropagation();
                               if (customFontInput.trim()) {
-                                editActive({ font_family: customFontInput.trim() });
+                                const customName = customFontInput.trim();
+                                editActive({ font_family: customName });
+                                if (editorRef.current) {
+                                  editorRef.current.style.fontFamily = fontStack(customName);
+                                  editorRef.current.focus();
+                                }
                                 setFontOpen(false);
                               }
                             }}
-                            className="h-6 px-2 rounded bg-white/10 hover:bg-white/20 text-[10px] font-medium text-white transition-colors shrink-0 cursor-pointer"
+                            className="h-6 px-2 rounded bg-white/10 hover:bg-white/20 text-[10px] font-medium text-white transition-colors shrink-0 cursor-pointer pointer-events-auto"
                           >
                             Apply
                           </button>

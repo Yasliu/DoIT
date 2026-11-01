@@ -411,3 +411,20 @@ Note: `--disable-gpu` would reach ~95 MB too but forces software compositing of 
   - Preserved underlying Markdown file format integrity with frontmatter metadata: writes both `font: "FONT_NAME"` and `font_family: "FONT_NAME"` without modifying document body text.
   - Deployed strict CSS fallback cascade array: `font-family: "${name}", "DoIT_Default", "Instrument Sans", "Segoe UI Variable Text", "Segoe UI", system-ui, sans-serif;`.
   - Configured `@font-face` alias `DoIT_Default` mapping safely to bundled webfonts. If an uninstalled or missing font is declared, the layout safely and silently cascades to the default font stack without errors, crashes, or rendering stalls.
+
+## [Section 22] - Critical UI Overhaul: Dropdown Interaction Restoration, Resizable Persistent Editor Drawer & Bento Tile Motion Physics
+- **Dropdown Component Interaction Restoration (The Selector Fix)**:
+  - Fixed unresponsive Font Family and Text Type (Normal, H1, H2, H3) dropdowns across `NoteSheet.tsx`, `HeadingSelect.tsx`, and `TrayCompanion.tsx`.
+  - Removed restrictive horizontal overflow clipping (`overflow-x-auto` was clipping absolutely-positioned dropdown menus) and replaced with `overflow-visible pointer-events-auto`.
+  - Added `pointer-events-auto` and isolated event propagation (`e.stopPropagation()`) across dropdown triggers, popover containers, and menu buttons.
+  - Added `onMouseDown={(e) => { e.preventDefault(); e.stopPropagation(); }}` on dropdown option items so that selecting a typeface or heading level does not blur the editor textarea.
+  - Implemented immediate styling application (`style.fontFamily`) on active editor nodes and restored editor focus without cursor loss or layout freezing.
+- **Dynamic Resizable Right Panel with Persistence Mapping**:
+  - Implemented an interactive resize rail handle (`w-1 hover:w-1.5 cursor-col-resize bg-white/10 hover:bg-white/30 transition-all absolute top-0 left-0 h-full z-40 select-none group/resize`) along the far-left edge of the sliding editor drawer (`NoteSheet.tsx`).
+  - Added drag tracking hooks capturing mouse position deltas (`deltaX = startX - clientX`) to smoothly widen or narrow the editor panel in real-time, clamped between `380px` and `window.innerWidth - 100px`.
+  - Persisted the finalized drawer width to local storage (`doit.drawer_width`) upon mouse release.
+  - Added startup initialization in `App.tsx` reading `localStorage.getItem("doit.drawer_width")` so all subsequent notes and app sessions immediately inherit the user's custom drawer width configuration.
+- **Smooth Bento Tile Expansion Physics (Fluid Motion Transitions)**:
+  - Eliminated rough layout snaps, pops, and visual jitter when text wraps, cards resize, or notes are reordered.
+  - Integrated `motion` from `motion/react` with the `layout` attribute on both the parent bento grid container (`CategoryShelf.tsx`) and individual note card tiles (`NoteTile.tsx`).
+  - Enforced fluid spring transition dynamics: `transition={{ type: "spring", stiffness: 180, damping: 25, mass: 0.8 }}`.

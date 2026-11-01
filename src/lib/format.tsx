@@ -767,7 +767,7 @@ function clearPrefix(block: HTMLElement): void {
   if (!block.firstChild) block.appendChild(document.createElement("br"));
 }
 
-/** Toggles a heading (Ctrl+1/2/3 and the toolbar H1/H2/H3 buttons) on the caret line. */
+/** Toggles or applies a heading (Ctrl+1/2/3 and the toolbar selector) on the caret line. */
 export function applyHeading(editor: HTMLElement, level: number): void {
   wrapStrayNodes(editor);
   let block = currentBlock(editor);
@@ -779,18 +779,22 @@ export function applyHeading(editor: HTMLElement, level: number): void {
   }
   if (block.tagName !== "DIV" || isSpecialBlock(block)) return;
 
-  const isHeading = /\bmd-h\d\b/.test(block.className);
   if (level === 0) {
-    if (isHeading) clearPrefix(block);
-    return;
-  }
-  const cls = `md-h${level}`;
-  if (block.classList.contains(cls)) {
     clearPrefix(block);
   } else {
     block.querySelectorAll(".md-cb").forEach((b) => b.remove());
     block.setAttribute("data-p", `${"#".repeat(level)} `);
-    block.className = cls;
+    block.className = `md-h${level}`;
+  }
+
+  // Preserve editor selection inside the modified block
+  const sel = window.getSelection();
+  if (sel) {
+    const range = document.createRange();
+    range.selectNodeContents(block);
+    range.collapse(false);
+    sel.removeAllRanges();
+    sel.addRange(range);
   }
 }
 
