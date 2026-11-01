@@ -1,3 +1,4 @@
+import { createPortal } from "react-dom";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { getCurrentWindow } from "@tauri-apps/api/window";
 import { Mark } from "./Mark";
@@ -110,14 +111,17 @@ export function TrayCompanion() {
   // Formatting popovers
   const [fontOpen, setFontOpen] = useState(false);
   const fontTriggerRef = useRef<HTMLButtonElement | null>(null);
-  const [fontMaxHeight, setFontMaxHeight] = useState<number>(280);
+  const [fontMenuStyle, setFontMenuStyle] = useState<React.CSSProperties>({});
 
   useEffect(() => {
     if (fontOpen && fontTriggerRef.current) {
       const rect = fontTriggerRef.current.getBoundingClientRect();
-      // Leave at least 18px breathing room before the window bottom
-      const spaceBelow = window.innerHeight - rect.bottom - 18;
-      setFontMaxHeight(Math.max(140, Math.min(320, Math.floor(spaceBelow))));
+      // portaled to <body>: viewport coordinates, clamped inside the window on every side
+      const w = 210;
+      const left = Math.max(8, Math.min(rect.right - w, window.innerWidth - w - 8));
+      const top = rect.bottom + 6;
+      const maxHeight = Math.max(120, Math.min(320, window.innerHeight - top - 12));
+      setFontMenuStyle({ position: "fixed", left, top, maxHeight });
     }
   }, [fontOpen]);
 
@@ -744,7 +748,7 @@ export function TrayCompanion() {
                 >
                   <Type size={11.5} />
                 </button>
-                {fontOpen && (
+                {fontOpen && createPortal(
                   <>
                     <div
                       className="fixed inset-0 z-40"
@@ -754,8 +758,8 @@ export function TrayCompanion() {
                     <div
                       onPointerDown={(e) => e.stopPropagation()}
                       onMouseDown={(e) => e.stopPropagation()}
-                      style={{ maxHeight: `${fontMaxHeight}px` }}
-                      className="absolute right-0 top-7 z-50 w-[210px] overflow-y-auto scrollbar-thin rounded-xl bg-[#14151a] border border-white/20 p-2 shadow-[0_25px_60px_rgba(0,0,0,0.95)] pointer-events-auto overscroll-contain"
+                      style={fontMenuStyle}
+                      className="z-[120] w-[210px] max-h-[260px] md:max-h-[320px] overflow-y-auto no-scrollbar rounded-xl bg-[#14151a] border border-white/20 p-2 shadow-[0_25px_60px_rgba(0,0,0,0.95)] pointer-events-auto overscroll-contain"
                     >
                       <div className="text-[9.5px] font-mono uppercase tracking-[0.12em] text-ink-4 px-1.5 py-0.5 select-none">
                         Font Presets
@@ -842,8 +846,9 @@ export function TrayCompanion() {
                         </div>
                       </div>
                     </div>
-                  </>
-                )}
+                  </>,
+ document.body,
+ )}
               </div>
               </>
               )}

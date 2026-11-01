@@ -33,7 +33,7 @@ jobs:
         with:
           tagName: ${{ github.ref_name }}
           releaseName: 'DoIT Desktop Core ${{ github.ref_name }}'
-          releaseBody: 'Production milestone build for the local-first bento task core.'
+          releaseBody: 'DoIT v1.1.4 - Fixes: Font Presets dropdown now stays inside the window (docked editor, maximized view and desk tray). Includes: update-check retries with a manual Check for updates button in Settings, category name limit with fade, key-cap shortcut fields, larger desk tray, faster image viewer, single-frame low-memory tray mode.'
           releaseDraft: false
           prerelease: false
           includeUpdaterJson: true
