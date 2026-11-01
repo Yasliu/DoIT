@@ -720,8 +720,10 @@ pub fn set_tray_mode(app: AppHandle, mode: String) -> Result<QuadrantInfo, Strin
     let m_pos = monitor.position();
 
     // Dock position coordinate vectors (x, y) relative directly against screen thresholds
-    let rel_x = pos.x - m_pos.x;
-    let rel_y = pos.y - m_pos.y;
+    // Decide with the frame's CENTRE (not its top-left): a tall panel docked at the bottom has its top-left in the
+    // upper half, which used to collapse the bar to the middle of the screen instead of the bottom corner.
+    let rel_x = pos.x + size.width as i32 / 2 - m_pos.x;
+    let rel_y = pos.y + size.height as i32 / 2 - m_pos.y;
     let width = screen_dim.width as i32;
     let height = screen_dim.height as i32;
 
