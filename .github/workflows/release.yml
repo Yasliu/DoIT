@@ -33,7 +33,7 @@ jobs:
         with:
           tagName: ${{ github.ref_name }}
           releaseName: 'DoIT Desktop Core ${{ github.ref_name }}'
-          releaseBody: 'DoIT v1.1.5 - Fixes: the desk tray bar now collapses to the correct screen corner (bottom corners stay at the bottom, top corners at the top) and expands back toward the screen centre. Includes the Font Presets dropdown containment fix and the update-check retries.'
+          releaseBody: 'DoIT v1.1.6 - Dynamic Quadrant-Based Dock Expansion, Full-Height Dock Note Scrolling & Viewport Clamping. Includes persistent single-show update notes and responsive modal enhancements.'
           releaseDraft: false
           prerelease: false
           includeUpdaterJson: true

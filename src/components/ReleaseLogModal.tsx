@@ -38,12 +38,12 @@ export function ReleaseLogModal({ onClose }: ReleaseLogModalProps) {
             <Sparkles size={14} />
           </div>
           <span className="font-mono text-[10px] uppercase tracking-[0.14em] text-ink-4">
-            Version 1.1.5 Update
+            Version 1.1.6 Update
           </span>
         </div>
 
         <h2 className="text-[17px] font-semibold text-white tracking-tight mb-3">
-          What&apos;s New in v1.1.5
+          What&apos;s New in v1.1.6
         </h2>
 
         <ul className="space-y-2.5 mb-5 text-[12.5px] text-ink-2 leading-relaxed">
@@ -53,11 +53,11 @@ export function ReleaseLogModal({ onClose }: ReleaseLogModalProps) {
           </li>
           <li className="flex items-start gap-2">
             <span className="size-1.5 rounded-full bg-white/60 mt-2 shrink-0" />
-            <span>Disabled font styling parameters inside raw Text Mode editing layouts.</span>
+            <span>Full-height vertical scrolling & draggable scrollbars in Dock Mode editor.</span>
           </li>
           <li className="flex items-start gap-2">
             <span className="size-1.5 rounded-full bg-white/60 mt-2 shrink-0" />
-            <span>Implemented an automated local one-time release notification logger.</span>
+            <span>Responsive confirmation dialogs with proper multi-line text wrapping.</span>
           </li>
         </ul>
 

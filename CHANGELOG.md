@@ -1,6 +1,6 @@
 # DoIT Developer Architecture & Engineering Changelog
 
-## [2026-11-01] - Version 1.1.5: Dynamic Quadrant-Based Dock Expansion Paths & Motion Synchronization
+## [2026-11-01] - Version 1.1.6: Dynamic Quadrant-Based Dock Expansion, Full-Height Scrolling & Production Release
 
 ### 1. Screen Quadrant Calculation Engine (`src-tauri/src/commands.rs`, `src-tauri/src/models.rs`)
 - **Active Monitor Query**: Retrieved active monitor dimensions via `tray.current_monitor()` / `screen_dim = monitor.size()`.

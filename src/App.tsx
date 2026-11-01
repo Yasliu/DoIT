@@ -27,7 +27,7 @@ interface Toast {
 }
 
 const COLLAPSE_KEY = "doit.collapsed";
-const CURRENT_VERSION = "1.1.5";
+const CURRENT_VERSION = "1.1.6";
 const VERSION_TRACKER_KEY = "doit.release_notes_version";
 
 function isVersionLower(current: string | null, target: string): boolean {
