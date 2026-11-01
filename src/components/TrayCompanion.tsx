@@ -1,5 +1,6 @@
 import { createPortal } from "react-dom";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import { motion } from "motion/react";
 import { getCurrentWindow } from "@tauri-apps/api/window";
 import { Mark } from "./Mark";
 import { HeadingSelect } from "./HeadingSelect";
@@ -198,11 +199,17 @@ export function TrayCompanion() {
     );
   }, []);
 
+  const [quadrant, setQuadrant] = useState<{ grow_x: "right" | "left" | "center"; grow_y: "down" | "up" }>({
+    grow_x: "left",
+    grow_y: "up",
+  });
+
   const expandFromPill = useCallback(async () => {
     shownRef.current = false;
     setShown(false);
     changeMode("switching");
-    await tauriApi.setTrayMode("panel");
+    const q = await tauriApi.setTrayMode("panel");
+    if (q) setQuadrant(q);
     await wait(45);
     changeMode("panel");
     openTray();
@@ -582,19 +589,29 @@ export function TrayCompanion() {
       className="flex h-screen w-screen items-end justify-end p-0 m-0 overflow-hidden bg-transparent select-none"
       style={{ background: "transparent", backgroundColor: "transparent" }}
     >
-      <div
+      <motion.div
         ref={panelRef}
-        onTransitionEnd={(e) => {
-          if (e.target === e.currentTarget && e.propertyName === "opacity" && !shownRef.current) {
+        initial={{
+          x: quadrant.grow_x === "right" ? -24 : quadrant.grow_x === "left" ? 24 : 0,
+          y: quadrant.grow_y === "down" ? -24 : 24,
+          opacity: 0,
+        }}
+        animate={{
+          x: 0,
+          y: 0,
+          opacity: shown ? 1 : 0,
+        }}
+        transition={{ type: "spring", stiffness: 420, damping: 32 }}
+        onAnimationComplete={() => {
+          if (!shown && !shownRef.current) {
             hideNow();
           }
         }}
         onPaste={handlePaste}
         onKeyDownCapture={handleUndoKeys}
         onContextMenu={handleContextMenu}
-        className="box-border flex h-full w-full flex-col overflow-hidden whitespace-nowrap text-ink-1 rounded-2xl border border-white/10 select-none p-2.5 shadow-none scale-100 transition-opacity duration-200 ease-out"
+        className="box-border flex h-full w-full flex-col overflow-hidden whitespace-nowrap text-ink-1 rounded-2xl border border-white/10 select-none p-2.5 shadow-none scale-100"
         style={{
-          opacity: shown ? 1 : 0,
           pointerEvents: shown ? "auto" : "none",
           backgroundColor: "var(--theme-tray-bg)",
           backdropFilter: "var(--theme-tray-blur)",
@@ -1328,7 +1345,7 @@ export function TrayCompanion() {
           </div>
         </div>
       )}
-      </div>
+      </motion.div>
     </div>
   );
 }

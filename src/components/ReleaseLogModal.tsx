@@ -38,18 +38,18 @@ export function ReleaseLogModal({ onClose }: ReleaseLogModalProps) {
             <Sparkles size={14} />
           </div>
           <span className="font-mono text-[10px] uppercase tracking-[0.14em] text-ink-4">
-            Version 1.1.4 Update
+            Version 1.1.5 Update
           </span>
         </div>
 
         <h2 className="text-[17px] font-semibold text-white tracking-tight mb-3">
-          What&apos;s New in v1.1.4
+          What&apos;s New in v1.1.5
         </h2>
 
         <ul className="space-y-2.5 mb-5 text-[12.5px] text-ink-2 leading-relaxed">
           <li className="flex items-start gap-2">
             <span className="size-1.5 rounded-full bg-white/60 mt-2 shrink-0" />
-            <span>Fixed font selection picker viewport clipping errors.</span>
+            <span>Dynamic quadrant-based dock expansion paths without jumping.</span>
           </li>
           <li className="flex items-start gap-2">
             <span className="size-1.5 rounded-full bg-white/60 mt-2 shrink-0" />

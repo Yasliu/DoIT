@@ -1,5 +1,23 @@
 # DoIT Developer Architecture & Engineering Changelog
 
+## [2026-11-01] - Version 1.1.5: Dynamic Quadrant-Based Dock Expansion Paths & Motion Synchronization
+
+### 1. Screen Quadrant Calculation Engine (`src-tauri/src/commands.rs`, `src-tauri/src/models.rs`)
+- **Active Monitor Query**: Retrieved active monitor dimensions via `tray.current_monitor()` / `screen_dim = monitor.size()`.
+- **Threshold & Growth Vector Analysis**:
+  - `Left Boundary` (`x < width / 3`): Forces horizontal expansion to the **RIGHT** (`pos.x`).
+  - `Right Boundary` (`x > width / 3 * 2`): Forces horizontal expansion to the **LEFT** (`pos.x + size.width - w`).
+  - `Center Cluster` (`width / 3 <= x <= width / 3 * 2`): Maintains **Horizontal Center** (`center_x - w / 2`).
+  - `Top Boundary` (`y < height / 2`): Forces vertical expansion **DOWNWARDS** (`pos.y`).
+  - `Bottom Boundary` (`y >= height / 2`): Forces vertical expansion **UPWARDS** (`pos.y + size.height - h`).
+- **Atomic Clamping**: Evaluates target coordinates through `clamp_to_monitor` and returns `QuadrantInfo { grow_x, grow_y }` to the frontend bridge.
+
+### 2. Framer Motion Synchronization at 60 FPS (`src/components/TrayCompanion.tsx`)
+- **Dynamic Entry Origins**: Mapped `QuadrantInfo` into container entry offsets:
+  - `grow_x === "right" ? -24 : grow_x === "left" ? 24 : 0`
+  - `grow_y === "down" ? -24 : 24`
+- **Zero-Glitch Spring Curves**: Configured `motion.div` with spring stiffness `420` and damping `32`, eliminating window position jumps and layout snaps during pill-to-panel transitions.
+
 ## [2026-11-01] - Version 1.1.4: Viewport Bounding Clamps, Ingestion Bar Breathing Room & Persistent Single-Show Release Modal
 
 ### 1. Tray Companion Font Dropdown Viewport Clamping (`src/components/TrayCompanion.tsx`, `src/components/NoteSheet.tsx`)
@@ -472,3 +490,7 @@ Note: `--disable-gpu` would reach ~95 MB too but forces software compositing of 
   - Added persistent version storage tracker (`doit.release_notes_version`).
   - On application startup lifecycle initialization, compares cached version token against current binary version ("1.1.4"). If lower or missing, presents the clean monochrome overlay release modal and updates storage immediately.
   - Features concise summary notes, a direct GitHub changelog documentation link, and a one-click "Got it" permanent dismissal trigger.
+
+- Font Presets dropdown (docked editor): anchored with fixed panel-relative coordinates (the scrolling toolbar's overflow was clipping it), `max-h-[260px] md:max-h-[320px]` + inner scroller capped to the panel's bottom edge.
+
+- Font dropdown (sheet + tray) now portaled to <body> with viewport-clamped coordinates: fixes it appearing at the wrong spot when maximized and being cut off on the left in the tray.
