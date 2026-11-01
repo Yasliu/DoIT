@@ -109,6 +109,18 @@ export function TrayCompanion() {
 
   // Formatting popovers
   const [fontOpen, setFontOpen] = useState(false);
+  const fontTriggerRef = useRef<HTMLButtonElement | null>(null);
+  const [fontMaxHeight, setFontMaxHeight] = useState<number>(280);
+
+  useEffect(() => {
+    if (fontOpen && fontTriggerRef.current) {
+      const rect = fontTriggerRef.current.getBoundingClientRect();
+      // Leave at least 18px breathing room before the window bottom
+      const spaceBelow = window.innerHeight - rect.bottom - 18;
+      setFontMaxHeight(Math.max(140, Math.min(320, Math.floor(spaceBelow))));
+    }
+  }, [fontOpen]);
+
   const [systemFonts, setSystemFonts] = useState<string[]>([]);
   const [fontSearch, setFontSearch] = useState("");
   const filteredSystemFonts = useMemo(() => {
@@ -688,7 +700,7 @@ export function TrayCompanion() {
                   <div
                     onPointerDown={(e) => e.stopPropagation()}
                     onMouseDown={(e) => e.stopPropagation()}
-                    className="absolute left-0 top-7 z-50 w-[170px] rounded-xl bg-[#14151a] border border-white/20 p-1.5 shadow-[0_25px_60px_rgba(0,0,0,0.95)] pointer-events-auto"
+                    className="absolute left-0 top-7 z-50 w-[170px] max-h-[260px] overflow-y-auto scrollbar-thin rounded-xl bg-[#14151a] border border-white/20 p-1.5 shadow-[0_25px_60px_rgba(0,0,0,0.95)] pointer-events-auto"
                   >
                     {shelves.map((shelf) => (
                       <button
@@ -721,6 +733,7 @@ export function TrayCompanion() {
               <div className="relative">
                 <button
                   type="button"
+                  ref={fontTriggerRef}
                   onMouseDown={(e) => e.stopPropagation()}
                   onClick={(e) => {
                     e.stopPropagation();
@@ -741,7 +754,8 @@ export function TrayCompanion() {
                     <div
                       onPointerDown={(e) => e.stopPropagation()}
                       onMouseDown={(e) => e.stopPropagation()}
-                      className="absolute right-0 top-7 z-50 w-[210px] max-h-[380px] sm:max-h-[420px] overflow-y-auto scrollbar-thin rounded-xl bg-[#14151a] border border-white/20 p-2 shadow-[0_25px_60px_rgba(0,0,0,0.95)] pointer-events-auto"
+                      style={{ maxHeight: `${fontMaxHeight}px` }}
+                      className="absolute right-0 top-7 z-50 w-[210px] overflow-y-auto scrollbar-thin rounded-xl bg-[#14151a] border border-white/20 p-2 shadow-[0_25px_60px_rgba(0,0,0,0.95)] pointer-events-auto overscroll-contain"
                     >
                       <div className="text-[9.5px] font-mono uppercase tracking-[0.12em] text-ink-4 px-1.5 py-0.5 select-none">
                         Font Presets

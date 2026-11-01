@@ -104,6 +104,8 @@ pub struct AppSettings {
     pub is_maximized: bool,
     #[serde(default = "default_dock_on_close")]
     pub dock_on_close: bool,
+    #[serde(default)]
+    pub last_seen_version: Option<String>,
 }
 
 fn default_dock_on_close() -> bool {
@@ -191,6 +193,7 @@ impl Default for AppSettings {
             theme_mode: "glass".to_string(),
             is_maximized: false,
             dock_on_close: true,
+            last_seen_version: None,
         }
     }
 }

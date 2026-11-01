@@ -130,6 +130,10 @@ export function NoteSheet({
         style.left = 0;
         style.right = "auto";
       }
+      const spaceBelow = window.innerHeight - rect.top - 16;
+      if (spaceBelow > 100) {
+        style.maxHeight = `${Math.min(420, Math.max(160, Math.floor(spaceBelow)))}px`;
+      }
       setFontMenuStyle(style);
     }
   }, [fontOpen]);
@@ -686,7 +690,7 @@ export function NoteSheet({
                     onMouseDown={(e) => e.stopPropagation()}
                     onClick={(e) => e.stopPropagation()}
                     style={fontMenuStyle}
-                    className="absolute right-0 top-9 z-50 w-[240px] max-w-[calc(100vw-32px)] max-h-[380px] sm:max-h-[420px] overflow-y-auto scrollbar-thin rounded-[14px] bg-[#14151a] border border-white/20 p-2 shadow-[0_25px_60px_rgba(0,0,0,0.95)] pointer-events-auto"
+                    className="absolute right-0 top-9 z-50 w-[240px] max-w-[calc(100vw-32px)] overflow-y-auto scrollbar-thin rounded-[14px] bg-[#14151a] border border-white/20 p-2 shadow-[0_25px_60px_rgba(0,0,0,0.95)] pointer-events-auto overscroll-contain"
                   >
                     <div className="text-[10px] font-mono uppercase tracking-[0.12em] text-ink-4 px-2 py-1 select-none">
                       Font Presets

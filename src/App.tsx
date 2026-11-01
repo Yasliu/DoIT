@@ -170,16 +170,58 @@ export default function App() {
     };
   }, [checkForUpdate]);
 
+  const handleCloseReleaseModal = useCallback(() => {
+    setShowReleaseModal(false);
+    try {
+      sessionStorage.setItem("doit.release_notes_seen", CURRENT_VERSION);
+      localStorage.setItem(VERSION_TRACKER_KEY, CURRENT_VERSION);
+      void tauriApi.getSettings().then((s) => {
+        void tauriApi.updateSettings({ ...s, last_seen_version: CURRENT_VERSION });
+      });
+    } catch {
+      /* ignore */
+    }
+  }, []);
+
   useEffect(() => {
     try {
-      const stored = localStorage.getItem(VERSION_TRACKER_KEY);
-      if (!stored || isVersionLower(stored, CURRENT_VERSION)) {
-        setShowReleaseModal(true);
-        localStorage.setItem(VERSION_TRACKER_KEY, CURRENT_VERSION);
+      if (sessionStorage.getItem("doit.release_notes_seen") === CURRENT_VERSION) {
+        return;
       }
     } catch {
       /* ignore storage errors */
     }
+
+    void tauriApi.getSettings().then((s) => {
+      try {
+        const localSeen = localStorage.getItem(VERSION_TRACKER_KEY);
+        const diskSeen = s.last_seen_version;
+
+        // Fresh install / first boot: quietly initialize version tracker without showing changelog
+        if (!diskSeen && !localSeen) {
+          localStorage.setItem(VERSION_TRACKER_KEY, CURRENT_VERSION);
+          sessionStorage.setItem("doit.release_notes_seen", CURRENT_VERSION);
+          void tauriApi.updateSettings({ ...s, last_seen_version: CURRENT_VERSION });
+          return;
+        }
+
+        // Upgrade detection: show modal once if previous version was strictly lower
+        const previousVersion = diskSeen || localSeen;
+        if (previousVersion && isVersionLower(previousVersion, CURRENT_VERSION)) {
+          setShowReleaseModal(true);
+          sessionStorage.setItem("doit.release_notes_seen", CURRENT_VERSION);
+          localStorage.setItem(VERSION_TRACKER_KEY, CURRENT_VERSION);
+          void tauriApi.updateSettings({ ...s, last_seen_version: CURRENT_VERSION });
+        } else {
+          sessionStorage.setItem("doit.release_notes_seen", CURRENT_VERSION);
+          if (!diskSeen) {
+            void tauriApi.updateSettings({ ...s, last_seen_version: CURRENT_VERSION });
+          }
+        }
+      } catch {
+        /* ignore storage errors */
+      }
+    });
   }, []);
 
   useEffect(() => {
@@ -640,7 +682,7 @@ export default function App() {
       )}
 
       {availableUpdate && <UpdateModal info={availableUpdate} />}
-      {showReleaseModal && <ReleaseLogModal onClose={() => setShowReleaseModal(false)} />}
+      {showReleaseModal && <ReleaseLogModal onClose={handleCloseReleaseModal} />}
     </div>
   );
 }

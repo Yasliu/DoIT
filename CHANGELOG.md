@@ -1,5 +1,23 @@
 # DoIT Developer Architecture & Engineering Changelog
 
+## [2026-11-01] - Version 1.1.4: Viewport Bounding Clamps, Ingestion Bar Breathing Room & Persistent Single-Show Release Modal
+
+### 1. Tray Companion Font Dropdown Viewport Clamping (`src/components/TrayCompanion.tsx`, `src/components/NoteSheet.tsx`)
+- **Dynamic Viewport Height Measurement**: Calculated the exact distance from the typeface trigger button to the bottom of the window chassis (`window.innerHeight - rect.bottom - 18`).
+- **Eliminated Overflow Clipping**: Replaced static Tailwind `max-h-[380px] sm:max-h-[420px]` classes with dynamic inline `style={{ maxHeight: `${fontMaxHeight}px` }}` clamped between `140px` and `320px`. The dropdown popover now terminates safely within the window chassis, guaranteeing the bottom border, border radius, and padding are fully visible without being clipped by the window's `overflow-hidden`.
+- **Mirror Fix for Canvas Editor**: Applied the same dynamic `maxHeight` clamping to `NoteSheet.tsx` to safeguard against compact window dimensions.
+
+### 2. Sidebar Ingestion Portal Layout & Text Truncation Fix (`src/components/Sidebar.tsx`)
+- **Full Text Visibility**: Replaced `truncate` and `overflow-hidden` on `File Import` and `Scan Folder` with `whitespace-nowrap`, adjusted font size to `11px`, and tightened padding to `px-1.5` so neither label is clipped into ellipsis (`Scan Fold...`).
+- **Breathing Room & Padding Calibration**: Expanded the portal container from `h-7 overflow-hidden pt-1.5` to `pt-2 pb-3.5 min-h-[38px]`, providing ample vertical clearance between the ingestion buttons and the `SHELVES` category header below.
+
+### 3. Persistent One-Time Update Log Modal (`src-tauri/src/models.rs`, `src/api/tauriBridge.ts`, `src/App.tsx`)
+- **Disk-Backed State (`last_seen_version`)**: Added `last_seen_version: Option<String>` to `AppSettings` in Rust backend and TypeScript bridge, ensuring version acknowledgments persist in `settings.json`.
+- **No-Spam Upgrade Guarantee**:
+  - Fresh installs / first launches quietly initialize `last_seen_version = CURRENT_VERSION` without displaying the modal.
+  - Upgrading users are shown the modal exactly once when `last_seen_version < CURRENT_VERSION`.
+  - Closing the modal commits the version to disk (`settings.json`), `localStorage`, and `sessionStorage`, permanently suppressing repeated popups across application reboots and reloads.
+
 ## [2026-10-30] - UI Refinements, Event Decoupling & Multi-Monitor Position Tracking
 
 ### 1. Visual Aesthetics & Outline Suppression (`src/styles/globals.css`, `src/components/TrayCompanion.tsx`)
