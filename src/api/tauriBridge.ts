@@ -50,6 +50,11 @@ export interface ScanSummary {
   imported_notes: NoteItem[];
 }
 
+export interface QuadrantInfo {
+  grow_x: "right" | "left" | "center";
+  grow_y: "down" | "up";
+}
+
 export interface AppSettings {
   storage_path: string;
   hotkey_new_note: string;
@@ -351,13 +356,13 @@ export const tauriApi = {
     }
   },
 
-  /** Mutates the single tray frame between the 380x480 panel and the 180x44 floating bar. */
-  async setTrayMode(mode: "panel" | "pill"): Promise<void> {
-    if (!isTauri()) return;
+  /** Mutates the single tray frame between the 380x480 panel and the 180x44 floating bar with dynamic quadrant detection. */
+  async setTrayMode(mode: "panel" | "pill"): Promise<QuadrantInfo | null> {
+    if (!isTauri()) return null;
     try {
-      await invoke("set_tray_mode", { mode });
+      return await invoke<QuadrantInfo>("set_tray_mode", { mode });
     } catch {
-      /* frame already gone */
+      return null;
     }
   },
 

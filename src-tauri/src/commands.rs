@@ -1,6 +1,6 @@
 use std::sync::Mutex;
 use tauri::{AppHandle, Emitter, Manager, State, Window};
-use crate::models::{AppSettings, CategoryInfo, GridCoordinates, NoteItem, ScanSummary};
+use crate::models::{AppSettings, CategoryInfo, GridCoordinates, NoteItem, QuadrantInfo, ScanSummary};
 use crate::storage::StorageManager;
 
 #[derive(Clone, Debug)]
@@ -694,7 +694,7 @@ pub fn tray_ready(window: tauri::WebviewWindow) -> String {
 /// Mutates the one tray frame between "panel" (380x480) and "pill" (180x44), keeping the
 /// bottom-right corner anchored. The frontend hides its content while this runs.
 #[tauri::command]
-pub fn set_tray_mode(app: AppHandle, mode: String) -> Result<(), String> {
+pub fn set_tray_mode(app: AppHandle, mode: String) -> Result<QuadrantInfo, String> {
     let tray = app
         .get_webview_window("tray")
         .ok_or_else(|| "tray window is not open".to_string())?;
@@ -711,9 +711,41 @@ pub fn set_tray_mode(app: AppHandle, mode: String) -> Result<(), String> {
     };
     let w = (lw * scale).round() as i32;
     let h = (lh * scale).round() as i32;
-    let right = pos.x + size.width as i32;
-    let bottom = pos.y + size.height as i32;
-    let (x, y) = clamp_to_monitor(&tray, &app, right - w, bottom - h, w, h);
+
+    let monitor = tray.current_monitor().ok().flatten()
+        .or_else(|| get_window_active_monitor(&tray))
+        .or_else(|| app.primary_monitor().ok().flatten())
+        .ok_or_else(|| "monitor not found".to_string())?;
+    let screen_dim = monitor.size();
+    let m_pos = monitor.position();
+
+    // Dock position coordinate vectors (x, y) relative directly against screen thresholds
+    let rel_x = pos.x - m_pos.x;
+    let rel_y = pos.y - m_pos.y;
+    let width = screen_dim.width as i32;
+    let height = screen_dim.height as i32;
+
+    // Left Boundary: x < (width / 3) -> Force Horizontal Growth to the RIGHT
+    // Right Boundary: x > (width / 3 * 2) -> Force Horizontal Growth to the LEFT
+    // Center Cluster: (width / 3) <= x <= (width / 3 * 2) -> Keep Horizontal Center
+    let (grow_x, target_x) = if rel_x < (width / 3) {
+        ("right", pos.x)
+    } else if rel_x > (width / 3 * 2) {
+        ("left", pos.x + size.width as i32 - w)
+    } else {
+        let center_x = pos.x + (size.width as i32 / 2);
+        ("center", center_x - (w / 2))
+    };
+
+    // Top Boundary: y < (height / 2) -> Force Vertical Growth DOWNWARDS
+    // Bottom Boundary: y >= (height / 2) -> Force Vertical Growth UPWARDS
+    let (grow_y, target_y) = if rel_y < (height / 2) {
+        ("down", pos.y)
+    } else {
+        ("up", pos.y + size.height as i32 - h)
+    };
+
+    let (x, y) = clamp_to_monitor(&tray, &app, target_x, target_y, w, h);
 
     lock_window_transition(250);
     set_window_bounds_atomic(&tray, x, y, w as u32, h as u32);
@@ -723,7 +755,10 @@ pub fn set_tray_mode(app: AppHandle, mode: String) -> Result<(), String> {
     } else {
         set_webview_memory_level(&tray, false);
     }
-    Ok(())
+    Ok(QuadrantInfo {
+        grow_x: grow_x.to_string(),
+        grow_y: grow_y.to_string(),
+    })
 }
 
 fn clamp_to_monitor(

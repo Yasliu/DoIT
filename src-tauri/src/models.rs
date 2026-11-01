@@ -64,6 +64,12 @@ pub struct NoteItem {
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct QuadrantInfo {
+    pub grow_x: String,
+    pub grow_y: String,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct CategoryInfo {
     pub name: String,
     pub collapsed: bool,
