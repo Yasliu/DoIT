@@ -1,6 +1,6 @@
 <div align="center">
 
-<img src="docs/logo.jpg" width="90" alt="DoIT logo">
+<img src="logo.svg" width="90" alt="DoIT logo">
 
 # DoIT
 
