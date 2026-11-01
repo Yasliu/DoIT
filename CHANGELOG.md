@@ -1,6 +1,6 @@
 # DoIT Developer Architecture & Engineering Changelog
 
-## [2026-11-01] - Version 1.1.5: Dynamic Quadrant-Based Dock Expansion Paths & Motion Synchronization
+## [2026-11-01] - Version 1.1.6: Dynamic Quadrant-Based Dock Expansion, Full-Height Scrolling & Production Release
 
 ### 1. Screen Quadrant Calculation Engine (`src-tauri/src/commands.rs`, `src-tauri/src/models.rs`)
 - **Active Monitor Query**: Retrieved active monitor dimensions via `tray.current_monitor()` / `screen_dim = monitor.size()`.
@@ -17,6 +17,15 @@
   - `grow_x === "right" ? -24 : grow_x === "left" ? 24 : 0`
   - `grow_y === "down" ? -24 : 24`
 - **Zero-Glitch Spring Curves**: Configured `motion.div` with spring stiffness `420` and damping `32`, eliminating window position jumps and layout snaps during pill-to-panel transitions.
+
+### 3. Dynamic Delete Confirmation Modal & Text Wrap Fix (`src/components/TrayCompanion.tsx`, `src/components/NoteSheet.tsx`)
+- **Text Overflow Fix**: Resolved inherited `whitespace-nowrap` on delete confirmation dialogs by applying `whitespace-normal break-words`, ensuring warning messages wrap cleanly without spilling out of the modal chassis.
+- **Responsive Dynamic Sizing**: Replaced hardcoded fixed pixel widths (`max-w-[280px]`) with dynamic responsive limits (`w-[calc(100%-32px)] max-w-[320px] min-w-[200px]`), ensuring proportional margins across all tray and canvas dimensions.
+
+### 4. Dock Mode Note Editor Full-Height Scrolling Engine (`src/components/TrayCompanion.tsx`, `src/styles/globals.css`)
+- **Flex Child Height Unlocking**: Added `min-h-0 overflow-hidden` to parent companion layout containers to strictly clamp the note workspace to the window chassis height, preventing infinite auto-expansion.
+- **Unified Document Scroll Wrapper**: Wrapped note contents (title, mode selector, media attachments, and body text) into a dedicated `flex-1 min-h-0 overflow-y-auto scrollbar-thin` container, keeping formatting toolbars fixed while restoring mouse wheel scrolling across heavy notes.
+- **Interactive Sleek Scrollbar**: Injected targeted `.scrollbar-thin` and `.editor-scrollbar` rules with `!important` overrides in `globals.css` to provide a subtle, visible 5px pill scrollbar thumb for manual dragging without breaking clean window aesthetics.
 
 ## [2026-11-01] - Version 1.1.4: Viewport Bounding Clamps, Ingestion Bar Breathing Room & Persistent Single-Show Release Modal
 
