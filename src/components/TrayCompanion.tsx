@@ -692,15 +692,15 @@ export function TrayCompanion() {
         </div>
 
         {/* Lower note collection container: smooth fade with 100% scale */}
-        <div className="pt-2 flex flex-1 flex-col overflow-visible min-h-0 scale-100">
+        <div className="pt-2 flex flex-1 flex-col overflow-hidden min-h-0 scale-100">
                 {activeNote ? (
           /* ---- IN-TRAY PROPER NOTE EDITOR ---- */
           <div
             key={`editor-${activeNote.id}`}
-            className="flex flex-1 flex-col overflow-visible px-1 scale-100 animate-in fade-in duration-150"
+            className="flex flex-1 flex-col overflow-hidden min-h-0 px-1 scale-100 animate-in fade-in duration-150"
           >
             {/* Note Toolbar: Type, Bold, Italic, Tasks/Text Mode, Image, Delete */}
-            <div className="flex flex-wrap items-center justify-between gap-x-1 gap-y-1 pb-2 border-b border-white/[0.07] overflow-visible pointer-events-auto">
+            <div className="flex flex-wrap items-center justify-between gap-x-1 gap-y-1 pb-2 border-b border-white/[0.07] overflow-visible pointer-events-auto shrink-0">
             {/* Shelf/Category selector */}
             <div className="relative">
               <button
@@ -969,133 +969,136 @@ export function TrayCompanion() {
             </div>
           </div>
 
-          <div className="mt-2 flex">
-            <ModeToggle
-              compact
-              rawMode={rawMode}
-              onChange={(raw) => editActive({ format: raw ? "txt" : "md" })}
-            />
-          </div>
-          {/* Title Input */}
-          <input
-            type="text"
-            value={activeNote.title ?? ""}
-            onChange={(e) => editActive({ title: e.target.value })}
-            onKeyDown={(e) => {
-              e.stopPropagation();
-              handleUndoKeys(e);
-            }}
-            data-undo="title"
-            placeholder="Untitled"
-            className="w-full mt-2.5 bg-transparent text-[16px] font-semibold text-ink-1 outline-none placeholder:text-ink-4/60"
-            style={{
-              fontFamily: fontStack(activeNote.font_family),
-              fontWeight: 560,
-            }}
-          />
-
-          {/* Media preview if present */}
-          {(() => {
-            const rawImages = (activeNote.media_urls && activeNote.media_urls.length > 0)
-              ? activeNote.media_urls
-              : (activeNote.media_url ? [activeNote.media_url] : []);
-            const images = rawImages.filter((img) => img && typeof img === "string" && img.trim().length > 0);
-            if (images.length === 0) return null;
-            return (
-              <div className="mt-2">
-                <div className="grid grid-cols-2 gap-2 max-h-[140px] overflow-y-auto scroll pr-1">
-                  {images.map((imgUrl, idx) => (
-                    <div
-                      key={`tray-img-${idx}`}
-                      onClick={() => {
-                        setPreviewImage(imgUrl);
-                      }}
-                      className="relative group aspect-video min-h-[80px] rounded-lg overflow-hidden bg-black/50 border border-white/10 flex items-center justify-center cursor-pointer hover:border-white/30 transition-all"
-                      title="Click to zoom & inspect full image"
-                    >
-                      <img
-                        src={imgUrl}
-                        alt=""
-                        className="w-full h-full object-contain rounded opacity-95 transition-transform duration-200 group-hover:scale-105"
-                        onError={(e) => {
-                          const parent = e.currentTarget.parentElement;
-                          if (parent) parent.style.display = "none";
-                        }}
-                      />
-                      <button
-                        type="button"
-                        onClick={(e) => {
-                          e.stopPropagation();
-                          removeActiveImageAt(idx);
-                        }}
-                        className="absolute right-1 top-1 grid size-5 place-items-center rounded bg-black/80 text-white/80 hover:text-white opacity-0 group-hover:opacity-100 transition-opacity border border-white/10 z-10"
-                        title="Remove image"
-                      >
-                        <X size={10} strokeWidth={2.2} />
-                      </button>
-                    </div>
-                  ))}
-                </div>
-              </div>
-            );
-          })()}
-
-          {/* Editor: Basic Note freeform writing vs Tasks mode */}
-          <div data-undo="body" className="flex-1 min-h-0 mt-2 overflow-y-auto scroll">
-            {rawMode ? (
-              <RawEditor
-                content={activeNote.content}
-                minHeight={180}
-                className="text-[11.5px]"
-                onChange={(content) => editActive({ content })}
+          {/* Scrollable Note Document: ModeToggle, Title, Images, Body */}
+          <div className="flex-1 min-h-0 overflow-y-auto overflow-x-hidden scrollbar-thin pr-1.5 pt-2 pb-6 space-y-2 select-text">
+            <div className="flex shrink-0">
+              <ModeToggle
+                compact
+                rawMode={rawMode}
+                onChange={(raw) => editActive({ format: raw ? "txt" : "md" })}
               />
-            ) : (
-            <div
-              ref={initEditor}
-              onPaste={(e) => {
-                if (handleMarkdownPaste(e)) handleEditorInput();
-              }}
-              contentEditable
-              suppressContentEditableWarning
-              onInput={handleEditorInput}
-              onContextMenu={(e) => {
-                const cell = (e.target as HTMLElement).closest("td,th") as HTMLElement | null;
-                if (cell && editorRef.current?.contains(cell)) {
-                  e.preventDefault();
-                  e.stopPropagation();
-                  setTableMenu({ x: e.clientX, y: e.clientY, cell });
-                }
-              }}
-              onMouseDown={(e) => {
-                if ((e.target as HTMLElement).closest(".md-cb")) e.preventDefault();
-              }}
-              onClick={(e) => {
-                if (handleCheckboxClick(e, editorRef.current)) handleEditorInput();
-              }}
+            </div>
+            {/* Title Input */}
+            <input
+              type="text"
+              value={activeNote.title ?? ""}
+              onChange={(e) => editActive({ title: e.target.value })}
               onKeyDown={(e) => {
-                const sc = getMarkdownShortcuts();
-                if (matchesCombo(e, sc.bold)) {
-                  e.preventDefault();
-                  handleToolbarFormat("bold");
-                  return;
-                }
-                if (matchesCombo(e, sc.italic)) {
-                  e.preventDefault();
-                  handleToolbarFormat("italic");
-                  return;
-                }
-                if (editorRef.current && handleRichEditorKeyDown(e, editorRef.current, handleEditorInput)) {
-                  return;
-                }
+                e.stopPropagation();
+                handleUndoKeys(e);
               }}
-              onKeyUp={updateActiveFormatting}
-              onMouseUp={updateActiveFormatting}
-              className="w-full h-full min-h-[180px] whitespace-pre-wrap break-words bg-transparent text-[12.5px] leading-relaxed text-ink-2 outline-none scroll select-text"
+              data-undo="title"
+              placeholder="Untitled"
+              className="w-full bg-transparent text-[16px] font-semibold text-ink-1 outline-none placeholder:text-ink-4/60 shrink-0"
               style={{
                 fontFamily: fontStack(activeNote.font_family),
+                fontWeight: 560,
               }}
             />
-            )}
+
+            {/* Media preview if present */}
+            {(() => {
+              const rawImages = (activeNote.media_urls && activeNote.media_urls.length > 0)
+                ? activeNote.media_urls
+                : (activeNote.media_url ? [activeNote.media_url] : []);
+              const images = rawImages.filter((img) => img && typeof img === "string" && img.trim().length > 0);
+              if (images.length === 0) return null;
+              return (
+                <div className="shrink-0">
+                  <div className="grid grid-cols-2 gap-2 max-h-[140px] overflow-y-auto scrollbar-thin pr-1">
+                    {images.map((imgUrl, idx) => (
+                      <div
+                        key={`tray-img-${idx}`}
+                        onClick={() => {
+                          setPreviewImage(imgUrl);
+                        }}
+                        className="relative group aspect-video min-h-[80px] rounded-lg overflow-hidden bg-black/50 border border-white/10 flex items-center justify-center cursor-pointer hover:border-white/30 transition-all"
+                        title="Click to zoom & inspect full image"
+                      >
+                        <img
+                          src={imgUrl}
+                          alt=""
+                          className="w-full h-full object-contain rounded opacity-95 transition-transform duration-200 group-hover:scale-105"
+                          onError={(e) => {
+                            const parent = e.currentTarget.parentElement;
+                            if (parent) parent.style.display = "none";
+                          }}
+                        />
+                        <button
+                          type="button"
+                          onClick={(e) => {
+                            e.stopPropagation();
+                            removeActiveImageAt(idx);
+                          }}
+                          className="absolute right-1 top-1 grid size-5 place-items-center rounded bg-black/80 text-white/80 hover:text-white opacity-0 group-hover:opacity-100 transition-opacity border border-white/10 z-10"
+                          title="Remove image"
+                        >
+                          <X size={10} strokeWidth={2.2} />
+                        </button>
+                      </div>
+                    ))}
+                  </div>
+                </div>
+              );
+            })()}
+
+            {/* Editor: Basic Note freeform writing vs Tasks mode */}
+            <div data-undo="body" className="min-h-[180px] pb-6">
+              {rawMode ? (
+                <RawEditor
+                  content={activeNote.content}
+                  minHeight={180}
+                  className="text-[11.5px]"
+                  onChange={(content) => editActive({ content })}
+                />
+              ) : (
+              <div
+                ref={initEditor}
+                onPaste={(e) => {
+                  if (handleMarkdownPaste(e)) handleEditorInput();
+                }}
+                contentEditable
+                suppressContentEditableWarning
+                onInput={handleEditorInput}
+                onContextMenu={(e) => {
+                  const cell = (e.target as HTMLElement).closest("td,th") as HTMLElement | null;
+                  if (cell && editorRef.current?.contains(cell)) {
+                    e.preventDefault();
+                    e.stopPropagation();
+                    setTableMenu({ x: e.clientX, y: e.clientY, cell });
+                  }
+                }}
+                onMouseDown={(e) => {
+                  if ((e.target as HTMLElement).closest(".md-cb")) e.preventDefault();
+                }}
+                onClick={(e) => {
+                  if (handleCheckboxClick(e, editorRef.current)) handleEditorInput();
+                }}
+                onKeyDown={(e) => {
+                  const sc = getMarkdownShortcuts();
+                  if (matchesCombo(e, sc.bold)) {
+                    e.preventDefault();
+                    handleToolbarFormat("bold");
+                    return;
+                  }
+                  if (matchesCombo(e, sc.italic)) {
+                    e.preventDefault();
+                    handleToolbarFormat("italic");
+                    return;
+                  }
+                  if (editorRef.current && handleRichEditorKeyDown(e, editorRef.current, handleEditorInput)) {
+                    return;
+                  }
+                }}
+                onKeyUp={updateActiveFormatting}
+                onMouseUp={updateActiveFormatting}
+                className="w-full min-h-[180px] whitespace-pre-wrap break-words bg-transparent text-[12.5px] leading-relaxed text-ink-2 outline-none select-text"
+                style={{
+                  fontFamily: fontStack(activeNote.font_family),
+                }}
+              />
+              )}
+            </div>
           </div>
         </div>
       ) : (
