@@ -1,3 +1,4 @@
+import { createPortal } from "react-dom";
 import { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } from "react";
 import {
   Bold,
@@ -97,6 +98,7 @@ export function NoteSheet({
     return systemFonts.filter((f) => f.toLowerCase().includes(q));
   }, [systemFonts, fontSearch]);
   const fontMenuRef = useRef<HTMLDivElement>(null);
+  const fontWrapRef = useRef<HTMLDivElement>(null);
   const [fontMenuStyle, setFontMenuStyle] = useState<React.CSSProperties>({});
   const shelfMenuRef = useRef<HTMLDivElement>(null);
   const [shelfMenuStyle, setShelfMenuStyle] = useState<React.CSSProperties>({});
@@ -119,19 +121,17 @@ export function NoteSheet({
   }, []);
 
   // Viewport detection hooks to ensure dropdowns never get clipped by window/panel boundaries
+  // The toolbar scrolls horizontally (overflow clips absolute children), so the menu is anchored to the
+  // trigger with fixed coordinates relative to the docked panel and capped to the panel's bottom edge.
   useLayoutEffect(() => {
-    if (fontOpen && fontMenuRef.current) {
-      const rect = fontMenuRef.current.getBoundingClientRect();
-      const style: React.CSSProperties = {};
-      if (rect.right > window.innerWidth - 8) {
-        style.right = 0;
-        style.left = "auto";
-      } else if (rect.left < 8) {
-        style.left = 0;
-        style.right = "auto";
-      }
-      setFontMenuStyle(style);
-    }
+    if (!fontOpen || !fontWrapRef.current) return;
+    // viewport coordinates (the menu is portaled to <body>, so no clipping / containing-block surprises)
+    const r = fontWrapRef.current.getBoundingClientRect();
+    const w = 240;
+    const left = Math.max(8, Math.min(r.right - w, window.innerWidth - w - 8));
+    const top = r.bottom + 6;
+    const cap = window.innerWidth >= 768 ? 320 : 260;
+    const maxHeight = Math.max(120, Math.min(cap, window.innerHeight - top - 12));    setFontMenuStyle({ position: "fixed", left, top, right: "auto", maxHeight });
   }, [fontOpen]);
 
   useLayoutEffect(() => {
@@ -648,7 +648,9 @@ export function NoteSheet({
           </div>
 
           <div className="flex shrink-0 items-center gap-0.5 overflow-visible pointer-events-auto">
-            <div className="relative pointer-events-auto">
+            {!rawMode && (
+            <>
+            <div ref={fontWrapRef} className="relative pointer-events-auto">
               <button
                 type="button"
                 onMouseDown={(e) => e.stopPropagation()}
@@ -665,7 +667,7 @@ export function NoteSheet({
                 </span>
               </button>
 
-              {fontOpen && (
+              {fontOpen && createPortal(
                 <>
                   <div
                     className="fixed inset-0 z-40"
@@ -684,7 +686,7 @@ export function NoteSheet({
                     onMouseDown={(e) => e.stopPropagation()}
                     onClick={(e) => e.stopPropagation()}
                     style={fontMenuStyle}
-                    className="absolute right-0 top-9 z-50 w-[240px] max-w-[calc(100vw-32px)] rounded-[14px] bg-[#14151a] border border-white/20 p-2 shadow-[0_25px_60px_rgba(0,0,0,0.95)] pointer-events-auto"
+                    className="z-50 w-[240px] max-h-[260px] md:max-h-[320px] overflow-y-auto no-scrollbar overscroll-contain rounded-[14px] bg-[#14151a] border border-white/20 p-2 shadow-[0_25px_60px_rgba(0,0,0,0.95)] pointer-events-auto overscroll-contain"
                   >
                     <div className="text-[10px] font-mono uppercase tracking-[0.12em] text-ink-4 px-2 py-1 select-none">
                       Font Presets
@@ -778,14 +780,12 @@ export function NoteSheet({
                       </div>
                     </div>
                   </div>
-                </>
-              )}
+                </>,
+ document.body,
+ )}
             </div>
 
             <span className="mx-0.5 h-4 w-px bg-white/[0.08]" />
-
-            {!rawMode && (
-            <>
             <button
               type="button"
               onMouseDown={(e) => e.preventDefault()}

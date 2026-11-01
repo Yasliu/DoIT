@@ -68,6 +68,7 @@ export interface AppSettings {
   hotkey_task?: string;
   theme_mode?: "glass" | "monochrome";
   dock_on_close?: boolean;
+  last_seen_version?: string;
 }
 
 export const DEFAULT_SETTINGS: AppSettings = {

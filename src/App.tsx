@@ -12,6 +12,7 @@ import { SettingsPanel } from "./components/SettingsPanel";
 import { Sidebar } from "./components/Sidebar";
 import { TitleBar } from "./components/TitleBar";
 import { UpdateInfo, UpdateModal } from "./components/UpdateModal";
+import { ReleaseLogModal } from "./components/ReleaseLogModal";
 import { useWorkspace } from "./hooks/useWorkspace";
 
 interface OpenNote {
@@ -26,6 +27,21 @@ interface Toast {
 }
 
 const COLLAPSE_KEY = "doit.collapsed";
+const CURRENT_VERSION = "1.1.4";
+const VERSION_TRACKER_KEY = "doit.release_notes_version";
+
+function isVersionLower(current: string | null, target: string): boolean {
+  if (!current) return true;
+  const c = current.replace(/^v/, "").split(".").map(Number);
+  const t = target.replace(/^v/, "").split(".").map(Number);
+  for (let i = 0; i < 3; i++) {
+    const cv = c[i] || 0;
+    const tv = t[i] || 0;
+    if (cv < tv) return true;
+    if (cv > tv) return false;
+  }
+  return false;
+}
 
 function readCollapsed(): Record<string, boolean> {
   try {
@@ -80,6 +96,7 @@ export default function App() {
   const [toast, setToast] = useState<Toast | null>(null);
   const [themeMode, setThemeMode] = useState<"glass" | "monochrome">("glass");
   const [availableUpdate, setAvailableUpdate] = useState<UpdateInfo | null>(null);
+  const [showReleaseModal, setShowReleaseModal] = useState(false);
   const toastTimer = useRef(0);
   const deepLinkUsed = useRef(false);
 
@@ -152,6 +169,60 @@ export default function App() {
       window.clearInterval(interval);
     };
   }, [checkForUpdate]);
+
+  const handleCloseReleaseModal = useCallback(() => {
+    setShowReleaseModal(false);
+    try {
+      sessionStorage.setItem("doit.release_notes_seen", CURRENT_VERSION);
+      localStorage.setItem(VERSION_TRACKER_KEY, CURRENT_VERSION);
+      void tauriApi.getSettings().then((s) => {
+        void tauriApi.updateSettings({ ...s, last_seen_version: CURRENT_VERSION });
+      });
+    } catch {
+      /* ignore */
+    }
+  }, []);
+
+  useEffect(() => {
+    try {
+      if (sessionStorage.getItem("doit.release_notes_seen") === CURRENT_VERSION) {
+        return;
+      }
+    } catch {
+      /* ignore storage errors */
+    }
+
+    void tauriApi.getSettings().then((s) => {
+      try {
+        const localSeen = localStorage.getItem(VERSION_TRACKER_KEY);
+        const diskSeen = s.last_seen_version;
+
+        // Fresh install / first boot: quietly initialize version tracker without showing changelog
+        if (!diskSeen && !localSeen) {
+          localStorage.setItem(VERSION_TRACKER_KEY, CURRENT_VERSION);
+          sessionStorage.setItem("doit.release_notes_seen", CURRENT_VERSION);
+          void tauriApi.updateSettings({ ...s, last_seen_version: CURRENT_VERSION });
+          return;
+        }
+
+        // Upgrade detection: show modal once if previous version was strictly lower
+        const previousVersion = diskSeen || localSeen;
+        if (previousVersion && isVersionLower(previousVersion, CURRENT_VERSION)) {
+          setShowReleaseModal(true);
+          sessionStorage.setItem("doit.release_notes_seen", CURRENT_VERSION);
+          localStorage.setItem(VERSION_TRACKER_KEY, CURRENT_VERSION);
+          void tauriApi.updateSettings({ ...s, last_seen_version: CURRENT_VERSION });
+        } else {
+          sessionStorage.setItem("doit.release_notes_seen", CURRENT_VERSION);
+          if (!diskSeen) {
+            void tauriApi.updateSettings({ ...s, last_seen_version: CURRENT_VERSION });
+          }
+        }
+      } catch {
+        /* ignore storage errors */
+      }
+    });
+  }, []);
 
   useEffect(() => {
     void tauriApi.getSettings().then((s) => {
@@ -611,6 +682,7 @@ export default function App() {
       )}
 
       {availableUpdate && <UpdateModal info={availableUpdate} />}
+      {showReleaseModal && <ReleaseLogModal onClose={handleCloseReleaseModal} />}
     </div>
   );
 }
