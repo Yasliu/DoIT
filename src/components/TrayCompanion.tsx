@@ -109,6 +109,8 @@ export function TrayCompanion() {
 
   // Formatting popovers
   const [fontOpen, setFontOpen] = useState(false);
+  const [customFontInput, setCustomFontInput] = useState("");
+  const [showDeleteConfirm, setShowDeleteConfirm] = useState(false);
   const [shelfOpen, setShelfOpen] = useState(false);
   const [previewImage, setPreviewImage] = useState<string | null>(null);
   const fileInputRef = useRef<HTMLInputElement | null>(null);
@@ -702,8 +704,19 @@ export function TrayCompanion() {
                 </button>
                 {fontOpen && (
                   <>
-                    <div className="fixed inset-0 z-40" onPointerDown={() => setFontOpen(false)} />
-                    <div className="absolute right-0 top-7 z-50 w-[180px] rounded-xl bg-[#14151a] border border-white/20 p-1.5 shadow-[0_25px_60px_rgba(0,0,0,0.95)]">
+                    <div
+                      className="fixed inset-0 z-40"
+                      onPointerDown={() => setFontOpen(false)}
+                      onClick={() => setFontOpen(false)}
+                    />
+                    <div
+                      onPointerDown={(e) => e.stopPropagation()}
+                      onMouseDown={(e) => e.stopPropagation()}
+                      className="absolute right-0 top-7 z-50 w-[210px] rounded-xl bg-[#14151a] border border-white/20 p-2 shadow-[0_25px_60px_rgba(0,0,0,0.95)]"
+                    >
+                      <div className="text-[9.5px] font-mono uppercase tracking-[0.12em] text-ink-4 px-1.5 py-0.5 select-none">
+                        Font Presets
+                      </div>
                       {NOTE_FONTS.map((font) => (
                         <button
                           key={font.name}
@@ -712,13 +725,47 @@ export function TrayCompanion() {
                             editActive({ font_family: font.name });
                             setFontOpen(false);
                           }}
-                          className="flex h-6 w-full items-center justify-between rounded px-2 text-[11px] text-ink-2 hover:bg-white/10 hover:text-white"
+                          className="flex h-6 w-full items-center justify-between rounded px-2 text-[11px] text-ink-2 hover:bg-white/10 hover:text-white cursor-pointer"
                           style={{ fontFamily: font.stack }}
                         >
                           <span className="truncate">{font.label}</span>
                           {font.name === activeNote.font_family && <Check size={10} />}
                         </button>
                       ))}
+                      <div className="my-1.5 h-px bg-white/10" />
+                      <div className="px-1 py-0.5">
+                        <div className="text-[9.5px] font-mono uppercase tracking-[0.12em] text-ink-4 px-0.5 pb-1 select-none">
+                          Custom Font
+                        </div>
+                        <div className="flex items-center gap-1">
+                          <input
+                            type="text"
+                            value={customFontInput}
+                            onChange={(e) => setCustomFontInput(e.target.value)}
+                            onKeyDown={(e) => {
+                              e.stopPropagation();
+                              if (e.key === "Enter" && customFontInput.trim()) {
+                                editActive({ font_family: customFontInput.trim() });
+                                setFontOpen(false);
+                              }
+                            }}
+                            placeholder="Font name..."
+                            className="flex-1 min-w-0 h-6 rounded bg-white/[0.05] border border-white/15 px-1.5 text-[10.5px] text-ink-1 placeholder:text-ink-4 outline-none focus:border-white/30"
+                          />
+                          <button
+                            type="button"
+                            onClick={() => {
+                              if (customFontInput.trim()) {
+                                editActive({ font_family: customFontInput.trim() });
+                                setFontOpen(false);
+                              }
+                            }}
+                            className="h-6 px-2 rounded bg-white/10 hover:bg-white/20 text-[10px] font-medium text-white transition-colors shrink-0 cursor-pointer"
+                          >
+                            Apply
+                          </button>
+                        </div>
+                      </div>
                     </div>
                   </>
                 )}
@@ -814,11 +861,8 @@ export function TrayCompanion() {
 
               <button
                 type="button"
-                onClick={() => {
-                  remove(activeNote.id);
-                  handleBack();
-                }}
-                className="icon-btn !size-6 hover:!text-red-400"
+                onClick={() => setShowDeleteConfirm(true)}
+                className="icon-btn !size-6 hover:!text-red-400 hover:!bg-red-500/10 cursor-pointer"
                 title="Delete note"
               >
                 <Trash size={11.5} />
@@ -838,7 +882,10 @@ export function TrayCompanion() {
             type="text"
             value={activeNote.title ?? ""}
             onChange={(e) => editActive({ title: e.target.value })}
-            onKeyDown={(e) => e.stopPropagation()}
+            onKeyDown={(e) => {
+              e.stopPropagation();
+              handleUndoKeys(e);
+            }}
             data-undo="title"
             placeholder="Untitled"
             className="w-full mt-2.5 bg-transparent text-[16px] font-semibold text-ink-1 outline-none placeholder:text-ink-4/60"
@@ -1154,6 +1201,51 @@ export function TrayCompanion() {
       )}
 
       {previewImage && <ImageLightbox src={previewImage} onClose={() => setPreviewImage(null)} />}
+
+      {/* Theme-matched delete confirmation popover modal */}
+      {showDeleteConfirm && activeNote && (
+        <div
+          className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 backdrop-blur-sm p-3 animate-in fade-in duration-150"
+          onPointerDown={(e) => e.stopPropagation()}
+          onClick={() => setShowDeleteConfirm(false)}
+        >
+          <div
+            onPointerDown={(e) => e.stopPropagation()}
+            onClick={(e) => e.stopPropagation()}
+            className="w-full max-w-[280px] rounded-2xl border border-white/15 bg-[#14151a] p-4 shadow-[0_25px_60px_rgba(0,0,0,0.95)] text-center animate-in zoom-in-95 duration-150"
+          >
+            <div className="mx-auto mb-2.5 grid size-9 place-items-center rounded-xl bg-red-500/10 text-red-400">
+              <Trash size={16} strokeWidth={2} />
+            </div>
+            <h3 className="text-[13px] font-semibold text-white">
+              Delete this note?
+            </h3>
+            <p className="mt-1 text-[11px] text-ink-3 leading-relaxed">
+              Are you sure you want to delete this note? This action cannot be undone.
+            </p>
+            <div className="mt-4 grid grid-cols-2 gap-2">
+              <button
+                type="button"
+                onClick={() => setShowDeleteConfirm(false)}
+                className="h-7 rounded-xl bg-white/[0.08] hover:bg-white/[0.14] text-[11.5px] font-medium text-ink-1 transition-colors cursor-pointer"
+              >
+                Cancel
+              </button>
+              <button
+                type="button"
+                onClick={() => {
+                  setShowDeleteConfirm(false);
+                  remove(activeNote.id);
+                  handleBack();
+                }}
+                className="h-7 rounded-xl bg-red-500/20 hover:bg-red-500/30 border border-red-500/30 text-[11.5px] font-medium text-red-200 transition-colors cursor-pointer"
+              >
+                Confirm Delete
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
       </div>
     </div>
   );

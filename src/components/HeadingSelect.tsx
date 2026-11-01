@@ -1,4 +1,4 @@
-import { useEffect, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { Check, ChevronDown } from "lucide-react";
 import { getHeadingLevel } from "../lib/format";
 import { cx } from "../lib/text";
@@ -20,17 +20,53 @@ interface HeadingSelectProps {
 export function HeadingSelect({ editorRef, onSelect, compact = false, disabled = false }: HeadingSelectProps) {
   const [open, setOpen] = useState(false);
   const [level, setLevel] = useState(0);
+  const savedRangeRef = useRef<Range | null>(null);
 
   useEffect(() => {
     const update = () => {
       const ed = editorRef.current;
       const sel = window.getSelection();
       if (!ed || !sel || !sel.anchorNode || !ed.contains(sel.anchorNode)) return;
+      if (sel.rangeCount > 0) {
+        savedRangeRef.current = sel.getRangeAt(0).cloneRange();
+      }
       setLevel(getHeadingLevel(ed));
     };
     document.addEventListener("selectionchange", update);
     return () => document.removeEventListener("selectionchange", update);
   }, [editorRef]);
+
+  const handleToggle = () => {
+    if (!open) {
+      const ed = editorRef.current;
+      const sel = window.getSelection();
+      if (ed && sel && sel.rangeCount > 0 && ed.contains(sel.anchorNode)) {
+        savedRangeRef.current = sel.getRangeAt(0).cloneRange();
+      }
+    }
+    setOpen((v) => !v);
+  };
+
+  const handleSelect = (selectedLevel: number) => {
+    const ed = editorRef.current;
+    if (ed) {
+      ed.focus();
+      if (savedRangeRef.current) {
+        const sel = window.getSelection();
+        if (sel) {
+          try {
+            sel.removeAllRanges();
+            sel.addRange(savedRangeRef.current);
+          } catch {
+            /* ignore range restore errors */
+          }
+        }
+      }
+    }
+    onSelect(selectedLevel);
+    setLevel(selectedLevel);
+    setOpen(false);
+  };
 
   const current = OPTIONS.find((o) => o.level === level) ?? OPTIONS[0];
 
@@ -40,12 +76,12 @@ export function HeadingSelect({ editorRef, onSelect, compact = false, disabled =
         type="button"
         disabled={disabled}
         onMouseDown={(e) => e.preventDefault()}
-        onClick={() => setOpen((v) => !v)}
+        onClick={handleToggle}
         title="Text style"
         aria-haspopup="listbox"
         aria-expanded={open}
         className={cx(
-          "flex items-center gap-1 rounded-md text-ink-3 transition-colors hover:bg-white/[0.08] hover:text-ink-1 disabled:opacity-30",
+          "flex items-center gap-1 rounded-md text-ink-3 transition-colors hover:bg-white/[0.08] hover:text-ink-1 disabled:opacity-30 cursor-pointer",
           compact ? "h-6 px-1.5 text-[10.5px]" : "h-7 px-2 text-[11.5px]",
           open && "bg-white/[0.08] text-ink-1",
         )}
@@ -58,13 +94,13 @@ export function HeadingSelect({ editorRef, onSelect, compact = false, disabled =
         <>
           <div
             className="fixed inset-0 z-40"
-            onMouseDown={(e) => {
-              e.preventDefault();
-              setOpen(false);
-            }}
+            onPointerDown={() => setOpen(false)}
+            onClick={() => setOpen(false)}
           />
           <div
             role="listbox"
+            onPointerDown={(e) => e.stopPropagation()}
+            onMouseDown={(e) => e.stopPropagation()}
             className="absolute left-0 top-full z-50 mt-1 w-[158px] rounded-xl border border-white/20 bg-[#14151a] p-1.5 shadow-[0_25px_60px_rgba(0,0,0,0.95)]"
           >
             {OPTIONS.map((opt) => (
@@ -73,14 +109,9 @@ export function HeadingSelect({ editorRef, onSelect, compact = false, disabled =
                 type="button"
                 role="option"
                 aria-selected={opt.level === level}
-                onMouseDown={(e) => e.preventDefault()}
-                onClick={() => {
-                  onSelect(opt.level);
-                  setLevel(opt.level);
-                  setOpen(false);
-                }}
+                onClick={() => handleSelect(opt.level)}
                 className={cx(
-                  "flex h-7 w-full items-center justify-between rounded-md px-2 text-left text-ink-2 transition-colors hover:bg-white/10 hover:text-white",
+                  "flex h-7 w-full items-center justify-between rounded-md px-2 text-left text-ink-2 transition-colors hover:bg-white/10 hover:text-white cursor-pointer",
                   opt.sample,
                   opt.level === level && "bg-white/[0.06] text-white",
                 )}

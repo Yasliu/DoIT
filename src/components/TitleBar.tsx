@@ -47,11 +47,11 @@ export function TitleBar({
           type="button"
           onClick={onToggleMini}
           className="ghost !h-7 !px-2.5"
-          title={mini ? "Return to the canvas" : "Shrink to a desk tray"}
+          title={mini ? "Return to the canvas" : "Shrink to Docking Mode"}
           aria-pressed={mini}
         >
           <span className="text-[11px] font-medium tracking-[0.01em]">
-            {mini ? "Canvas" : "Tray"}
+            {mini ? "Canvas" : "Dock"}
           </span>
           <span className="kbd">⌘J</span>
         </button>

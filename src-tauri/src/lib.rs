@@ -105,8 +105,13 @@ pub fn run() {
                             });
                         }
 
-                        // X button on main → switch to floating tray companion on the same monitor
-                        let _ = open_tray_mode(app.clone());
+                        // X button on main: if dock_on_close is true, switch to floating docking mode; else exit
+                        let storage = app.state::<StorageManager>();
+                        if storage.get_dock_on_close() {
+                            let _ = open_tray_mode(app.clone());
+                        } else {
+                            app.exit(0);
+                        }
                     } else {
                         // X button on tray companion / pill → just hide it
                         if let Some(win) = app.get_webview_window(&label) {
@@ -145,7 +150,7 @@ pub fn run() {
             }
             // Native Windows taskbar notification tray icon
             let show_item = MenuItem::with_id(app, "show", "Open Canvas", true, None::<&str>)?;
-            let tray_item = MenuItem::with_id(app, "tray", "Switch to Desk Tray", true, None::<&str>)?;
+            let tray_item = MenuItem::with_id(app, "tray", "Switch to Docking Mode", true, None::<&str>)?;
             let quit_item = MenuItem::with_id(app, "quit", "Quit DoIT", true, None::<&str>)?;
             let tray_menu = Menu::with_items(app, &[&show_item, &tray_item, &quit_item])?;
 

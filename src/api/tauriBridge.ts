@@ -67,6 +67,7 @@ export interface AppSettings {
   hotkey_table_row?: string;
   hotkey_task?: string;
   theme_mode?: "glass" | "monochrome";
+  dock_on_close?: boolean;
 }
 
 export const DEFAULT_SETTINGS: AppSettings = {
@@ -86,19 +87,26 @@ export const DEFAULT_SETTINGS: AppSettings = {
   hotkey_table_row: "Ctrl+Alt+ArrowDown",
   hotkey_task: "Ctrl+L",
   theme_mode: "glass",
+  dock_on_close: true,
 };
 
 export const NOTE_FONTS: Array<{ name: string; label: string; stack: string }> = [
-  { name: "Instrument Sans", label: "Instrument Sans", stack: '"Instrument Sans", sans-serif' },
-  { name: "Instrument Serif", label: "Instrument Serif", stack: '"Instrument Serif", Georgia, serif' },
-  { name: "Newsreader", label: "Newsreader", stack: '"Newsreader", "Instrument Serif", Georgia, serif' },
-  { name: "JetBrains Mono", label: "JetBrains Mono", stack: '"JetBrains Mono", monospace' },
-  { name: "Bricolage Grotesque", label: "Bricolage Grotesque", stack: '"Bricolage Grotesque", sans-serif' },
+  { name: "Instrument Sans", label: "Instrument Sans", stack: '"Instrument Sans", "DoIT_Default", "Segoe UI Variable Text", "Segoe UI", system-ui, sans-serif' },
+  { name: "Instrument Serif", label: "Instrument Serif", stack: '"Instrument Serif", "DoIT_Default", Georgia, serif' },
+  { name: "Newsreader", label: "Newsreader", stack: '"Newsreader", "Instrument Serif", "DoIT_Default", Georgia, serif' },
+  { name: "JetBrains Mono", label: "JetBrains Mono", stack: '"JetBrains Mono", "DoIT_Default", monospace' },
+  { name: "Bricolage Grotesque", label: "Bricolage Grotesque", stack: '"Bricolage Grotesque", "DoIT_Default", sans-serif' },
 ];
 
 export function fontStack(name?: string): string {
-  const found = NOTE_FONTS.find((font) => font.name === name);
-  return found ? found.stack : '"Instrument Sans", sans-serif';
+  if (!name || name === "default" || name === "DoIT_Default") {
+    return '"Instrument Sans", "DoIT_Default", "Segoe UI Variable Text", "Segoe UI", system-ui, sans-serif';
+  }
+  const found = NOTE_FONTS.find((font) => font.name.toLowerCase() === name.toLowerCase());
+  if (found) {
+    return found.stack;
+  }
+  return `"${name}", "DoIT_Default", "Instrument Sans", "Segoe UI Variable Text", "Segoe UI", system-ui, sans-serif`;
 }
 
 export const isTauri = () =>
@@ -285,8 +293,8 @@ export const tauriApi = {
   async close(): Promise<void> {
     if (!isTauri()) return;
     try {
-      // Cross button hides to background Desk Tray so app remains active companion
-      await invoke("open_tray_mode");
+      // Closes window, triggering CloseRequested event in Rust which honors dock_on_close
+      await getCurrentWindow().close();
     } catch (err) {
     }
   },

@@ -102,6 +102,12 @@ pub struct AppSettings {
     pub theme_mode: String,
     #[serde(default)]
     pub is_maximized: bool,
+    #[serde(default = "default_dock_on_close")]
+    pub dock_on_close: bool,
+}
+
+fn default_dock_on_close() -> bool {
+    true
 }
 
 fn default_hotkey_open_file() -> String {
@@ -184,6 +190,7 @@ impl Default for AppSettings {
             hotkey_task: default_hotkey_task(),
             theme_mode: "glass".to_string(),
             is_maximized: false,
+            dock_on_close: true,
         }
     }
 }
@@ -321,6 +328,7 @@ impl NoteItem {
         md.push_str(&format!("repeated_num: {}\n", repeated_num));
         if let Some(ref font) = self.font_family {
             let font_clean = clean_yaml_scalar(font);
+            md.push_str(&format!("font: \"{}\"\n", font_clean));
             md.push_str(&format!("font_family: \"{}\"\n", font_clean));
         }
         if let Some(bold) = self.is_bold {
@@ -470,7 +478,7 @@ impl NoteItem {
             category,
             last_edited,
             grid_coordinates: GridCoordinates { x: order, y: 0.0, w: 320.0, h: 220.0 },
-            font_family: Some(fm.get("font_family").cloned().filter(|s| !s.is_empty()).unwrap_or_else(|| "Instrument Sans".to_string())),
+            font_family: Some(fm.get("font_family").or_else(|| fm.get("font")).cloned().filter(|s| !s.is_empty()).unwrap_or_else(|| "Instrument Sans".to_string())),
             is_bold: Some(flag("is_bold")),
             is_italic: Some(flag("is_italic")),
             media_url,

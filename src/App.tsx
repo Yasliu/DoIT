@@ -331,6 +331,18 @@ export default function App() {
     }
   }, [workspace, notify, originFromCanvas]);
 
+  const handleScanFolder = useCallback(async () => {
+    try {
+      const summary = await workspace.pickAndScan();
+      notify(`Imported ${summary.imported_count} notes (${summary.total_scanned} scanned)`);
+    } catch (err: any) {
+      const msg = typeof err === "string" ? err : err?.message || "";
+      if (msg && !msg.toLowerCase().includes("cancelled")) {
+        notify(msg);
+      }
+    }
+  }, [workspace, notify]);
+
   const counts = useMemo(() => {
     const map: Record<string, number> = {};
     notes.forEach((note) => {
@@ -395,6 +407,8 @@ export default function App() {
           isSettings={isSettings}
           onDeleteCategory={(cat) => void deleteCategory(cat)}
           onCategoryContextMenu={(event, shelf) => setCategoryMenu({ x: event.clientX, y: event.clientY, shelf })}
+          onImportFile={handleImportNote}
+          onScanFolder={handleScanFolder}
         />
       )}
 

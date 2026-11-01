@@ -85,6 +85,8 @@ export function NoteSheet({
   const draftRef = useRef(draft);
   const saveTimer = useRef(0);
   const [fontOpen, setFontOpen] = useState(false);
+  const [customFontInput, setCustomFontInput] = useState("");
+  const [showDeleteConfirm, setShowDeleteConfirm] = useState(false);
   const [shelfOpen, setShelfOpen] = useState(false);
   const [previewImage, setPreviewImage] = useState<string | null>(null);
   const fileInputRef = useRef<HTMLInputElement | null>(null);
@@ -123,11 +125,11 @@ export function NoteSheet({
     }
   }, [draft.id, draft.content]);
 
-  const handleEditorInput = () => {
+  const handleEditorInput = (immediate = false) => {
     if (!editorRef.current) return;
     normalizeEditor(editorRef.current);
     const content = markdownToContent(htmlToMarkdown(editorRef.current), draftRef.current.content, () => uid("line"));
-    commit({ ...draftRef.current, content, last_edited: Date.now() });
+    commit({ ...draftRef.current, content, last_edited: Date.now() }, immediate);
     updateActiveFormatting();
   };
 
@@ -223,7 +225,7 @@ export function NoteSheet({
     const ed = editorRef.current;
     if (!ed) return;
     fn(ed);
-    handleEditorInput();
+    handleEditorInput(true);
   };
 
   const accent = accentFor(draft.category, shelves);
@@ -247,8 +249,8 @@ export function NoteSheet({
     saveTimer.current = window.setTimeout(() => commitRef.current(draftRef.current), 240);
   };
 
-  const edit = (patch: Partial<NoteItem>) => {
-    commit({ ...draftRef.current, ...patch, last_edited: Date.now() });
+  const edit = (patch: Partial<NoteItem>, immediate = false) => {
+    commit({ ...draftRef.current, ...patch, last_edited: Date.now() }, immediate);
   };
 
   const external = !!draft.source_path;
@@ -538,18 +540,29 @@ export function NoteSheet({
 
               {fontOpen && (
                 <>
-                  <div className="fixed inset-0 z-40" onPointerDown={() => setFontOpen(false)} />
-                  <div className="absolute right-0 top-9 z-50 w-[230px] rounded-[14px] bg-[#14151a] border border-white/20 p-2 shadow-[0_25px_60px_rgba(0,0,0,0.95)]">
+                  <div
+                    className="fixed inset-0 z-40"
+                    onPointerDown={() => setFontOpen(false)}
+                    onClick={() => setFontOpen(false)}
+                  />
+                  <div
+                    onPointerDown={(e) => e.stopPropagation()}
+                    onMouseDown={(e) => e.stopPropagation()}
+                    className="absolute right-0 top-9 z-50 w-[240px] rounded-[14px] bg-[#14151a] border border-white/20 p-2 shadow-[0_25px_60px_rgba(0,0,0,0.95)]"
+                  >
+                    <div className="text-[10px] font-mono uppercase tracking-[0.12em] text-ink-4 px-2 py-1 select-none">
+                      Font Presets
+                    </div>
                     {NOTE_FONTS.map((font) => (
                       <button
                         key={font.name}
                         type="button"
                         onClick={() => {
-                          edit({ font_family: font.name });
+                          edit({ font_family: font.name }, true);
                           setFontOpen(false);
                         }}
                         className={cx(
-                          "flex h-8 w-full items-center justify-between rounded-md px-2 text-left text-[13px]",
+                          "flex h-8 w-full items-center justify-between rounded-md px-2 text-left text-[13px] cursor-pointer",
                           font.name === draft.font_family
                             ? "bg-white/[0.08] text-ink-1"
                             : "text-ink-2 hover:bg-white/[0.06] hover:text-ink-1",
@@ -560,6 +573,45 @@ export function NoteSheet({
                         {font.name === draft.font_family && <Check size={11} />}
                       </button>
                     ))}
+                    <div className="my-1.5 h-px bg-white/10" />
+                    <div className="px-1 py-1">
+                      <div className="text-[10px] font-mono uppercase tracking-[0.12em] text-ink-4 px-1 pb-1.5 select-none">
+                        Custom Font Declaration
+                      </div>
+                      <div className="flex items-center gap-1.5">
+                        <input
+                          type="text"
+                          value={customFontInput}
+                          onChange={(e) => setCustomFontInput(e.target.value)}
+                          onKeyDown={(e) => {
+                            e.stopPropagation();
+                            if (e.key === "Enter" && customFontInput.trim()) {
+                              edit({ font_family: customFontInput.trim() }, true);
+                              setFontOpen(false);
+                            }
+                          }}
+                          placeholder="e.g. Fira Code, Outfit..."
+                          className="flex-1 min-w-0 h-7 rounded-lg bg-white/[0.05] border border-white/15 px-2 text-[11.5px] text-ink-1 placeholder:text-ink-4 outline-none focus:border-white/30"
+                        />
+                        <button
+                          type="button"
+                          onClick={() => {
+                            if (customFontInput.trim()) {
+                              edit({ font_family: customFontInput.trim() }, true);
+                              setFontOpen(false);
+                            }
+                          }}
+                          className="h-7 px-2.5 rounded-lg bg-white/10 hover:bg-white/20 text-[11px] font-medium text-white transition-colors shrink-0 cursor-pointer"
+                        >
+                          Apply
+                        </button>
+                      </div>
+                      {draft.font_family && !NOTE_FONTS.some((f) => f.name.toLowerCase() === draft.font_family?.toLowerCase()) && (
+                        <div className="mt-1.5 px-1 text-[11px] font-mono text-ink-3 truncate">
+                          Active: <span className="text-white">{draft.font_family}</span>
+                        </div>
+                      )}
+                    </div>
                   </div>
                 </>
               )}
@@ -660,12 +712,9 @@ export function NoteSheet({
             {!external && (
               <button
                 type="button"
-                onClick={() => {
-                  deleted.current = true;
-                  onDelete(draftRef.current);
-                }}
+                onClick={() => setShowDeleteConfirm(true)}
                 aria-label="Delete note"
-                className="icon-btn !size-7 hover:!text-white"
+                className="icon-btn !size-7 hover:!text-red-400 hover:!bg-red-500/10 cursor-pointer"
                 title="Delete note"
               >
                 <Trash size={12.5} strokeWidth={1.7} />
@@ -716,7 +765,10 @@ export function NoteSheet({
               ref={titleRef}
               value={draft.title ?? ""}
               onChange={(event) => edit({ title: event.target.value })}
-              onKeyDown={(e) => e.stopPropagation()}
+              onKeyDown={(e) => {
+                e.stopPropagation();
+                handleUndoKeys(e);
+              }}
               data-undo="title"
               placeholder="Untitled"
               aria-label="Note title"
@@ -790,7 +842,7 @@ export function NoteSheet({
                   }}
                   contentEditable
                   suppressContentEditableWarning
-                  onInput={handleEditorInput}
+                  onInput={() => handleEditorInput()}
                   onContextMenu={(e) => {
                     const cell = (e.target as HTMLElement).closest("td,th") as HTMLElement | null;
                     if (cell && editorRef.current?.contains(cell)) {
@@ -856,11 +908,56 @@ export function NoteSheet({
           y={tableMenu.y}
           cell={tableMenu.cell}
           onClose={() => setTableMenu(null)}
-          onChanged={handleEditorInput}
+          onChanged={() => handleEditorInput()}
         />
       )}
 
       {previewImage && <ImageLightbox src={previewImage} onClose={() => setPreviewImage(null)} />}
+
+      {/* Theme-matched destructive action confirmation modal */}
+      {showDeleteConfirm && (
+        <div
+          className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 backdrop-blur-sm p-4 animate-in fade-in duration-150"
+          onPointerDown={(e) => e.stopPropagation()}
+          onClick={() => setShowDeleteConfirm(false)}
+        >
+          <div
+            onPointerDown={(e) => e.stopPropagation()}
+            onClick={(e) => e.stopPropagation()}
+            className="w-full max-w-[320px] rounded-2xl border border-white/15 bg-[#14151a] p-5 shadow-[0_25px_60px_rgba(0,0,0,0.95)] text-center animate-in zoom-in-95 duration-150"
+          >
+            <div className="mx-auto mb-3 grid size-10 place-items-center rounded-xl bg-red-500/10 text-red-400">
+              <Trash size={18} strokeWidth={2} />
+            </div>
+            <h3 className="text-[14px] font-semibold text-white">
+              Delete this note?
+            </h3>
+            <p className="mt-1 text-[12px] text-ink-3 leading-relaxed">
+              Are you sure you want to delete this note? This action cannot be undone.
+            </p>
+            <div className="mt-5 grid grid-cols-2 gap-2">
+              <button
+                type="button"
+                onClick={() => setShowDeleteConfirm(false)}
+                className="h-8 rounded-xl bg-white/[0.08] hover:bg-white/[0.14] text-[12px] font-medium text-ink-1 transition-colors cursor-pointer"
+              >
+                Cancel
+              </button>
+              <button
+                type="button"
+                onClick={() => {
+                  setShowDeleteConfirm(false);
+                  deleted.current = true;
+                  onDelete(draftRef.current);
+                }}
+                className="h-8 rounded-xl bg-red-500/20 hover:bg-red-500/30 border border-red-500/30 text-[12px] font-medium text-red-200 transition-colors cursor-pointer"
+              >
+                Confirm Delete
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
     </>
   );
 }

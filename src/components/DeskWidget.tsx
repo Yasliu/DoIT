@@ -206,7 +206,7 @@ export function DeskWidget({
             <div className="flex items-center gap-2">
               <span className="size-[5px] rounded-full bg-white/80" />
               <span className="font-mono text-[9.5px] uppercase tracking-[0.13em] text-ink-3">
-                {mode === "menu" ? "Desk tray" : "Find a note"}
+                {mode === "menu" ? "Docking Mode" : "Find a note"}
               </span>
             </div>
             <div className="flex items-center gap-0.5">
@@ -392,7 +392,7 @@ export function DeskWidget({
         role="button"
         tabIndex={0}
         aria-expanded={open}
-        aria-label="Desk tray"
+        aria-label="Docking Mode"
         onPointerDown={startDrag}
         onKeyDown={(event) => {
           if (event.key === "Enter" || event.key === " ") {
@@ -416,7 +416,7 @@ export function DeskWidget({
         }}
       >
         <Mark size={16} className="pointer-events-none shrink-0" />
-        <span className="text-[11.5px] font-medium tracking-[0.005em] text-ink-2">Tray</span>
+        <span className="text-[11.5px] font-medium tracking-[0.005em] text-ink-2">Dock</span>
         <span className="grid size-6 place-items-center rounded-full text-ink-4 transition-colors hover:bg-white/10 hover:text-ink-1">
           {open ? <X size={11} strokeWidth={2} /> : <Plus size={12} strokeWidth={2} />}
         </span>

@@ -189,6 +189,26 @@ impl StorageManager {
         Ok(())
     }
 
+    pub fn get_dock_on_close(&self) -> bool {
+        self.settings.read().map(|s| s.dock_on_close).unwrap_or(true)
+    }
+
+    pub fn set_dock_on_close(&self, dock_on_close: bool) -> Result<(), String> {
+        let changed = {
+            let mut lock = self.settings.write().map_err(|e| e.to_string())?;
+            if lock.dock_on_close != dock_on_close {
+                lock.dock_on_close = dock_on_close;
+                true
+            } else {
+                false
+            }
+        };
+        if changed {
+            self.persist_settings()?;
+        }
+        Ok(())
+    }
+
     pub fn update_settings(&self, new_settings: AppSettings) -> Result<AppSettings, String> {
         let old_path = {
             let mut lock = self.settings.write().map_err(|e| e.to_string())?;
