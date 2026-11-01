@@ -109,7 +109,21 @@ export function TrayCompanion() {
 
   // Formatting popovers
   const [fontOpen, setFontOpen] = useState(false);
-  const [customFontInput, setCustomFontInput] = useState("");
+  const [systemFonts, setSystemFonts] = useState<string[]>([]);
+  const [fontSearch, setFontSearch] = useState("");
+  const filteredSystemFonts = useMemo(() => {
+    if (!fontSearch.trim()) return systemFonts;
+    const q = fontSearch.toLowerCase();
+    return systemFonts.filter((f) => f.toLowerCase().includes(q));
+  }, [systemFonts, fontSearch]);
+
+  useEffect(() => {
+    void tauriApi.getSystemFonts().then((fonts) => {
+      if (fonts && fonts.length > 0) {
+        setSystemFonts(fonts);
+      }
+    });
+  }, []);
   const [showDeleteConfirm, setShowDeleteConfirm] = useState(false);
   const [shelfOpen, setShelfOpen] = useState(false);
   const [previewImage, setPreviewImage] = useState<string | null>(null);
@@ -645,12 +659,12 @@ export function TrayCompanion() {
         </div>
 
         {/* Lower note collection container: smooth fade with 100% scale */}
-        <div className="pt-2 flex flex-1 flex-col overflow-hidden min-h-0 scale-100">
+        <div className="pt-2 flex flex-1 flex-col overflow-visible min-h-0 scale-100">
                 {activeNote ? (
           /* ---- IN-TRAY PROPER NOTE EDITOR ---- */
           <div
             key={`editor-${activeNote.id}`}
-            className="flex flex-1 flex-col overflow-hidden px-1 scale-100 animate-in fade-in duration-150"
+            className="flex flex-1 flex-col overflow-visible px-1 scale-100 animate-in fade-in duration-150"
           >
             {/* Note Toolbar: Type, Bold, Italic, Tasks/Text Mode, Image, Delete */}
             <div className="flex flex-wrap items-center justify-between gap-x-1 gap-y-1 pb-2 border-b border-white/[0.07] overflow-visible pointer-events-auto">
@@ -755,54 +769,60 @@ export function TrayCompanion() {
                         </button>
                       ))}
                       <div className="my-1.5 h-px bg-white/10" />
-                      <div className="px-1 py-0.5">
-                        <div className="text-[9.5px] font-mono uppercase tracking-[0.12em] text-ink-4 px-0.5 pb-1 select-none">
-                          Custom Font
+                      <div>
+                        <div className="flex items-center justify-between px-1 py-0.5 select-none">
+                          <span className="text-[9.5px] font-mono uppercase tracking-[0.12em] text-ink-4">
+                            System Fonts ({filteredSystemFonts.length})
+                          </span>
                         </div>
-                        <div className="flex items-center gap-1">
+                        <div className="px-0.5 pb-1">
                           <input
                             type="text"
-                            value={customFontInput}
-                            onChange={(e) => setCustomFontInput(e.target.value)}
+                            value={fontSearch}
+                            onChange={(e) => setFontSearch(e.target.value)}
                             onMouseDown={(e) => e.stopPropagation()}
                             onClick={(e) => e.stopPropagation()}
-                            onKeyDown={(e) => {
-                              e.stopPropagation();
-                              if (e.key === "Enter" && customFontInput.trim()) {
-                                const customName = customFontInput.trim();
-                                editActive({ font_family: customName });
-                                if (editorRef.current) {
-                                  editorRef.current.style.fontFamily = fontStack(customName);
-                                  editorRef.current.focus();
-                                }
-                                setFontOpen(false);
-                              }
-                            }}
-                            placeholder="Font name..."
-                            className="flex-1 min-w-0 h-6 rounded bg-white/[0.05] border border-white/15 px-1.5 text-[10.5px] text-ink-1 placeholder:text-ink-4 outline-none focus:border-white/30 pointer-events-auto"
+                            placeholder="Search installed fonts..."
+                            className="w-full h-6 rounded bg-white/[0.05] border border-white/15 px-1.5 text-[10.5px] text-ink-1 placeholder:text-ink-4 outline-none focus:border-white/30 pointer-events-auto"
                           />
-                          <button
-                            type="button"
-                            onMouseDown={(e) => {
-                              e.preventDefault();
-                              e.stopPropagation();
-                            }}
-                            onClick={(e) => {
-                              e.stopPropagation();
-                              if (customFontInput.trim()) {
-                                const customName = customFontInput.trim();
-                                editActive({ font_family: customName });
-                                if (editorRef.current) {
-                                  editorRef.current.style.fontFamily = fontStack(customName);
-                                  editorRef.current.focus();
-                                }
-                                setFontOpen(false);
-                              }
-                            }}
-                            className="h-6 px-2 rounded bg-white/10 hover:bg-white/20 text-[10px] font-medium text-white transition-colors shrink-0 cursor-pointer pointer-events-auto"
-                          >
-                            Apply
-                          </button>
+                        </div>
+                        <div className="max-h-[140px] overflow-y-auto scrollbar-thin px-0.5 space-y-0.5">
+                          {filteredSystemFonts.length === 0 ? (
+                            <div className="px-2 py-2 text-center text-[10px] text-ink-4">
+                              {systemFonts.length === 0 ? "Loading fonts..." : "No matching fonts"}
+                            </div>
+                          ) : (
+                            filteredSystemFonts.map((fontName) => {
+                              const isCurrent = (activeNote.font_family || "").toLowerCase() === fontName.toLowerCase();
+                              return (
+                                <button
+                                  key={fontName}
+                                  type="button"
+                                  onMouseDown={(e) => {
+                                    e.preventDefault();
+                                    e.stopPropagation();
+                                  }}
+                                  onClick={(e) => {
+                                    e.stopPropagation();
+                                    editActive({ font_family: fontName });
+                                    if (editorRef.current) {
+                                      editorRef.current.style.fontFamily = fontStack(fontName);
+                                      editorRef.current.focus();
+                                    }
+                                    setFontOpen(false);
+                                  }}
+                                  className={cx(
+                                    "flex h-6 w-full items-center justify-between rounded px-2 text-[11px] cursor-pointer pointer-events-auto",
+                                    isCurrent ? "bg-white/[0.08] text-white" : "text-ink-2 hover:bg-white/[0.06] hover:text-white",
+                                  )}
+                                  style={{ fontFamily: fontStack(fontName) }}
+                                >
+                                  <span className="truncate">{fontName}</span>
+                                  {isCurrent && <Check size={10} className="shrink-0 ml-1.5" />}
+                                </button>
+                              );
+                            })
+                          )}
                         </div>
                       </div>
                     </div>

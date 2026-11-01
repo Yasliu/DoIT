@@ -476,4 +476,27 @@ export const tauriApi = {
       /* ignore */
     }
   },
+
+  async getSystemFonts(): Promise<string[]> {
+    if (isTauri()) {
+      try {
+        const fonts = await invoke<string[]>("get_system_fonts");
+        if (Array.isArray(fonts) && fonts.length > 0) {
+          return fonts;
+        }
+      } catch (err) {
+        console.warn("Failed to get system fonts from Tauri backend:", err);
+      }
+    }
+    if ("queryLocalFonts" in window) {
+      try {
+        const local = await (window as any).queryLocalFonts();
+        const names = Array.from(new Set(local.map((f: any) => f.family))).sort() as string[];
+        if (names.length > 0) return names;
+      } catch {
+        /* ignore */
+      }
+    }
+    return [];
+  },
 };

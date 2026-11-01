@@ -232,7 +232,8 @@ pub fn run() {
             save_tray_position,
             restart_app,
             quit_app,
-            show_tray_context_menu
+            show_tray_context_menu,
+            get_system_fonts
         ])
         .run(tauri::generate_context!())
         .expect("error while running DoIT tauri application");

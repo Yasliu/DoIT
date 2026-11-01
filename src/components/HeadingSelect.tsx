@@ -1,13 +1,13 @@
-import { useEffect, useRef, useState } from "react";
+import { useEffect, useLayoutEffect, useRef, useState } from "react";
 import { Check, ChevronDown } from "lucide-react";
 import { getHeadingLevel } from "../lib/format";
 import { cx } from "../lib/text";
 
 const OPTIONS = [
-  { level: 0, label: "Normal Text", sample: "text-[12px] font-normal" },
-  { level: 1, label: "Heading 1", sample: "text-[15px] font-bold" },
-  { level: 2, label: "Heading 2", sample: "text-[13.5px] font-semibold" },
-  { level: 3, label: "Heading 3", sample: "text-[12.5px] font-semibold" },
+  { level: 0, label: "Normal Text", shortLabel: "Normal", sample: "text-[12px] font-normal" },
+  { level: 1, label: "Heading 1", shortLabel: "H1", sample: "text-[15px] font-bold" },
+  { level: 2, label: "Heading 2", shortLabel: "H2", sample: "text-[13.5px] font-semibold" },
+  { level: 3, label: "Heading 3", shortLabel: "H3", sample: "text-[12.5px] font-semibold" },
 ] as const;
 
 interface HeadingSelectProps {
@@ -21,6 +21,19 @@ export function HeadingSelect({ editorRef, onSelect, compact = false, disabled =
   const [open, setOpen] = useState(false);
   const [level, setLevel] = useState(0);
   const savedRangeRef = useRef<Range | null>(null);
+  const menuRef = useRef<HTMLDivElement>(null);
+  const [alignRight, setAlignRight] = useState(false);
+
+  useLayoutEffect(() => {
+    if (open && menuRef.current) {
+      const rect = menuRef.current.getBoundingClientRect();
+      if (rect.right > window.innerWidth - 8) {
+        setAlignRight(true);
+      } else {
+        setAlignRight(false);
+      }
+    }
+  }, [open]);
 
   useEffect(() => {
     const update = () => {
@@ -93,7 +106,7 @@ export function HeadingSelect({ editorRef, onSelect, compact = false, disabled =
           open && "bg-white/[0.08] text-ink-1",
         )}
       >
-        <span className="whitespace-nowrap">{current.label}</span>
+        <span className="whitespace-nowrap">{compact ? current.shortLabel : current.label}</span>
         <ChevronDown size={compact ? 9 : 10} strokeWidth={2} className={cx("transition-transform duration-200", open && "rotate-180")} />
       </button>
 
@@ -111,11 +124,15 @@ export function HeadingSelect({ editorRef, onSelect, compact = false, disabled =
             }}
           />
           <div
+            ref={menuRef}
             role="listbox"
             onPointerDown={(e) => e.stopPropagation()}
             onMouseDown={(e) => e.stopPropagation()}
             onClick={(e) => e.stopPropagation()}
-            className="absolute left-0 top-full z-50 mt-1 w-[158px] rounded-xl border border-white/20 bg-[#14151a] p-1.5 shadow-[0_25px_60px_rgba(0,0,0,0.95)] pointer-events-auto"
+            className={cx(
+              "absolute top-full z-50 mt-1 w-[158px] rounded-xl border border-white/20 bg-[#14151a] p-1.5 shadow-[0_25px_60px_rgba(0,0,0,0.95)] pointer-events-auto",
+              alignRight ? "right-0" : "left-0",
+            )}
           >
             {OPTIONS.map((opt) => (
               <button

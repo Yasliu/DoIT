@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useLayoutEffect, useRef, useState } from "react";
+import { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } from "react";
 import {
   Bold,
   Check,
@@ -89,7 +89,17 @@ export function NoteSheet({
   const draftRef = useRef(draft);
   const saveTimer = useRef(0);
   const [fontOpen, setFontOpen] = useState(false);
-  const [customFontInput, setCustomFontInput] = useState("");
+  const [systemFonts, setSystemFonts] = useState<string[]>([]);
+  const [fontSearch, setFontSearch] = useState("");
+  const filteredSystemFonts = useMemo(() => {
+    if (!fontSearch.trim()) return systemFonts;
+    const q = fontSearch.toLowerCase();
+    return systemFonts.filter((f) => f.toLowerCase().includes(q));
+  }, [systemFonts, fontSearch]);
+  const fontMenuRef = useRef<HTMLDivElement>(null);
+  const [fontMenuStyle, setFontMenuStyle] = useState<React.CSSProperties>({});
+  const shelfMenuRef = useRef<HTMLDivElement>(null);
+  const [shelfMenuStyle, setShelfMenuStyle] = useState<React.CSSProperties>({});
   const [showDeleteConfirm, setShowDeleteConfirm] = useState(false);
   const [shelfOpen, setShelfOpen] = useState(false);
   const [previewImage, setPreviewImage] = useState<string | null>(null);
@@ -98,6 +108,49 @@ export function NoteSheet({
   const titleRef = useRef<HTMLInputElement | null>(null);
   const closeRef = useRef<() => void>(() => {});
   const closeCancel = useRef<() => void>(() => {});
+
+  // Load system fonts on mount
+  useEffect(() => {
+    void tauriApi.getSystemFonts().then((fonts) => {
+      if (fonts && fonts.length > 0) {
+        setSystemFonts(fonts);
+      }
+    });
+  }, []);
+
+  // Viewport detection hooks to ensure dropdowns never get clipped by window/panel boundaries
+  useLayoutEffect(() => {
+    if (fontOpen && fontMenuRef.current) {
+      const rect = fontMenuRef.current.getBoundingClientRect();
+      const style: React.CSSProperties = {};
+      if (rect.right > window.innerWidth - 8) {
+        style.right = 0;
+        style.left = "auto";
+      } else if (rect.left < 8) {
+        style.left = 0;
+        style.right = "auto";
+      }
+      setFontMenuStyle(style);
+    }
+  }, [fontOpen]);
+
+  useLayoutEffect(() => {
+    if (shelfOpen && shelfMenuRef.current) {
+      const rect = shelfMenuRef.current.getBoundingClientRect();
+      const style: React.CSSProperties = {};
+      if (rect.left < 8) {
+        style.left = 0;
+        style.right = "auto";
+      } else if (rect.right > window.innerWidth - 8) {
+        style.right = 0;
+        style.left = "auto";
+      }
+      setShelfMenuStyle(style);
+    }
+  }, [shelfOpen]);
+
+  // Screen-Adaptive Minimum Threshold: 360px on compact screens, 420px on standard/high-res displays
+  const getAdaptiveMinW = () => (window.innerWidth <= 1280 ? 360 : 420);
 
   // Interactive Resizable Right Panel
   const isResizing = useRef(false);
@@ -117,7 +170,7 @@ export function NoteSheet({
     const onMouseMove = (moveEvent: MouseEvent) => {
       if (!isResizing.current) return;
       const deltaX = startX.current - moveEvent.clientX;
-      const minW = 380;
+      const minW = getAdaptiveMinW();
       const maxW = Math.max(minW, window.innerWidth - 100);
       const nextW = Math.round(Math.min(Math.max(startWidth.current + deltaX, minW), maxW));
       onResizeWidth?.(nextW);
@@ -132,7 +185,7 @@ export function NoteSheet({
       window.removeEventListener("mouseup", onMouseUp);
 
       const deltaX = startX.current - upEvent.clientX;
-      const minW = 380;
+      const minW = getAdaptiveMinW();
       const maxW = Math.max(minW, window.innerWidth - 100);
       const finalW = Math.round(Math.min(Math.max(startWidth.current + deltaX, minW), maxW));
       onResizeWidth?.(finalW);
@@ -501,7 +554,7 @@ export function NoteSheet({
                   : "transform 460ms cubic-bezier(0.32, 0.72, 0, 1), opacity 240ms ease-out",
           willChange: phase === "settled" ? "auto" : "transform",
         }}
-        className="absolute inset-y-0 right-0 z-30 flex flex-col overflow-hidden rounded-[22px] glass-sheet outline-none border border-white/10 shadow-[0_30px_90px_rgba(0,0,0,0.6)]"
+        className="absolute inset-y-0 right-0 z-30 flex flex-col overflow-visible rounded-[22px] glass-sheet outline-none border border-white/10 shadow-[0_30px_90px_rgba(0,0,0,0.6)]"
       >
         {/* Interactive Resizable Handle Rail */}
         <div
@@ -516,8 +569,8 @@ export function NoteSheet({
           style={{ backgroundColor: accent, animation: "strip-in 620ms cubic-bezier(0.22,1,0.36,1) both" }}
         />
 
-        <div className="flex min-h-[52px] shrink-0 flex-nowrap items-center justify-between gap-x-3 px-5 py-1.5 overflow-visible pointer-events-auto">
-          <div className="flex min-w-0 max-w-[130px] shrink items-center gap-2.5">
+        <div className="flex min-h-[52px] shrink-0 flex-nowrap items-center justify-between gap-x-2 px-3.5 sm:px-4 py-1.5 overflow-visible pointer-events-auto">
+          <div className="flex min-w-0 max-w-[130px] shrink items-center gap-2">
             {external ? (
               <span
                 title={draft.source_path}
@@ -531,17 +584,21 @@ export function NoteSheet({
               <button
                 type="button"
                 onClick={() => setShelfOpen((v) => !v)}
-                className="flex h-6 items-center gap-1.5 rounded-md px-1.5 font-mono text-[9.5px] uppercase tracking-[0.11em] text-ink-3 transition-colors hover:bg-white/[0.06] hover:text-ink-1"
+                className="flex h-6 items-center gap-1.5 rounded-md px-1.5 font-mono text-[9.5px] uppercase tracking-[0.11em] text-ink-3 transition-colors hover:bg-white/[0.06] hover:text-ink-1 shrink-0"
               >
                 <span className="size-[4px] shrink-0 rounded-full" style={{ backgroundColor: accent }} />
-                <span className="fade-end max-w-[96px] overflow-hidden whitespace-nowrap">{cleanText(draft.category)}</span>
+                <span className="fade-end max-w-[80px] overflow-hidden whitespace-nowrap">{cleanText(draft.category)}</span>
                 <ChevronDown size={10} strokeWidth={2} />
               </button>
 
               {shelfOpen && (
                 <>
                   <div className="fixed inset-0 z-40" onPointerDown={() => setShelfOpen(false)} />
-                  <div className="absolute left-0 top-8 z-50 w-[220px] rounded-[14px] bg-[#14151a] border border-white/20 p-2 shadow-[0_25px_60px_rgba(0,0,0,0.95)]">
+                  <div
+                    ref={shelfMenuRef}
+                    style={shelfMenuStyle}
+                    className="absolute left-0 top-8 z-50 w-[220px] rounded-[14px] bg-[#14151a] border border-white/20 p-2 shadow-[0_25px_60px_rgba(0,0,0,0.95)]"
+                  >
                     <div className="micro px-2 pb-1.5 pt-1">Move to shelf</div>
                     {shelves.map((shelf) => (
                       <button
@@ -590,7 +647,7 @@ export function NoteSheet({
             )}
           </div>
 
-          <div className="flex min-w-0 items-center gap-0.5 overflow-visible pointer-events-auto">
+          <div className="flex shrink-0 items-center gap-0.5 overflow-visible pointer-events-auto">
             <div className="relative pointer-events-auto">
               <button
                 type="button"
@@ -599,11 +656,13 @@ export function NoteSheet({
                   e.stopPropagation();
                   setFontOpen((v) => !v);
                 }}
-                className="flex h-7 items-center gap-1.5 rounded-md px-2 text-[11.5px] text-ink-3 transition-colors hover:bg-white/[0.06] hover:text-ink-1 cursor-pointer pointer-events-auto"
-                title="Note typeface"
+                className="flex h-7 items-center gap-1.5 rounded-md px-1.5 sm:px-2 text-[11.5px] text-ink-3 transition-colors hover:bg-white/[0.06] hover:text-ink-1 cursor-pointer pointer-events-auto shrink-0"
+                title={`Note typeface: ${cleanText(draft.font_family) || "Instrument Sans"}`}
               >
                 <Type size={12} strokeWidth={1.7} />
-                <span className="max-w-[92px] truncate">{cleanText(draft.font_family) || "Instrument Sans"}</span>
+                <span className={cx("truncate", width && width < 460 ? "hidden" : "max-w-[76px] hidden sm:inline")}>
+                  {cleanText(draft.font_family) || "Instrument Sans"}
+                </span>
               </button>
 
               {fontOpen && (
@@ -620,10 +679,12 @@ export function NoteSheet({
                     }}
                   />
                   <div
+                    ref={fontMenuRef}
                     onPointerDown={(e) => e.stopPropagation()}
                     onMouseDown={(e) => e.stopPropagation()}
                     onClick={(e) => e.stopPropagation()}
-                    className="absolute right-0 top-9 z-50 w-[240px] rounded-[14px] bg-[#14151a] border border-white/20 p-2 shadow-[0_25px_60px_rgba(0,0,0,0.95)] pointer-events-auto"
+                    style={fontMenuStyle}
+                    className="absolute right-0 top-9 z-50 w-[240px] max-w-[calc(100vw-32px)] rounded-[14px] bg-[#14151a] border border-white/20 p-2 shadow-[0_25px_60px_rgba(0,0,0,0.95)] pointer-events-auto"
                   >
                     <div className="text-[10px] font-mono uppercase tracking-[0.12em] text-ink-4 px-2 py-1 select-none">
                       Font Presets
@@ -646,10 +707,10 @@ export function NoteSheet({
                           setFontOpen(false);
                         }}
                         className={cx(
-                          "flex h-8 w-full items-center justify-between rounded-md px-2 text-left text-[13px] cursor-pointer pointer-events-auto",
+                          "flex h-7.5 w-full items-center justify-between rounded-md px-2 text-left text-[12.5px] cursor-pointer pointer-events-auto",
                           font.name === draft.font_family
-                            ? "bg-white/[0.08] text-ink-1"
-                            : "text-ink-2 hover:bg-white/[0.06] hover:text-ink-1",
+                            ? "bg-white/[0.08] text-white"
+                            : "text-ink-2 hover:bg-white/[0.06] hover:text-white",
                         )}
                         style={{ fontFamily: font.stack }}
                       >
@@ -658,67 +719,70 @@ export function NoteSheet({
                       </button>
                     ))}
                     <div className="my-1.5 h-px bg-white/10" />
-                    <div className="px-1 py-1">
-                      <div className="text-[10px] font-mono uppercase tracking-[0.12em] text-ink-4 px-1 pb-1.5 select-none">
-                        Custom Font Declaration
+                    <div>
+                      <div className="flex items-center justify-between px-2 py-1 select-none">
+                        <span className="text-[10px] font-mono uppercase tracking-[0.12em] text-ink-4">
+                          System Fonts ({filteredSystemFonts.length})
+                        </span>
                       </div>
-                      <div className="flex items-center gap-1.5">
+                      <div className="px-1 pb-1.5">
                         <input
                           type="text"
-                          value={customFontInput}
-                          onChange={(e) => setCustomFontInput(e.target.value)}
+                          value={fontSearch}
+                          onChange={(e) => setFontSearch(e.target.value)}
                           onMouseDown={(e) => e.stopPropagation()}
                           onClick={(e) => e.stopPropagation()}
-                          onKeyDown={(e) => {
-                            e.stopPropagation();
-                            if (e.key === "Enter" && customFontInput.trim()) {
-                              const customName = customFontInput.trim();
-                              edit({ font_family: customName }, true);
-                              if (editorRef.current) {
-                                editorRef.current.style.fontFamily = fontStack(customName);
-                                editorRef.current.focus();
-                              }
-                              setFontOpen(false);
-                            }
-                          }}
-                          placeholder="e.g. Fira Code, Outfit..."
-                          className="flex-1 min-w-0 h-7 rounded-lg bg-white/[0.05] border border-white/15 px-2 text-[11.5px] text-ink-1 placeholder:text-ink-4 outline-none focus:border-white/30"
+                          placeholder="Search installed fonts..."
+                          className="w-full h-7 rounded-lg bg-white/[0.05] border border-white/15 px-2 text-[11px] text-ink-1 placeholder:text-ink-4 outline-none focus:border-white/30"
                         />
-                        <button
-                          type="button"
-                          onMouseDown={(e) => {
-                            e.preventDefault();
-                            e.stopPropagation();
-                          }}
-                          onClick={(e) => {
-                            e.stopPropagation();
-                            if (customFontInput.trim()) {
-                              const customName = customFontInput.trim();
-                              edit({ font_family: customName }, true);
-                              if (editorRef.current) {
-                                editorRef.current.style.fontFamily = fontStack(customName);
-                                editorRef.current.focus();
-                              }
-                              setFontOpen(false);
-                            }
-                          }}
-                          className="h-7 px-2.5 rounded-lg bg-white/10 hover:bg-white/20 text-[11px] font-medium text-white transition-colors shrink-0 cursor-pointer pointer-events-auto"
-                        >
-                          Apply
-                        </button>
                       </div>
-                      {draft.font_family && !NOTE_FONTS.some((f) => f.name.toLowerCase() === draft.font_family?.toLowerCase()) && (
-                        <div className="mt-1.5 px-1 text-[11px] font-mono text-ink-3 truncate">
-                          Active: <span className="text-white">{draft.font_family}</span>
-                        </div>
-                      )}
+                      <div className="max-h-[170px] overflow-y-auto scrollbar-thin px-0.5 space-y-0.5">
+                        {filteredSystemFonts.length === 0 ? (
+                          <div className="px-2 py-3 text-center text-[11px] text-ink-4">
+                            {systemFonts.length === 0 ? "Loading system fonts..." : "No matching fonts found"}
+                          </div>
+                        ) : (
+                          filteredSystemFonts.map((fontName) => {
+                            const isCurrent = (draft.font_family || "").toLowerCase() === fontName.toLowerCase();
+                            return (
+                              <button
+                                key={fontName}
+                                type="button"
+                                onMouseDown={(e) => {
+                                  e.preventDefault();
+                                  e.stopPropagation();
+                                }}
+                                onClick={(e) => {
+                                  e.stopPropagation();
+                                  edit({ font_family: fontName }, true);
+                                  if (editorRef.current) {
+                                    editorRef.current.style.fontFamily = fontStack(fontName);
+                                    editorRef.current.focus();
+                                  }
+                                  setFontOpen(false);
+                                }}
+                                className={cx(
+                                  "flex h-7 w-full items-center justify-between rounded-md px-2 text-left text-[12px] cursor-pointer pointer-events-auto",
+                                  isCurrent
+                                    ? "bg-white/[0.08] text-white"
+                                    : "text-ink-2 hover:bg-white/[0.06] hover:text-white",
+                                )}
+                                style={{ fontFamily: fontStack(fontName) }}
+                              >
+                                <span className="truncate">{fontName}</span>
+                                {isCurrent && <Check size={11} className="shrink-0 ml-1.5" />}
+                              </button>
+                            );
+                          })
+                        )}
+                      </div>
                     </div>
                   </div>
                 </>
               )}
             </div>
 
-            <span className="mx-1 h-4 w-px bg-white/[0.08]" />
+            <span className="mx-0.5 h-4 w-px bg-white/[0.08]" />
 
             {!rawMode && (
             <>
@@ -729,7 +793,7 @@ export function NoteSheet({
               aria-label="Toggle Bold"
               title="Bold text (Ctrl+B)"
               data-active={isBoldActive || undefined}
-              className={cx("icon-btn !size-7 cursor-pointer", isBoldActive && "!bg-white/20 !text-white")}
+              className={cx("icon-btn !size-7 cursor-pointer shrink-0", isBoldActive && "!bg-white/20 !text-white")}
             >
               <Bold size={12.5} strokeWidth={2.4} />
             </button>
@@ -740,20 +804,24 @@ export function NoteSheet({
               aria-label="Toggle Italic"
               title="Italic text (Ctrl+I)"
               data-active={isItalicActive || undefined}
-              className={cx("icon-btn !size-7 cursor-pointer", isItalicActive && "!bg-white/20 !text-white")}
+              className={cx("icon-btn !size-7 cursor-pointer shrink-0", isItalicActive && "!bg-white/20 !text-white")}
             >
               <Italic size={12.5} strokeWidth={2.4} />
             </button>
 
-            <span className="mx-1 h-4 w-px bg-white/[0.08]" />
-            <HeadingSelect editorRef={editorRef} onSelect={(level) => runEditorCommand((ed) => applyHeading(ed, level))} />
+            <span className="mx-0.5 h-4 w-px bg-white/[0.08]" />
+            <HeadingSelect
+              compact={!width || width < 460}
+              editorRef={editorRef}
+              onSelect={(level) => runEditorCommand((ed) => applyHeading(ed, level))}
+            />
             <button
               type="button"
               onMouseDown={(e) => e.preventDefault()}
               onClick={() => runEditorCommand((ed) => insertTableAtCaret(ed))}
               aria-label="Insert table"
               title="Insert table (Ctrl+T)"
-              className="icon-btn !size-7 cursor-pointer"
+              className="icon-btn !size-7 cursor-pointer shrink-0"
             >
               <TableIcon size={13} strokeWidth={1.8} />
             </button>
@@ -763,11 +831,11 @@ export function NoteSheet({
               onClick={() => runEditorCommand((ed) => applyTask(ed))}
               aria-label="Task checkbox"
               title="Task checkbox (- [ ])"
-              className="icon-btn !size-7 cursor-pointer"
+              className="icon-btn !size-7 cursor-pointer shrink-0"
             >
               <ListChecks size={13.5} strokeWidth={1.8} />
             </button>
-            <span className="mx-1 h-4 w-px bg-white/[0.08]" />
+            <span className="mx-0.5 h-4 w-px bg-white/[0.08]" />
             </>
             )}
             <input

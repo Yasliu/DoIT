@@ -998,3 +998,73 @@ pub fn open_external_file(path: String, storage: State<'_, StorageManager>) -> R
 pub fn save_external_file(note: NoteItem, storage: State<'_, StorageManager>) -> Result<NoteItem, String> {
     storage.save_external(note)
 }
+
+
+#[tauri::command]
+pub fn get_system_fonts() -> Vec<String> {
+    let mut fonts = std::collections::BTreeSet::new();
+
+    #[cfg(target_os = "windows")]
+    {
+        use std::os::windows::process::CommandExt;
+        const CREATE_NO_WINDOW: u32 = 0x08000000;
+
+        let registry_keys = [
+            "HKLM\\SOFTWARE\\Microsoft\\Windows NT\\CurrentVersion\\Fonts",
+            "HKCU\\SOFTWARE\\Microsoft\\Windows NT\\CurrentVersion\\Fonts",
+        ];
+
+        for key in registry_keys {
+            if let Ok(output) = std::process::Command::new("reg")
+                .args(["query", key])
+                .creation_flags(CREATE_NO_WINDOW)
+                .output()
+            {
+                if output.status.success() {
+                    let text = String::from_utf8_lossy(&output.stdout);
+                    for line in text.lines() {
+                        let trimmed = line.trim();
+                        if trimmed.is_empty() || trimmed.starts_with("HKEY_") {
+                            continue;
+                        }
+                        if let Some(pos) = trimmed.find("REG_SZ") {
+                            let raw_name = trimmed[..pos].trim();
+                            let mut name = raw_name;
+                            for suffix in &[" (TrueType)", " (OpenType)", " (Variable)", " (All lanes)", " & "] {
+                                if let Some(idx) = name.find(suffix) {
+                                    name = &name[..idx];
+                                }
+                            }
+                            let family = name
+                                .trim_end_matches(" Bold Italic")
+                                .trim_end_matches(" SemiBold Italic")
+                                .trim_end_matches(" ExtraBold Italic")
+                                .trim_end_matches(" Light Italic")
+                                .trim_end_matches(" Semilight Italic")
+                                .trim_end_matches(" Thin Italic")
+                                .trim_end_matches(" Bold")
+                                .trim_end_matches(" Italic")
+                                .trim_end_matches(" Light")
+                                .trim_end_matches(" Semilight")
+                                .trim_end_matches(" Black")
+                                .trim_end_matches(" Thin")
+                                .trim_end_matches(" ExtraBold")
+                                .trim_end_matches(" ExtraLight")
+                                .trim_end_matches(" SemiBold")
+                                .trim_end_matches(" Medium")
+                                .trim_end_matches(" Heavy")
+                                .trim_end_matches(" Regular")
+                                .trim();
+
+                            if !family.is_empty() && !family.starts_with('@') {
+                                fonts.insert(family.to_string());
+                            }
+                        }
+                    }
+                }
+            }
+        }
+    }
+
+    fonts.into_iter().collect()
+}

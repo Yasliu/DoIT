@@ -36,21 +36,26 @@ function readCollapsed(): Record<string, boolean> {
   }
 }
 
-const MIN_DRAWER_WIDTH = 380;
+export function getAdaptiveMinDrawerWidth(): number {
+  // Screen-Adaptive Minimum Threshold: 360px on compact screens, 420px on standard/high-res displays
+  return window.innerWidth <= 1280 ? 360 : 420;
+}
 
 function getStoredDrawerWidth(): number {
+  const minW = getAdaptiveMinDrawerWidth();
+  const maxW = Math.max(minW, window.innerWidth - 100);
   try {
     const raw = localStorage.getItem("doit.drawer_width");
     if (raw) {
       const parsed = parseInt(raw, 10);
-      if (!isNaN(parsed) && parsed >= MIN_DRAWER_WIDTH) {
-        return Math.min(parsed, window.innerWidth - 100);
+      if (!isNaN(parsed) && parsed >= 300) {
+        return Math.max(minW, Math.min(maxW, parsed));
       }
     }
   } catch {
     /* ignore */
   }
-  return Math.min(Math.max(MIN_DRAWER_WIDTH, Math.round(window.innerWidth * 0.42)), 640);
+  return Math.max(minW, Math.min(640, Math.round(window.innerWidth * 0.42)));
 }
 
 export default function App() {
@@ -491,7 +496,7 @@ export default function App() {
 
           {/* Right-side sliding editor drawer: reserves space so the dashboard stays visible + interactive */}
           <aside
-            className="relative shrink-0"
+            className="relative shrink-0 overflow-visible"
             style={{
               width: openFresh && openNote && sheetReserve && !sheetClosing ? drawerWidth : 0,
               marginLeft: openFresh && openNote && sheetReserve && !sheetClosing ? 12 : 0,

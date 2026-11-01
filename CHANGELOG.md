@@ -428,3 +428,17 @@ Note: `--disable-gpu` would reach ~95 MB too but forces software compositing of 
   - Eliminated rough layout snaps, pops, and visual jitter when text wraps, cards resize, or notes are reordered.
   - Integrated `motion` from `motion/react` with the `layout` attribute on both the parent bento grid container (`CategoryShelf.tsx`) and individual note card tiles (`NoteTile.tsx`).
   - Enforced fluid spring transition dynamics: `transition={{ type: "spring", stiffness: 180, damping: 25, mass: 0.8 }}`.
+
+## [Section 23] - Critical UI & Editor Refactor: System Font Ingestion, Minimum Width Safeguards, Dropdown Boundary Protection & Table Escape Engine
+- **Dynamic System Font Ingestion Engine (The Confusing Input Purge)**:
+  - Removed manual text input box and Apply button under 'Custom Font Declaration' across `NoteSheet.tsx` and `TrayCompanion.tsx`.
+  - Added native `get_system_fonts` Tauri command querying the Windows Registry (`HKLM` and `HKCU\SOFTWARE\Microsoft\Windows NT\CurrentVersion\Fonts`) with Web API fallback (`window.queryLocalFonts()`), automatically sweeping all natively installed typefaces without prompts or permissions.
+  - Implemented dynamic, searchable, theme-matched scrollable inner panel inside the typeface dropdown menus with real-time text query filtering, font preview rendering, active font checkmark indication, and one-click immediate application.
+- **Right Editor Side-Panel Minimum Width Safeguards & Absolute Toolbar Visibility**:
+  - Implemented screen-adaptive minimum width threshold in `App.tsx` and `NoteSheet.tsx`: clamping rigidly at `360px` for compact displays (`<= 1280px` screen width) and `420px` for standard/high-resolution multi-monitor configurations.
+  - Absolute Toolbar Visibility: Added `shrink-0` and compact responsive font and heading modes (icon-only font button when drawer width is < 460px; short labels "Normal", "H1", "H2", "H3" in `HeadingSelect.tsx`), ensuring toolbar items (Font, B, I, Header drop-down, Table, Checkbox, Image, Delete, Close) never wrap or get pushed off-screen down to the absolute minimum width stopping point.
+  - Dropdown Clipping Prevention: Converted container layout properties from `overflow-hidden` to `overflow-visible` on the main frame header and sheet chassis, and deployed dynamic viewport detection hooks (`useLayoutEffect` with `getBoundingClientRect()` alignment) on `HeadingSelect`, font dropdown, and shelf dropdown menus, preventing any edge clipping against screen and drawer boundaries.
+- **Table Line-Break Escape Engine (The Enter Line-Break Bug Fix)**:
+  - Enhanced rich-text editor keyboard handler (`handleRichEditorKeyDown` & `moveInTable` in `format.tsx`) for table matrix blocks.
+  - When the cursor is positioned at the conclusion of a table matrix block (or in the final cell with caret at the end, or in an empty trailing row), pressing `Enter` cleanly breaks out of the table layout parameters instead of trapping the cursor or infinitely generating table rows.
+  - Explicitly appends a clean newline paragraph block (`\n` / `<div><br></div>`) right below the table boundary and advances typing cursor focus seamlessly onto the blank text row.
