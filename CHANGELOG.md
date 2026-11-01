@@ -293,3 +293,152 @@
 
 ## [2026-10-31] - Pasted multi-line text collapsing
 - `htmlToMarkdown` (`src/lib/format.tsx`): the editors are `white-space: pre-wrap`, so pasted text arrives as text nodes containing `\n`; my earlier rewrite collapsed those to spaces, merging pasted lines into one. Newlines inside text nodes are now real line breaks.
+
+## [2026-10-31] - V2 Core: Universal Markdown, Right-Side Editor, Updater, Tray Stabilization
+**Schema (V2)**: `NoteItem.format` (`"md"` default | `"txt"`). `.md` files keep DoIT frontmatter (`app: "DoIT"`) when saved, but it is no longer required to load; `.txt` files are stored as plain text (category/title recovered from `Category - Title - date - n.txt` names).
+- **Updater**: endpoint fixed to `https://raw.githubusercontent.com/Yasliu/DoIT/main/update.json` (old value pointed at `yasin-islam`); removed v1-only keys (`active`, `dialog`) from `plugins.updater`. Boot check (`App.tsx`) skips when offline, uses `check({timeout: 3000})` + a 3s race, and swallows every failure silently; never blocks notes load. NOTE: `update.json` does not exist in the repo yet, so checks currently 404 (silently).
+- **Universal ingestion** (`models.rs`, `storage.rs`): `NoteItem::from_file` / `parse_generic_document` accept any `.md`/`.txt` (boot index, single import, folder scan); frontmatter optional, title from frontmatter -> filename -> first `# heading` -> file stem; stable id from filename hash; file mtime used as last_edited; invalid UTF-8 repaired lossily. Tasks only become a checklist when EVERY line is a task.
+- **Defensive AST pass**: `sanitize_markdown_body` (pulldown-cmark 0.12) wraps corrupt/control-character bodies in a fenced monospace block and closes unterminated code fences. The editor renders fenced blocks as isolated monospace blocks (`.md-code`). (Implemented in `models.rs`; `main.rs` only boots `run()`.)
+- **TXT**: listed like any note; footer + tray show **Convert to Markdown**, which flips `format` to `md` -> save rewrites as `.md` with frontmatter and deletes the `.txt`.
+- **Editor shortcuts** (`format.tsx`): Ctrl+1/2/3 headings (toggle), Ctrl+T inserts a table, Tab walks table cells and appends a new row from the last cell, Shift+Tab goes back; Ctrl+B/I unchanged. Headings/tables/code get live classes (`refreshBlockClasses`).
+- **Inline images**: `![alt](path)` renders inline in the editor via Tauri asset protocol (`protocol-asset` feature + `assetProtocol` scope: HOME, DOCUMENT, DESKTOP, DOWNLOAD, PICTURE, APPDATA); round-trips back to markdown. Existing attached-image cards are untouched.
+- **Right-side drawer** (`NoteSheet.tsx`, `App.tsx`): centered modal + scrim removed. Editor is a drawer sliding from the right edge (`transform 300ms cubic-bezier(0.16,1,0.3,1)`), dashboard reflows/stays interactive, switching notes does not replay the slide, Escape/X slides it out. Focus trap removed (non-modal). Closing no longer prunes blank lines between paragraphs.
+- **Tray**: window created hidden + pill hidden at setup; tray locked to 380x480 logical (min = max); expand/collapse use scale-computed absolute pixel sizes instead of a hidden window's reported size. Tray editor shares the same markdown renderer (single column, wraps).
+
+## [2026-10-31] - V2 Fix: Rendered Markdown Editor, Visual Toolbar, Legacy Frontmatter Purge
+**Parser / renderer** (`src/lib/format.tsx`) - the editor no longer shows markdown markers:
+- Block parser: `# ..######` headings, `-`/`*`/bullet lists, `>` quotes (marker kept invisibly in `data-p`, restored on save), `---` rules (`<hr>`), fenced code (`<pre class="md-pre">`, plaintext-only island), and pipe tables rendered as real `<table>` (editable `th`/`td` cells, alignment kept from `:---:` separators, `\|` escaped). Cells accept inline bold/italic.
+- Live conversion while typing (`normalizeEditor`): `# `, `- `, `> ` become real lines; a typed header row + `|---|---|` becomes a table. Multi-line paste is re-parsed as markdown (`handleMarkdownPaste`).
+- Keys: Enter leaves empty bullet/quote and exits headings; Backspace at line start strips the prefix; in tables Tab/Shift+Tab/Enter move cells and the last cell appends a row.
+- Images: `![alt](url|C:\abs\path|relative)` render inline as rounded frames; relative paths resolve against the storage folder (`setMarkdownBaseDir`) via the Tauri asset protocol.
+- Verified in jsdom: markdown -> DOM -> markdown round-trips headings, lists, quotes, tables, code, rules and images (only table separators normalise to `| --- |`).
+- Note: rendering is a custom block parser over the editable surface (a read-only React tree cannot be edited); `pulldown-cmark` still guards imported files in the Rust layer.
+**Toolbar** (`NoteSheet.tsx`, `TrayCompanion.tsx`): new monochrome Lucide buttons `Heading1/2/3` (toggle heading on caret line), `Table` (inserts the `| Header | Header |` / `|---|---|` / `|  |  |` blueprint at the caret as a real table), `ListChecks` (switches to checklist if needed and appends a new empty task row). Heading/table buttons disable in checklist mode.
+**Table styling** (`globals.css`): `1px solid white/10` cell borders, header `bg white/[0.02]` + semibold white, cell padding `6px 12px` (`py-1.5 px-3`), focused-cell highlight, rounded scroll-x wrapper.
+**Legacy frontmatter purge**: `app: "DoIT"` and `version:` are no longer written (`to_markdown`) or required; the strict validator (`parse_and_validate_doit_markdown`) and its tests are deleted - one lenient `parse_generic_document` reads optional keys (id, category, title, order, type, media, flags). Settings panel signature box and "validate / non-DoIT" copy removed; scan toasts reworded; stale comments/README updated.
+
+## [2026-10-31] - V2 Stabilization: Unified Mixed-Mode Document, Table Columns, Header Dropdown, Shortcuts, Drawer Easing
+**Unified document** (`format.tsx`, `NoteSheet.tsx`, `TrayCompanion.tsx`, `models.rs`)
+- Removed the TEXT/TASKS mode switch, the checklist list view, `TaskLineInput.tsx`, bullet-memory/`convertContentMode`, and the duplicate task-row button. A note body is now ONE markdown canvas: text, headings, tables and `- [ ]` tasks can sit anywhere together.
+- `- [ ]` / `- [x]` lines render as real checkboxes mid-paragraph (typed `- [ ] ` or `[ ] ` inside a bullet converts live). Clicking a box rewrites only that line's `[ ]`<->`[x]`; Enter continues the task list, Enter on an empty task / Backspace at line start leaves it. One toolbar `ListChecks` button toggles the caret line into a task.
+- Storage: `contentToMarkdown` / `markdownToContent` map lines <-> items (task lines stay `is_todo` items so cards/progress still work). Rust parser: tasks recognised per line, `type:` key no longer written or forcing all lines into tasks (legacy `type: checkbox` ignored). New mixed round-trip test.
+- Note cards: `previewLine` (`text.ts`) strips heading hashes, quote/bullet markers, table pipes/separators, fences, rules and image syntax; task rows keep their checkbox.
+**Tables**: Tab on the last header cell appends a column to every row (new header `Header`, empty cells); Tab on the final cell still appends a row; `Ctrl+Alt+Right` = add column, `Ctrl+Alt+Down` = add row. Table wrapper is an isolated scroller (`w-full overflow-x-auto`, thin 6px transparent-track scrollbar, `width:max-content; min-width:100%`, cells 7em-28em) so wide tables never shift the drawer or the single-column tray.
+**Toolbar**: H1/H2/H3 buttons replaced by one themed dropdown (`HeadingSelect`: Normal Text / Heading 1-3, label follows the caret line) in both canvas editor and tray.
+**Shortcuts** (`shortcuts.ts`, `SettingsPanel.tsx`, `models.rs`): new settings keys `hotkey_h1/h2/h3/bold/italic/table` (defaults Ctrl+1/2/3/B/I/T). Settings now shows a "Markdown editor" group with record-a-combo fields (modifier required, Backspace = default); the editors bind to the saved combos (loaded on startup, saved/reset in Settings; tray picks them up on next launch).
+**Drawer**: slide uses `transform 500ms cubic-bezier(0.16,1,0.3,1)` for both entry and exit (dashboard reserve width eases at the same duration), `will-change: transform` while moving, unmount delayed to 520ms.
+**Build fix**: the previous cleanup deleted `WebView2Loader.dll`; this toolchain (gnullvm) links it dynamically, so `doit.exe` failed to start (my earlier "launch ok" check was wrong - the error dialog kept the process alive). Restored the DLL next to `doit.exe` in the project root and the local NSIS installer now bundles it (built with a local-only `--config` resource override, repo config untouched so the MSVC CI build is unaffected). Verified: no error dialog, loader module loaded, WebView2 processes spawned.
+
+## [2026-10-31] - Re-architecture: OS File Associations, In-Place External Saves, MD/Text Mode, UI Fixes
+**File associations & launch args** (`tauri.conf.json`, `lib.rs`, `commands.rs`, `storage.rs`, `models.rs`)
+- `bundle.fileAssociations`: `.md` (Markdown Document) and `.txt` (Text Document), role Editor. The NSIS installer registers "Open with DoIT" for both (verified in the generated installer script).
+- Startup args are parsed in `run()` (called from `main.rs`) via `file_from_args`; the path waits in managed state `LaunchFile` and the frontend pulls it with `take_launch_file` once its listener is ready. `tauri-plugin-single-instance` (registered first) forwards a second launch's file to the running instance (`open-external-file` event; canvas is restored if the app was in tray mode). Verified: a second launch exits immediately.
+- `open_external_file` reads the file in place (no copy; invalid UTF-8 repaired; a file that is already a repository note opens as that native note). New `NoteItem.source_path` / `external_header` (original YAML frontmatter is preserved verbatim).
+**Conditional save**
+- Native notes: unchanged silent autosave, no Save button. External notes (`source_path` set): autosave, close-commit and category/delete controls are off (`upsert_note` also hard-refuses to copy them); a prominent **Save** button (also Ctrl+S) with an Unsaved marker writes atomically back to that exact path via `save_external_file`. Closing with unsaved changes asks to discard.
+**MD Mode / Text Mode** (`ModeToggle.tsx`, `RawEditor.tsx`, sheet + tray)
+- MD Mode = rendered markdown (`format: md`); Text Mode = raw monospace source, markers visible (`# Title`, `| Header |`), toolbar formatting hidden (`format: txt`). Toggling flips the extension: native notes are re-filed `.md` <-> `.txt` by the existing storage rename; external files are renamed in place on Save (refuses if the target exists). The old "Convert to Markdown" button is gone. Note: converting to `.txt` drops frontmatter-only metadata (attached images, fonts).
+**Fixes**
+- Drawer: entry and exit are now plain `transform 300ms ease-out` (no custom overshoot curves); dashboard reserve width uses the same 300ms ease-out; unmount at 320ms.
+- Table right-click menu (`TableMenu.tsx`): + Add Column, + Add Row (below the clicked row), Delete Row (header protected); works in the sheet and the single-column tray, writes back through the normal serialiser.
+- Empty task rows: checkbox is now absolutely positioned and the line has a fixed 25px left text offset, so the caret always sits 10px clear of the ring.
+- Card previews (`previewLine`): every `|`, standalone dash/colon alignment tokens and separator rows are stripped from snippets, leaving only the cell words.
+- Untouched: tray geometry/position memory, pill logic and the fade-only tray transitions.
+
+## [2026-10-31] - Real-Rendering Card Previews, Soft Drawer Entry, Release/Updater Pipeline
+**Card previews** (`NoteTile.tsx`, `format.tsx::previewMarkup`, `globals.css`): tiles now show the note exactly as it looks when opened. MD notes render the same block markup as the editor (styled headings, bullets, quotes, tables, code, inline images, task checkboxes) read-only and clamped to the card size with a soft fade only when content overflows; Text-Mode (.txt) notes show the raw file in monospace as-is. Preview checkboxes still toggle (Nth rendered box -> matching task item; fenced "tasks" are ignored). Editable flags are stripped so nothing in a card is focusable.
+**Drawer entry**: root cause of the harsh slide-in was `focus()` on the off-canvas panel, which made the browser scroll the clipped chassis sideways, plus the dashboard width easing starting a frame before the panel. Fixes: `focus({ preventScroll: true })`, dashboard reserve now starts on the same frame as the slide (`onOpening`), entry = 460ms `cubic-bezier(0.32,0.72,0,1)` + 240ms fade; exit untouched (300ms ease-out).
+**Updater / releases**
+- UI: replaced the full-screen modal with a non-blocking themed card (bottom-right) with real download progress (`downloadAndInstall` events), "Later" / "Update now"; checks on startup (offline-safe, 3s cap) and every 6h.
+- Config: endpoint `https://github.com/Yasliu/DoIT/releases/latest/download/latest.json`, `windows.installMode: passive`, `bundle.createUpdaterArtifacts: true`, **new signing key pair** (public key in `tauri.conf.json`; private key at `%USERPROFILE%\.tauri\doit-updater.key`, no password). Workflow now passes `TAURI_SIGNING_PRIVATE_KEY(_PASSWORD)` and `includeUpdaterJson`, so tauri-action uploads the signed installer + `latest.json`. Local build verified: produces `DoIT_1.1.0_x64-setup.exe` + `.sig`.
+- Version bumped 0.1.0 -> 1.1.0 (tauri.conf, Cargo.toml, package.json): the updater only offers builds whose version is higher than the installed one.
+- Note: Tauri updates by downloading the full signed installer (it has no binary-delta mode); it runs in the background with progress and a passive installer.
+
+## [2026-10-31] - Performance: one live webview, WebView2 footprint 251 MB -> 73-97 MB
+**Measured (Win32 "private working set" of the WebView2 tree, same machine, 9-10s after each step):**
+| state | before | after |
+|---|---|---|
+| canvas open | 8 processes / 251 MB | 5 processes / 97 MB |
+| tray mode | 8 processes / 227 MB | 5 processes / 73 MB |
+| tray -> canvas again | 8 processes / 254 MB | 5 processes / 100 MB |
+**Window lifecycle** (`commands.rs`, `lib.rs`, `tauri.conf.json`)
+- Startup creates ONLY `main` (the always-hidden `tray` and `pill` webviews are gone: 3 renderers -> 1).
+- Tray mode creates a single `tray` frame on demand. Panel (380x480) and floating bar (180x44) are the SAME frame: `set_tray_mode` mutates it with native bounds, bottom-right anchored and screen-clamped; the page hides its content (blank transparent) while the frame resizes, then fades the new shape in. Verified with real Esc / click: 475x600 <-> 225x55 px at 125% DPI, same corner. Separate `pill` window, `TrayPill` route and `collapse/expand_tray_from_pill` removed.
+- Entering tray mode: frontend gets `flush-pending` (debounced saves written), then the canvas window is **destroyed** (renderer + layout tree freed). Leaving tray mode rebuilds it from the window config, restores the saved size/position/maximize state, reveals it on `canvas_ready` (3s failsafe) and destroys the tray frame. It is skipped while an external file has unsaved edits (`set_external_dirty`). A file launched while the canvas is gone is parked in `LaunchFile` and opened on mount.
+**Memory hooks**
+- `--in-process-gpu` (removes the separate GPU process: ~100-130 MB), `--js-flags=--expose-gc`, `--disable-background-networking`, `--disk-cache-size=8388608` in `additionalBrowserArgs` (config + builder share the exact same string so WebView2 keeps ONE browser/GPU tree). Data folder stays the per-app isolated `%LOCALAPPDATA%\com.doit.desktop\EBWebView`.
+- `flush_webview_memory` (calls `window.gc()` before a window goes idle) and `set_webview_memory_level` (WebView2 `ICoreWebView2_19::MemoryUsageTargetLevel` LOW while the tray is the floating bar, NORMAL when it is the panel).
+**Frontend bundle**: removed the `motion` dependency (tray cross-fades are now CSS), stripped all app `console.*` calls, vite build: no sourcemaps, no modulepreload polyfill, minified CSS. JS 511 kB -> 402 kB. (Next.js is not used; this is Vite + Tailwind.)
+**Tables**: right-click menu gained **Delete Column** (disabled for a table's last column; alignment markers are kept in sync) next to Add Column / Add Row / Delete Row.
+Note: `--disable-gpu` would reach ~95 MB too but forces software compositing of the transparent/blurred UI; `--in-process-gpu` keeps hardware acceleration at ~97 MB.
+
+## [2026-10-31] - v1.1.1
+- **Task shortcut**: new configurable `Ctrl+L` (turns the caret line into a `- [ ]` task / back to text) listed in Settings; typing `[] ` or `[ ] ` at the start of a line also creates a task live. Verified by script.
+- **Settings shortcut fields**: replaced the clipped text boxes with key-cap fields (`ShortcutField`); arrow keys show as theme-matched Lucide arrow icons. "Table keys (fixed)" is now a line-per-item list.
+- **Desk tray panel**: 380x480 -> 440x620 logical (clamped to 90% width / 88% height of the monitor). First-open shrink fixed: the frame is created on one monitor then moved, so Windows could rescale it by the DPI ratio; `tray_ready` now re-applies the exact geometry once the frame sits on its final monitor.
+- **Image viewer lag**: new isolated `ImageLightbox`: pan/zoom live in refs and are written to the image transform inside requestAnimationFrame (no React re-render of the editor tree), wheel zoom is cursor-anchored and non-passive, backdrop blur removed. Esc closes only the viewer.
+- **Release**: version 1.1.1 (tauri.conf, Cargo.toml, package.json); tags v1.0.0 / v1.1.0 removed, only v1.1.1 remains.
+
+## [2026-10-31] - Updater diagnostics (not released yet)
+- Diagnosis of "v1.1.0 does not see v1.1.1": endpoint, manifest (`"version": "1.1.1"`, no `v` prefix), asset URLs and the Ed25519/BLAKE2b signature all valid; a dev run with the app version forced to 1.1.0 found v1.1.1 in 1.3s and downloaded + signature-verified it. Root cause: GitHub's release CDN intermittently needs 10-12s for the TLS handshake (measured 142ms-12.5s), the shipped v1.1.0 check had a hard 3s cap, ran once at startup and then not for 6h.
+- Fix (ships with the next release): `App.tsx` retries with growing patience (15s, then 30s attempts after 25s / 2min / 10min) before falling back to the 6h interval; Settings -> "App updates" shows the running version and a "Check for updates" button (toasts "latest version" / "could not reach server").
+
+## [Section 21] - Engine Overhaul: Dropdowns, 50-Step Undo/Redo, Ingestion Portal, Docking Mode, Lifecycle Guardrails & Fault-Tolerant Custom Fonts
+- **Dropdown Component Corrections & Immediate Selection**:
+  - Fixed event handling and backdrop collision in `HeadingSelect.tsx`, `NoteSheet.tsx`, and `TrayCompanion.tsx`.
+  - Replaced blocking `onMouseDown` preventions on dropdown menu items with clean propagation isolation (`stopPropagation`), preventing backdrop click swallowing.
+  - Implemented caret range snapshotting (`savedRangeRef`) that preserves and restores exact selection ranges inside the editor before applying text level styles (`applyHeading`).
+  - Font family selections and text level selections now trigger immediate commits (`immediate = true`) to active note targets without debounce latency.
+- **Deep 50-Step Undo/Redo Engine (`useUndoStack.ts`)**:
+  - Expanded undo history buffer stack depth to 50 distinct structural state mutations (`MAX_DEPTH = 50`).
+  - Eliminated the 600ms coalesce freeze, replacing it with responsive snapshot detection triggered by word boundaries, spaces, punctuation (`[ .,;:!?'"()[\]{}\-–—]`), line additions/removals, and typing pauses (`>= 300ms`).
+  - Added undo keyboard shortcut delegation on title input fields in both `NoteSheet.tsx` and `TrayCompanion.tsx`, resolving previous event propagation locks and ensuring `Ctrl+Z`, `Ctrl+Shift+Z`, and `Ctrl+Y` flow fluidly across title and body editors.
+- **Main Dashboard Ingestion Portal Relocation**:
+  - Removed "Open / Ingest File" and "Scan & Import Custom Folder" from the hidden Settings drawer panel (`SettingsPanel.tsx`).
+  - Promoted both utilities directly onto the prominent left-side main dashboard rail (`Sidebar.tsx`) with dedicated actions in both expanded (text labels + icons) and collapsed (compact icon-only buttons with tooltips) sidebar states.
+  - Wired directly to `workspace.importNoteFile()` and `workspace.pickAndScan()`.
+- **Destructive Action Warn Block**:
+  - Intercepted the note Delete (trashcan) action button in `NoteSheet.tsx` and `TrayCompanion.tsx`.
+  - Replaced instant data purge with a clean, theme-matched confirmation popover modal ("Are you sure you want to delete this note? This action cannot be undone.") providing explicit "Cancel" and "Confirm Delete" actions.
+- **Docking Mode Rebranding & Window Lifecycle Parameter**:
+  - Rebranded all software references, title bar labels, system tray menu items, widget titles, and tooltip text tracking "Desk Tray Mode" over to "Docking Mode".
+  - Introduced explicit boolean setting in `AppSettings` (Rust backend & TypeScript bridge): `dock_on_close` (default: `true`).
+  - Added user toggle switch in Settings -> "Window Lifecycle & Docking Mode".
+  - When enabled (`dock_on_close == true`): tapping window close (✕) smoothly collapses the application into its compact floating bar dock.
+  - When disabled (`dock_on_close == false`): tapping window close (✕) terminates the native Rust application process (`app.exit(0)`) and shuts down the runtime environment instantly.
+- **Fault-Tolerant Custom Font Preview Engine**:
+  - Integrated custom font family declaration input within font dropdown popovers in `NoteSheet.tsx` and `TrayCompanion.tsx`, allowing users to apply arbitrary typeface names.
+  - Preserved underlying Markdown file format integrity with frontmatter metadata: writes both `font: "FONT_NAME"` and `font_family: "FONT_NAME"` without modifying document body text.
+  - Deployed strict CSS fallback cascade array: `font-family: "${name}", "DoIT_Default", "Instrument Sans", "Segoe UI Variable Text", "Segoe UI", system-ui, sans-serif;`.
+  - Configured `@font-face` alias `DoIT_Default` mapping safely to bundled webfonts. If an uninstalled or missing font is declared, the layout safely and silently cascades to the default font stack without errors, crashes, or rendering stalls.
+
+## [Section 22] - Critical UI Overhaul: Dropdown Interaction Restoration, Resizable Persistent Editor Drawer & Bento Tile Motion Physics
+- **Dropdown Component Interaction Restoration (The Selector Fix)**:
+  - Fixed unresponsive Font Family and Text Type (Normal, H1, H2, H3) dropdowns across `NoteSheet.tsx`, `HeadingSelect.tsx`, and `TrayCompanion.tsx`.
+  - Removed restrictive horizontal overflow clipping (`overflow-x-auto` was clipping absolutely-positioned dropdown menus) and replaced with `overflow-visible pointer-events-auto`.
+  - Added `pointer-events-auto` and isolated event propagation (`e.stopPropagation()`) across dropdown triggers, popover containers, and menu buttons.
+  - Added `onMouseDown={(e) => { e.preventDefault(); e.stopPropagation(); }}` on dropdown option items so that selecting a typeface or heading level does not blur the editor textarea.
+  - Implemented immediate styling application (`style.fontFamily`) on active editor nodes and restored editor focus without cursor loss or layout freezing.
+- **Dynamic Resizable Right Panel with Persistence Mapping**:
+  - Implemented an interactive resize rail handle (`w-1 hover:w-1.5 cursor-col-resize bg-white/10 hover:bg-white/30 transition-all absolute top-0 left-0 h-full z-40 select-none group/resize`) along the far-left edge of the sliding editor drawer (`NoteSheet.tsx`).
+  - Added drag tracking hooks capturing mouse position deltas (`deltaX = startX - clientX`) to smoothly widen or narrow the editor panel in real-time, clamped between `380px` and `window.innerWidth - 100px`.
+  - Persisted the finalized drawer width to local storage (`doit.drawer_width`) upon mouse release.
+  - Added startup initialization in `App.tsx` reading `localStorage.getItem("doit.drawer_width")` so all subsequent notes and app sessions immediately inherit the user's custom drawer width configuration.
+- **Smooth Bento Tile Expansion Physics (Fluid Motion Transitions)**:
+  - Eliminated rough layout snaps, pops, and visual jitter when text wraps, cards resize, or notes are reordered.
+  - Integrated `motion` from `motion/react` with the `layout` attribute on both the parent bento grid container (`CategoryShelf.tsx`) and individual note card tiles (`NoteTile.tsx`).
+  - Enforced fluid spring transition dynamics: `transition={{ type: "spring", stiffness: 180, damping: 25, mass: 0.8 }}`.
+
+## [Section 23] - Critical UI & Editor Refactor: System Font Ingestion, Minimum Width Safeguards, Dropdown Boundary Protection & Table Escape Engine
+- **Dynamic System Font Ingestion Engine (The Confusing Input Purge)**:
+  - Removed manual text input box and Apply button under 'Custom Font Declaration' across `NoteSheet.tsx` and `TrayCompanion.tsx`.
+  - Added native `get_system_fonts` Tauri command querying the Windows Registry (`HKLM` and `HKCU\SOFTWARE\Microsoft\Windows NT\CurrentVersion\Fonts`) with Web API fallback (`window.queryLocalFonts()`), automatically sweeping all natively installed typefaces without prompts or permissions.
+  - Implemented dynamic, searchable, theme-matched scrollable inner panel inside the typeface dropdown menus with real-time text query filtering, font preview rendering, active font checkmark indication, and one-click immediate application.
+- **Right Editor Side-Panel Minimum Width Safeguards & Absolute Toolbar Visibility**:
+  - Implemented screen-adaptive minimum width threshold in `App.tsx` and `NoteSheet.tsx`: clamping rigidly at `360px` for compact displays (`<= 1280px` screen width) and `420px` for standard/high-resolution multi-monitor configurations.
+  - Absolute Toolbar Visibility: Added `shrink-0` and compact responsive font and heading modes (icon-only font button when drawer width is < 460px; short labels "Normal", "H1", "H2", "H3" in `HeadingSelect.tsx`), ensuring toolbar items (Font, B, I, Header drop-down, Table, Checkbox, Image, Delete, Close) never wrap or get pushed off-screen down to the absolute minimum width stopping point.
+  - Dropdown Clipping Prevention: Converted container layout properties from `overflow-hidden` to `overflow-visible` on the main frame header and sheet chassis, and deployed dynamic viewport detection hooks (`useLayoutEffect` with `getBoundingClientRect()` alignment) on `HeadingSelect`, font dropdown, and shelf dropdown menus, preventing any edge clipping against screen and drawer boundaries.
+- **Table Line-Break Escape Engine (The Enter Line-Break Bug Fix)**:
+  - Enhanced rich-text editor keyboard handler (`handleRichEditorKeyDown` & `moveInTable` in `format.tsx`) for table matrix blocks.
+  - When the cursor is positioned at the conclusion of a table matrix block (or in the final cell with caret at the end, or in an empty trailing row), pressing `Enter` cleanly breaks out of the table layout parameters instead of trapping the cursor or infinitely generating table rows.
+  - Explicitly appends a clean newline paragraph block (`\n` / `<div><br></div>`) right below the table boundary and advances typing cursor focus seamlessly onto the blank text row.

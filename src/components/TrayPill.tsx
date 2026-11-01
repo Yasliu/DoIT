@@ -48,7 +48,7 @@ export function TrayPill({ onOpen }: { onOpen: () => void }) {
           e.preventDefault();
           void tauriApi.showTrayContextMenu();
         }}
-        title="Click to open Desk Tray · Hold and drag to move"
+        title="Click to open Docking Mode · Hold and drag to move"
         className="box-border flex h-full w-full cursor-pointer items-center justify-center gap-2 overflow-hidden whitespace-nowrap rounded-2xl border border-white/10 text-ink-1 transition-opacity duration-200 ease-out"
         style={{
           opacity: shown ? 1 : 0,

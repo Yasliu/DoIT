@@ -650,9 +650,47 @@ export function handleRichEditorKeyDown(
       onInput();
       return true;
     }
-    if (e.key === "Tab" || (e.key === "Enter" && !e.shiftKey)) {
+    if (e.key === "Tab") {
       e.preventDefault();
-      moveInTable(cell, e.key === "Tab" ? (e.shiftKey ? -1 : 1) : 0);
+      moveInTable(cell, e.shiftKey ? -1 : 1);
+      onInput();
+      return true;
+    }
+    if (e.key === "Enter" && !e.shiftKey) {
+      const table = cell.closest("table") as HTMLTableElement | null;
+      if (table) {
+        const cells = Array.from(table.querySelectorAll("th,td")) as HTMLElement[];
+        const isLastCell = cells.indexOf(cell) === cells.length - 1;
+        const tr = cell.closest("tr");
+        const isLastRow = tr && tr === table.querySelector("tbody tr:last-child, tr:last-child");
+        const isRowEmpty = tr && Array.from(tr.children).every((c) => (c.textContent || "").trim() === "");
+
+        if ((isLastCell && caretAtEnd(cell, range)) || (isLastRow && isRowEmpty)) {
+          e.preventDefault();
+          if (isLastRow && isRowEmpty && table.querySelectorAll("tr").length > 1) {
+            tr?.remove();
+          }
+          const tableWrap = (cell.closest(".md-tablewrap") as HTMLElement) || table;
+          let targetLine = tableWrap.nextElementSibling as HTMLElement | null;
+          if (
+            !targetLine ||
+            targetLine.classList.contains("md-tablewrap") ||
+            targetLine.classList.contains("md-pre") ||
+            targetLine.hasAttribute("data-raw") ||
+            targetLine.textContent?.trim()
+          ) {
+            const newLine = document.createElement("div");
+            newLine.appendChild(document.createElement("br"));
+            tableWrap.after(newLine);
+            targetLine = newLine;
+          }
+          placeCaretStart(targetLine);
+          onInput();
+          return true;
+        }
+      }
+      e.preventDefault();
+      moveInTable(cell, 0);
       onInput();
       return true;
     }
@@ -767,7 +805,7 @@ function clearPrefix(block: HTMLElement): void {
   if (!block.firstChild) block.appendChild(document.createElement("br"));
 }
 
-/** Toggles a heading (Ctrl+1/2/3 and the toolbar H1/H2/H3 buttons) on the caret line. */
+/** Toggles or applies a heading (Ctrl+1/2/3 and the toolbar selector) on the caret line. */
 export function applyHeading(editor: HTMLElement, level: number): void {
   wrapStrayNodes(editor);
   let block = currentBlock(editor);
@@ -779,18 +817,22 @@ export function applyHeading(editor: HTMLElement, level: number): void {
   }
   if (block.tagName !== "DIV" || isSpecialBlock(block)) return;
 
-  const isHeading = /\bmd-h\d\b/.test(block.className);
   if (level === 0) {
-    if (isHeading) clearPrefix(block);
-    return;
-  }
-  const cls = `md-h${level}`;
-  if (block.classList.contains(cls)) {
     clearPrefix(block);
   } else {
     block.querySelectorAll(".md-cb").forEach((b) => b.remove());
     block.setAttribute("data-p", `${"#".repeat(level)} `);
-    block.className = cls;
+    block.className = `md-h${level}`;
+  }
+
+  // Preserve editor selection inside the modified block
+  const sel = window.getSelection();
+  if (sel) {
+    const range = document.createRange();
+    range.selectNodeContents(block);
+    range.collapse(false);
+    sel.removeAllRanges();
+    sel.addRange(range);
   }
 }
 
@@ -828,6 +870,24 @@ function moveInTable(cell: HTMLElement, dir: number, forceRow = false): void {
   if (forceRow) target = cells.length;
 
   if (target >= cells.length) {
+    if (dir === 0) {
+      const tableWrap = (cell.closest(".md-tablewrap") as HTMLElement) || table;
+      let targetLine = tableWrap.nextElementSibling as HTMLElement | null;
+      if (
+        !targetLine ||
+        targetLine.classList.contains("md-tablewrap") ||
+        targetLine.classList.contains("md-pre") ||
+        targetLine.hasAttribute("data-raw") ||
+        targetLine.textContent?.trim()
+      ) {
+        const newLine = document.createElement("div");
+        newLine.appendChild(document.createElement("br"));
+        tableWrap.after(newLine);
+        targetLine = newLine;
+      }
+      placeCaretStart(targetLine);
+      return;
+    }
     const body = table.querySelector("tbody") ?? table.appendChild(document.createElement("tbody"));
     const row = document.createElement("tr");
     const aligns = (table.getAttribute("data-align") || "").split(",");

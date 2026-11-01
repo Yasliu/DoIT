@@ -5,11 +5,11 @@ import {
   Check,
   CheckCircle2,
   Folder,
-  FolderInput,
   FolderSearch,
   HardDrive,
   Keyboard,
   Layers,
+  PanelRightClose,
   RefreshCw,
   RotateCcw,
   ScanLine,
@@ -104,48 +104,7 @@ export function SettingsPanel({ onBack, onStoragePathChanged, onThemeChanged }: 
     }
   };
 
-  const handleImportSingleFile = async () => {
-    setIngestStatus(null);
-    try {
-      const note = await tauriApi.importSingleMarkdownFile();
-      setIngestStatus({
-        type: "success",
-        message: `Successfully ingested "${note.title || "Untitled"}" into ${note.category}.`,
-      });
-      onStoragePathChanged();
-    } catch (err: any) {
-      const msg = typeof err === "string" ? err : err?.message || "Failed to import file";
-      if (!msg.toLowerCase().includes("cancelled")) {
-        setIngestStatus({
-          type: "error",
-          message: msg,
-        });
-      }
-    }
-  };
 
-  const handlePickAndScan = async () => {
-    setIngestStatus(null);
-    setIsScanning(true);
-    try {
-      const res = await tauriApi.pickAndScanFolder();
-      setIngestStatus({
-        type: "info",
-        message: `Scanned ${res.total_scanned} files: ${res.imported_count} notes imported (${res.skipped_count} files skipped).`,
-      });
-      onStoragePathChanged();
-    } catch (err: any) {
-      const msg = typeof err === "string" ? err : err?.message || "Failed to scan folder";
-      if (!msg.toLowerCase().includes("cancelled")) {
-        setIngestStatus({
-          type: "error",
-          message: msg,
-        });
-      }
-    } finally {
-      setIsScanning(false);
-    }
-  };
 
   const handleScanCurrentRepo = async () => {
     setIngestStatus(null);
@@ -167,10 +126,20 @@ export function SettingsPanel({ onBack, onStoragePathChanged, onThemeChanged }: 
     }
   };
 
+  const handleToggleDockOnClose = async (checked: boolean) => {
+    const nextSettings: AppSettings = {
+      ...settings,
+      dock_on_close: checked,
+    };
+    setSettings(nextSettings);
+    await tauriApi.updateSettings(nextSettings);
+  };
+
   const handleSave = async () => {
     const nextSettings: AppSettings = {
       ...settings,
       storage_path: pathInput.trim() || settings.storage_path,
+      dock_on_close: settings.dock_on_close ?? true,
     };
     const pathChanged = nextSettings.storage_path !== settings.storage_path;
     const res = await tauriApi.updateSettings(nextSettings);
@@ -366,7 +335,44 @@ export function SettingsPanel({ onBack, onStoragePathChanged, onThemeChanged }: 
           </div>
         </section>
 
-        {/* SECTION 3: Markdown & Text Import */}
+        {/* SECTION 3: Window Lifecycle & Docking Mode */}
+        <section className="glass rounded-[20px] p-5 shadow-[0_20px_50px_-20px_rgba(0,0,0,0.8)] border border-white/10">
+          <div className="flex items-start gap-3">
+            <div className="grid size-9 shrink-0 place-items-center rounded-xl bg-white/[0.06] text-white">
+              <PanelRightClose size={17} strokeWidth={1.8} />
+            </div>
+            <div className="flex-1 min-w-0">
+              <h2 className="text-[14px] font-semibold text-ink-1">
+                Window Lifecycle & Docking Mode
+              </h2>
+              <p className="mt-1 text-[12px] leading-relaxed text-ink-3">
+                Configure runtime termination and window minimize behavior on exit.
+              </p>
+            </div>
+          </div>
+
+          <div className="mt-4 rounded-xl bg-white/[0.03] p-4 border border-white/[0.06] flex items-center justify-between">
+            <div className="pr-4">
+              <div className="text-[13px] font-medium text-ink-1">
+                Enable Docking Mode on Window Close
+              </div>
+              <div className="mt-0.5 text-[11.5px] text-ink-4">
+                When enabled, clicking (✕) collapses DoIT smoothly into its floating bar dock. When disabled, clicking (✕) terminates the native application instantly.
+              </div>
+            </div>
+            <label className="relative inline-flex items-center cursor-pointer shrink-0">
+              <input
+                type="checkbox"
+                checked={settings.dock_on_close ?? true}
+                onChange={(e) => void handleToggleDockOnClose(e.target.checked)}
+                className="sr-only peer"
+              />
+              <div className="w-11 h-6 bg-white/10 peer-focus:outline-none rounded-full peer peer-checked:after:translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-white after:rounded-full after:h-5 after:w-5 after:transition-all peer-checked:bg-white/30 border border-white/20"></div>
+            </label>
+          </div>
+        </section>
+
+        {/* SECTION 4: Repository Synchronization */}
         <section className="glass rounded-[20px] p-5 shadow-[0_20px_50px_-20px_rgba(0,0,0,0.8)] border border-white/10">
           <div className="flex items-start gap-3">
             <div className="grid size-9 shrink-0 place-items-center rounded-xl bg-white/[0.06] text-white">
@@ -374,10 +380,10 @@ export function SettingsPanel({ onBack, onStoragePathChanged, onThemeChanged }: 
             </div>
             <div className="flex-1 min-w-0">
               <h2 className="text-[14px] font-semibold text-ink-1">
-                Markdown & Text Import
+                Repository Synchronization
               </h2>
               <p className="mt-1 text-[12px] leading-relaxed text-ink-3">
-                Import and scan any <code className="text-white font-mono text-[11px] bg-white/10 px-1 py-0.5 rounded">.md</code> or <code className="text-white font-mono text-[11px] bg-white/10 px-1 py-0.5 rounded">.txt</code> file across devices. No special header or metadata is needed.
+                Rescan and index all <code className="text-white font-mono text-[11px] bg-white/10 px-1 py-0.5 rounded">.md</code> or <code className="text-white font-mono text-[11px] bg-white/10 px-1 py-0.5 rounded">.txt</code> files in the active notes storage directory. File import and custom folder scans are also accessible on the main dashboard sidebar.
               </p>
             </div>
           </div>
@@ -386,27 +392,9 @@ export function SettingsPanel({ onBack, onStoragePathChanged, onThemeChanged }: 
           <div className="mt-4 flex flex-wrap items-center gap-2.5">
             <button
               type="button"
-              onClick={handleImportSingleFile}
-              className="flex h-9 items-center rounded-xl border border-white/15 bg-white/[0.07] px-3.5 text-[12px] font-medium text-white hover:bg-white/[0.14] transition-all cursor-pointer"
-            >
-              <span>Open / Ingest File</span>
-            </button>
-
-            <button
-              type="button"
-              onClick={handlePickAndScan}
-              disabled={isScanning}
-              className="flex h-9 items-center gap-2 rounded-xl border border-white/15 bg-white/[0.07] px-3.5 text-[12px] font-medium text-white hover:bg-white/[0.14] transition-all cursor-pointer disabled:opacity-50"
-            >
-              <FolderInput size={14} />
-              <span>{isScanning ? "Scanning..." : "Scan & Import Custom Folder"}</span>
-            </button>
-
-            <button
-              type="button"
               onClick={handleScanCurrentRepo}
               disabled={isScanning}
-              className="flex h-9 items-center gap-1.5 rounded-xl border border-white/10 bg-white/[0.03] px-3 text-[12px] text-ink-3 hover:bg-white/[0.08] hover:text-white transition-all cursor-pointer ml-auto"
+              className="flex h-9 items-center gap-1.5 rounded-xl border border-white/10 bg-white/[0.06] px-3.5 text-[12px] text-white hover:bg-white/[0.12] transition-all cursor-pointer"
             >
               <RefreshCw size={12} className={isScanning ? "animate-spin" : ""} />
               <span>Sync Repository</span>
@@ -481,11 +469,11 @@ export function SettingsPanel({ onBack, onStoragePathChanged, onThemeChanged }: 
               />
             </div>
 
-            {/* Minimize to Tray */}
+            {/* Toggle Docking Mode */}
             <div className="rounded-xl bg-white/[0.03] p-3 border border-white/[0.06] flex items-center justify-between">
               <div>
-                <div className="text-[12.5px] font-medium text-ink-2">Minimize to Tray</div>
-                <div className="text-[10.5px] text-ink-4">Hides to Windows Taskbar Tray</div>
+                <div className="text-[12.5px] font-medium text-ink-2">Toggle Docking Mode</div>
+                <div className="text-[10.5px] text-ink-4">Switch between Canvas and Dock</div>
               </div>
               <input
                 type="text"

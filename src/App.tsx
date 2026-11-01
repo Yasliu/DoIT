@@ -36,6 +36,28 @@ function readCollapsed(): Record<string, boolean> {
   }
 }
 
+export function getAdaptiveMinDrawerWidth(): number {
+  // Screen-Adaptive Minimum Threshold: 360px on compact screens, 420px on standard/high-res displays
+  return window.innerWidth <= 1280 ? 360 : 420;
+}
+
+function getStoredDrawerWidth(): number {
+  const minW = getAdaptiveMinDrawerWidth();
+  const maxW = Math.max(minW, window.innerWidth - 100);
+  try {
+    const raw = localStorage.getItem("doit.drawer_width");
+    if (raw) {
+      const parsed = parseInt(raw, 10);
+      if (!isNaN(parsed) && parsed >= 300) {
+        return Math.max(minW, Math.min(maxW, parsed));
+      }
+    }
+  } catch {
+    /* ignore */
+  }
+  return Math.max(minW, Math.min(640, Math.round(window.innerWidth * 0.42)));
+}
+
 export default function App() {
   const workspace = useWorkspace();
   const { notes, shelves, state, create, patch, remove, restore, moveCategory, deleteCategory, createCategory, renameCategory, reorderNote } = workspace;
@@ -45,6 +67,7 @@ export default function App() {
   const [query, setQuery] = useState("");
   const [active, setActive] = useState<string | null>(null);
   const [openNote, setOpenNote] = useState<OpenNote | null>(null);
+  const [drawerWidth, setDrawerWidth] = useState<number>(getStoredDrawerWidth);
   const [contextMenu, setContextMenu] = useState<{ x: number; y: number; note: NoteItem } | null>(null);
   const [categoryMenu, setCategoryMenu] = useState<{ x: number; y: number; shelf: string } | null>(null);
   const [sheetClosing, setSheetClosing] = useState(false);
@@ -331,6 +354,18 @@ export default function App() {
     }
   }, [workspace, notify, originFromCanvas]);
 
+  const handleScanFolder = useCallback(async () => {
+    try {
+      const summary = await workspace.pickAndScan();
+      notify(`Imported ${summary.imported_count} notes (${summary.total_scanned} scanned)`);
+    } catch (err: any) {
+      const msg = typeof err === "string" ? err : err?.message || "";
+      if (msg && !msg.toLowerCase().includes("cancelled")) {
+        notify(msg);
+      }
+    }
+  }, [workspace, notify]);
+
   const counts = useMemo(() => {
     const map: Record<string, number> = {};
     notes.forEach((note) => {
@@ -395,6 +430,8 @@ export default function App() {
           isSettings={isSettings}
           onDeleteCategory={(cat) => void deleteCategory(cat)}
           onCategoryContextMenu={(event, shelf) => setCategoryMenu({ x: event.clientX, y: event.clientY, shelf })}
+          onImportFile={handleImportNote}
+          onScanFolder={handleScanFolder}
         />
       )}
 
@@ -459,9 +496,9 @@ export default function App() {
 
           {/* Right-side sliding editor drawer: reserves space so the dashboard stays visible + interactive */}
           <aside
-            className="relative shrink-0"
+            className="relative shrink-0 overflow-visible"
             style={{
-              width: openFresh && openNote && sheetReserve && !sheetClosing ? "clamp(420px, 42vw, 600px)" : 0,
+              width: openFresh && openNote && sheetReserve && !sheetClosing ? drawerWidth : 0,
               marginLeft: openFresh && openNote && sheetReserve && !sheetClosing ? 12 : 0,
               transition: sheetClosing
                 ? "width 300ms ease-out, margin-left 300ms ease-out"
@@ -476,6 +513,8 @@ export default function App() {
                 canvas={canvasRef.current}
                 shelves={shelves}
                 instant={wasSheetOpen.current}
+                width={drawerWidth}
+                onResizeWidth={setDrawerWidth}
                 onClosing={() => setSheetClosing(true)}
                 onOpening={() => setSheetReserve(true)}
                 onCommit={commitSheet}
