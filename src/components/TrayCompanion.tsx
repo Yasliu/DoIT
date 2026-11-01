@@ -715,6 +715,8 @@ export function TrayCompanion() {
             </div>
 
             <div className="flex items-center gap-0.5">
+              {!rawMode && (
+              <>
               {/* Typeface selector */}
               <div className="relative">
                 <button
@@ -739,7 +741,7 @@ export function TrayCompanion() {
                     <div
                       onPointerDown={(e) => e.stopPropagation()}
                       onMouseDown={(e) => e.stopPropagation()}
-                      className="absolute right-0 top-7 z-50 w-[210px] rounded-xl bg-[#14151a] border border-white/20 p-2 shadow-[0_25px_60px_rgba(0,0,0,0.95)] pointer-events-auto"
+                      className="absolute right-0 top-7 z-50 w-[210px] max-h-[380px] sm:max-h-[420px] overflow-y-auto scrollbar-thin rounded-xl bg-[#14151a] border border-white/20 p-2 shadow-[0_25px_60px_rgba(0,0,0,0.95)] pointer-events-auto"
                     >
                       <div className="text-[9.5px] font-mono uppercase tracking-[0.12em] text-ink-4 px-1.5 py-0.5 select-none">
                         Font Presets
@@ -829,6 +831,8 @@ export function TrayCompanion() {
                   </>
                 )}
               </div>
+              </>
+              )}
 
               {!rawMode && (
               <>

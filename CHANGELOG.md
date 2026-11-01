@@ -442,3 +442,15 @@ Note: `--disable-gpu` would reach ~95 MB too but forces software compositing of 
   - Enhanced rich-text editor keyboard handler (`handleRichEditorKeyDown` & `moveInTable` in `format.tsx`) for table matrix blocks.
   - When the cursor is positioned at the conclusion of a table matrix block (or in the final cell with caret at the end, or in an empty trailing row), pressing `Enter` cleanly breaks out of the table layout parameters instead of trapping the cursor or infinitely generating table rows.
   - Explicitly appends a clean newline paragraph block (`\n` / `<div><br></div>`) right below the table boundary and advances typing cursor focus seamlessly onto the blank text row.
+
+## [Section 24] - v1.1.4: Mode-Specific Font Restrictions, Viewport Bounding Constraints & Startup Update Log Modal
+- **Mode-Specific Font Visibility & Editing Restrictions**:
+  - Restricted typeface selection controls strictly to rich Markdown mode ('MD Mode').
+  - When the editor is toggled into raw 'Text Mode' (monospace plain text view), the font selection dropdown is completely hidden from the top toolbar row across both `NoteSheet.tsx` and `TrayCompanion.tsx`.
+- **Font Dropdown Viewport Bounds & Clipping Eradication**:
+  - Enforced strict structural height limits and scrolling mechanics on the font picker popover container chassis: `max-h-[380px] sm:max-h-[420px] overflow-y-auto scrollbar-thin`.
+  - Added clean viewport boundary constraints ensuring the dropdown never bleeds past the bottom window chassis or truncates system font indexes on compact screens.
+- **One-Time Post-Update Log Interface (Version v1.1.4 Modal)**:
+  - Added persistent version storage tracker (`doit.release_notes_version`).
+  - On application startup lifecycle initialization, compares cached version token against current binary version ("1.1.4"). If lower or missing, presents the clean monochrome overlay release modal and updates storage immediately.
+  - Features concise summary notes, a direct GitHub changelog documentation link, and a one-click "Got it" permanent dismissal trigger.

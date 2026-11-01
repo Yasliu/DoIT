@@ -12,6 +12,7 @@ import { SettingsPanel } from "./components/SettingsPanel";
 import { Sidebar } from "./components/Sidebar";
 import { TitleBar } from "./components/TitleBar";
 import { UpdateInfo, UpdateModal } from "./components/UpdateModal";
+import { ReleaseLogModal } from "./components/ReleaseLogModal";
 import { useWorkspace } from "./hooks/useWorkspace";
 
 interface OpenNote {
@@ -26,6 +27,21 @@ interface Toast {
 }
 
 const COLLAPSE_KEY = "doit.collapsed";
+const CURRENT_VERSION = "1.1.4";
+const VERSION_TRACKER_KEY = "doit.release_notes_version";
+
+function isVersionLower(current: string | null, target: string): boolean {
+  if (!current) return true;
+  const c = current.replace(/^v/, "").split(".").map(Number);
+  const t = target.replace(/^v/, "").split(".").map(Number);
+  for (let i = 0; i < 3; i++) {
+    const cv = c[i] || 0;
+    const tv = t[i] || 0;
+    if (cv < tv) return true;
+    if (cv > tv) return false;
+  }
+  return false;
+}
 
 function readCollapsed(): Record<string, boolean> {
   try {
@@ -80,6 +96,7 @@ export default function App() {
   const [toast, setToast] = useState<Toast | null>(null);
   const [themeMode, setThemeMode] = useState<"glass" | "monochrome">("glass");
   const [availableUpdate, setAvailableUpdate] = useState<UpdateInfo | null>(null);
+  const [showReleaseModal, setShowReleaseModal] = useState(false);
   const toastTimer = useRef(0);
   const deepLinkUsed = useRef(false);
 
@@ -152,6 +169,18 @@ export default function App() {
       window.clearInterval(interval);
     };
   }, [checkForUpdate]);
+
+  useEffect(() => {
+    try {
+      const stored = localStorage.getItem(VERSION_TRACKER_KEY);
+      if (!stored || isVersionLower(stored, CURRENT_VERSION)) {
+        setShowReleaseModal(true);
+        localStorage.setItem(VERSION_TRACKER_KEY, CURRENT_VERSION);
+      }
+    } catch {
+      /* ignore storage errors */
+    }
+  }, []);
 
   useEffect(() => {
     void tauriApi.getSettings().then((s) => {
@@ -611,6 +640,7 @@ export default function App() {
       )}
 
       {availableUpdate && <UpdateModal info={availableUpdate} />}
+      {showReleaseModal && <ReleaseLogModal onClose={() => setShowReleaseModal(false)} />}
     </div>
   );
 }
