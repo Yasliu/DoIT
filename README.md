@@ -70,15 +70,23 @@ Drop any `.md` or `.txt` files into your note repository folder, hit **Sync Repo
   <img src="docs/shot-save.jpg" width="700" alt="The Save button for externally opened files">
 </p>
 
-## What's new in v1.1.4
+## What's new in v1.1.5
 
-- Open `.md` / `.txt` files directly through DoIT and edit them in place
-- Explicit **Save** button for externally opened files; DoIT-native notes autosave
+- The tray companion now checks where it sits on the screen and always expands toward the open space: near the left edge it grows right, near the right edge it grows left, and the same applies up and down
+- Smoother pill-to-panel animation: expanding the tray no longer jumps or snaps
 
 The full history lives in the release log below.
 
 <details>
 <summary><strong>Release log</strong> (click to expand)</summary>
+
+<details>
+<summary><strong>v1.1.5</strong> — November 1, 2026</summary>
+
+- The tray companion figures out which part of the screen it's docked to before expanding, so the panel always grows toward your open space instead of off the edge
+- The expand animation now moves in sync with the window, removing the small jumps and snaps you could catch when the pill turned into a panel
+
+</details>
 
 <details>
 <summary><strong>v1.1.4</strong> — November 1, 2026</summary>
