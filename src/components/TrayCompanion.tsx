@@ -1304,29 +1304,29 @@ export function TrayCompanion() {
       {/* Theme-matched delete confirmation popover modal */}
       {showDeleteConfirm && activeNote && (
         <div
-          className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 backdrop-blur-sm p-3 animate-in fade-in duration-150"
+          className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 backdrop-blur-sm p-4 animate-in fade-in duration-150 select-none pointer-events-auto"
           onPointerDown={(e) => e.stopPropagation()}
           onClick={() => setShowDeleteConfirm(false)}
         >
           <div
             onPointerDown={(e) => e.stopPropagation()}
             onClick={(e) => e.stopPropagation()}
-            className="w-full max-w-[280px] rounded-2xl border border-white/15 bg-[#14151a] p-4 shadow-[0_25px_60px_rgba(0,0,0,0.95)] text-center animate-in zoom-in-95 duration-150"
+            className="w-[calc(100%-32px)] max-w-[320px] min-w-[200px] rounded-2xl border border-white/15 bg-[#14151a] p-4 sm:p-5 shadow-[0_25px_60px_rgba(0,0,0,0.95)] text-center whitespace-normal break-words animate-in zoom-in-95 duration-150"
           >
             <div className="mx-auto mb-2.5 grid size-9 place-items-center rounded-xl bg-red-500/10 text-red-400">
               <Trash size={16} strokeWidth={2} />
             </div>
-            <h3 className="text-[13px] font-semibold text-white">
+            <h3 className="text-[13px] sm:text-[13.5px] font-semibold text-white tracking-tight whitespace-normal">
               Delete this note?
             </h3>
-            <p className="mt-1 text-[11px] text-ink-3 leading-relaxed">
+            <p className="mt-1.5 text-[11px] sm:text-[11.5px] text-ink-3 leading-relaxed whitespace-normal break-words px-1">
               Are you sure you want to delete this note? This action cannot be undone.
             </p>
             <div className="mt-4 grid grid-cols-2 gap-2">
               <button
                 type="button"
                 onClick={() => setShowDeleteConfirm(false)}
-                className="h-7 rounded-xl bg-white/[0.08] hover:bg-white/[0.14] text-[11.5px] font-medium text-ink-1 transition-colors cursor-pointer"
+                className="h-7.5 rounded-xl bg-white/[0.08] hover:bg-white/[0.14] text-[11.5px] font-medium text-ink-1 transition-colors cursor-pointer whitespace-nowrap"
               >
                 Cancel
               </button>
@@ -1337,7 +1337,7 @@ export function TrayCompanion() {
                   remove(activeNote.id);
                   handleBack();
                 }}
-                className="h-7 rounded-xl bg-red-500/20 hover:bg-red-500/30 border border-red-500/30 text-[11.5px] font-medium text-red-200 transition-colors cursor-pointer"
+                className="h-7.5 rounded-xl bg-red-500/20 hover:bg-red-500/30 border border-red-500/30 text-[11.5px] font-medium text-red-200 transition-colors cursor-pointer whitespace-nowrap"
               >
                 Confirm Delete
               </button>

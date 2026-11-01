@@ -1093,15 +1093,15 @@ export function NoteSheet({
           <div
             onPointerDown={(e) => e.stopPropagation()}
             onClick={(e) => e.stopPropagation()}
-            className="w-full max-w-[320px] rounded-2xl border border-white/15 bg-[#14151a] p-5 shadow-[0_25px_60px_rgba(0,0,0,0.95)] text-center animate-in zoom-in-95 duration-150"
+            className="w-[calc(100%-32px)] max-w-[340px] min-w-[220px] rounded-2xl border border-white/15 bg-[#14151a] p-5 shadow-[0_25px_60px_rgba(0,0,0,0.95)] text-center whitespace-normal break-words animate-in zoom-in-95 duration-150"
           >
             <div className="mx-auto mb-3 grid size-10 place-items-center rounded-xl bg-red-500/10 text-red-400">
               <Trash size={18} strokeWidth={2} />
             </div>
-            <h3 className="text-[14px] font-semibold text-white">
+            <h3 className="text-[14px] font-semibold text-white tracking-tight whitespace-normal">
               Delete this note?
             </h3>
-            <p className="mt-1 text-[12px] text-ink-3 leading-relaxed">
+            <p className="mt-1.5 text-[12px] text-ink-3 leading-relaxed whitespace-normal break-words px-1">
               Are you sure you want to delete this note? This action cannot be undone.
             </p>
             <div className="mt-5 grid grid-cols-2 gap-2">

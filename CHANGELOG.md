@@ -18,6 +18,10 @@
   - `grow_y === "down" ? -24 : 24`
 - **Zero-Glitch Spring Curves**: Configured `motion.div` with spring stiffness `420` and damping `32`, eliminating window position jumps and layout snaps during pill-to-panel transitions.
 
+### 3. Dynamic Delete Confirmation Modal & Text Wrap Fix (`src/components/TrayCompanion.tsx`, `src/components/NoteSheet.tsx`)
+- **Text Overflow Fix**: Resolved inherited `whitespace-nowrap` on delete confirmation dialogs by applying `whitespace-normal break-words`, ensuring warning messages wrap cleanly without spilling out of the modal chassis.
+- **Responsive Dynamic Sizing**: Replaced hardcoded fixed pixel widths (`max-w-[280px]`) with dynamic responsive limits (`w-[calc(100%-32px)] max-w-[320px] min-w-[200px]`), ensuring proportional margins across all tray and canvas dimensions.
+
 ## [2026-11-01] - Version 1.1.4: Viewport Bounding Clamps, Ingestion Bar Breathing Room & Persistent Single-Show Release Modal
 
 ### 1. Tray Companion Font Dropdown Viewport Clamping (`src/components/TrayCompanion.tsx`, `src/components/NoteSheet.tsx`)
