@@ -261,8 +261,8 @@ export function BentoCanvas({
       )}
       style={{ scrollbarGutter: "stable" }}
     >
-      <div className="mx-auto w-full max-w-[1000px] px-6 pb-44 pt-5">
-        <header className="flex items-start justify-between gap-8">
+      <div className="mx-auto w-full max-w-[1000px] px-4 sm:px-6 pb-44 pt-5">
+        <header className="flex flex-wrap items-start justify-between gap-4 sm:gap-8">
           <div className="min-w-0">
             <div className="micro">{today}</div>
             <h1 className="mt-2.5 text-[32px] font-medium leading-[1.04] tracking-[-0.04em] text-ink-1">

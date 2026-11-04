@@ -45,9 +45,18 @@
   - **Row 2**: Mode toggle (`MD MODE` / `TEXT MODE`) on the left, and rich formatting tools (Typeface, Bold, Italic, Heading, Table, Task, Image) on the right.
 - **Vertical Screen Slide-Down**: When screen aspect ratio is portrait or width is constrained, the note panel slides down cleanly to occupy the bottom half (`w-full h-full`), entering/exiting with vertical translation and zero crowded buttons.
 
-### 11. Dock Taskbar Clamping Calibration & Closed-Start Logic (`src-tauri/src/commands.rs`, `src/App.tsx`, `src/components/TrayCompanion.tsx`)
-- **Exact Taskbar Boundary Offset**: Calibrated `margin_y` from `72px` to `12px` relative to `rcWork.bottom`, ensuring the dock sits neatly directly above the taskbar in the bottom-right corner without hovering excessively high.
-- **Context-Aware Initial State**: Opening Docking Mode without an active note starts the dock collapsed as the small `TrayPill`; opening it while inside a note opens the full panel with that note.
+### 12. Responsive Container Query Canvas & Anti-Crush Protection (`src/lib/text.ts`, `src/components/CategoryShelf.tsx`, `src/components/NoteTile.tsx`, `src/components/BentoCanvas.tsx`, `src/components/NoteSheet.tsx`)
+- **Container Queries for Note Shelves**: Migrated `SPANS` from global viewport breakpoints (`md:col-span-6`) to container query constraints (`@[540px]:col-span-6`). When the canvas is resized beside an open note drawer, cards automatically collapse into full-width single-column tiles (`col-span-12`) instead of crushing into 80px vertical slivers.
+- **Canvas Minimum Width Clamp**: Clamped drawer resize so that the canvas preserves at least 420px. Pulling the drawer past 72% of the window width or within 180px of the edge smoothly transitions into full Maximize mode rather than squishing the canvas.
+- **Responsive Canvas Header**: Replaced rigid `gap-8` flex headers with wrapping flex layout so titles, dates, and category buttons never truncate each other in compact widths.
+
+### 13. Dynamic Compact Toolbar, Boundary-Free Dock Hover, & Standalone Release (`src/components/NoteSheet.tsx`, `src/components/TrayCompanion.tsx`, `src/components/TrayPill.tsx`, `src-tauri/src/commands.rs`)
+- **Dynamic Compact Formatting Controls**: Added automatic compact modes to `ModeToggle` (`MD` / `TXT`), font selector (icon-only), and heading selector when the drawer width is under 520px. All bottom-row formatting buttons (`ListChecks`, `ImageIcon`, `TableMenu`) stay fully visible without getting clipped off the edge.
+- **Two-Line Delete Confirmation Modal**: Added explicit structured two-line layout (`Are you sure you want to delete this note?<br/>This action cannot be undone.`) and `whitespace-normal break-words` to delete confirmation modals in both canvas and dock modes, eliminating text truncation (`...cannot be und`).
+- **Dock Pill Boundary Padding**: Expanded the native pill window from 180x44 to 200x52 with an inner 172x38 pill, giving 14px of transparent margin so the `scale: 1.055` hover bubble animation never clips against native window borders.
+- **Native Drag Gesture Reset**: Wrapped `tauriApi.beginDrag().finally(...)` and attached global `pointerup` / `pointerleave` listeners to prevent hover state locks when dragging the dock between monitors.
+- **Fluid Synchronized Maximization**: Replaced abrupt `display: none` layout switches with synchronized `420ms cubic-bezier(0.22, 1, 0.36, 1)` transitions across both canvas and note drawer.
+- **Standalone Offline Binary**: Compiled release executable `doit.exe` with embedded assets, completely eliminating `localhost` connection errors.
 
 ### 12. Zero-Lag Resizing with Auto-Maximize Snapping (`src/components/NoteSheet.tsx`, `src/App.tsx`)
 - **Transition Suppression**: Disabled CSS transitions on `<aside>` during active dragging via `isResizingSheet`, delivering instantaneous 60 FPS cursor tracking.

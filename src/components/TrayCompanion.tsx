@@ -1373,16 +1373,17 @@ export function TrayCompanion() {
           <div
             onPointerDown={(e) => e.stopPropagation()}
             onClick={(e) => e.stopPropagation()}
-            className="w-[90%] max-w-[320px] rounded-2xl border border-white/15 bg-[#14151a] p-4 sm:p-5 shadow-[0_25px_60px_rgba(0,0,0,0.95)] text-center animate-in zoom-in-95 duration-150"
+            className="w-[90%] max-w-[320px] rounded-2xl border border-white/15 bg-[#14151a] p-4 sm:p-5 shadow-[0_25px_60px_rgba(0,0,0,0.95)] text-center whitespace-normal select-text animate-in zoom-in-95 duration-150"
           >
             <div className="mx-auto mb-2.5 grid size-9 place-items-center rounded-xl bg-red-500/10 text-red-400">
               <Trash size={16} strokeWidth={2} />
             </div>
-            <h3 className="text-[13.5px] font-semibold text-white tracking-tight">
+            <h3 className="text-[13.5px] font-semibold text-white tracking-tight whitespace-normal">
               Delete this note?
             </h3>
             <p className="mt-2 text-[12px] text-ink-3 leading-relaxed whitespace-normal break-words text-center px-1">
-              Are you sure you want to delete this note? This action cannot be undone.
+              Are you sure you want to delete this note?
+              <span className="block mt-0.5 text-ink-4">This action cannot be undone.</span>
             </p>
             <div className="mt-4 grid grid-cols-2 gap-2">
               <button

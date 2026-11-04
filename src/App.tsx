@@ -534,7 +534,10 @@ export default function App() {
         <div className={cx("min-h-0 flex-1 px-3 pb-3", isVerticalScreen ? "flex flex-col" : "flex")}>
           <main
             ref={canvasRef}
-            className={cx("relative min-w-0 overflow-hidden", isNoteMaximized ? "hidden" : "flex-1")}
+            className={cx(
+              "relative min-w-0 overflow-hidden transition-[opacity,flex,width] duration-300 ease-out",
+              isNoteMaximized ? "opacity-0 pointer-events-none flex-none w-0" : "opacity-100 flex-1",
+            )}
           >
             <div aria-hidden="true" className="lightscape" />
             <div className="relative z-10 h-full">
@@ -608,8 +611,8 @@ export default function App() {
                     ? "height 300ms ease-out, margin-top 300ms ease-out"
                     : "width 300ms ease-out, margin-left 300ms ease-out"
                   : isVerticalScreen
-                    ? "height 460ms cubic-bezier(0.32, 0.72, 0, 1), margin-top 460ms cubic-bezier(0.32, 0.72, 0, 1)"
-                    : "width 460ms cubic-bezier(0.32, 0.72, 0, 1), margin-left 460ms cubic-bezier(0.32, 0.72, 0, 1)",
+                    ? "height 420ms cubic-bezier(0.22, 1, 0.36, 1), margin-top 420ms cubic-bezier(0.22, 1, 0.36, 1)"
+                    : "width 420ms cubic-bezier(0.22, 1, 0.36, 1), margin-left 420ms cubic-bezier(0.22, 1, 0.36, 1), flex 420ms cubic-bezier(0.22, 1, 0.36, 1)",
             }}
           >
             {openFresh && openNote && (

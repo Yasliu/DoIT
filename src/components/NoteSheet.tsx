@@ -185,11 +185,10 @@ export function NoteSheet({
       if (!isResizing.current) return;
       const deltaX = startX.current - moveEvent.clientX;
       const minW = getAdaptiveMinW();
-      const maxW = Math.max(minW, window.innerWidth - 100);
-      const nextW = Math.round(Math.min(Math.max(startWidth.current + deltaX, minW), maxW));
+      const rawW = startWidth.current + deltaX;
 
       // Dragged past threshold snaps straight into maximize mode
-      if (nextW >= window.innerWidth * 0.78 || nextW >= window.innerWidth - 120) {
+      if (rawW >= window.innerWidth * 0.72 || rawW >= window.innerWidth - 180) {
         isResizing.current = false;
         onResizeStateChange?.(false);
         document.body.style.userSelect = "";
@@ -199,6 +198,10 @@ export function NoteSheet({
         onToggleMaximize?.();
         return;
       }
+
+      // Preserve canvas breathing room so notes never crush into thin slivers
+      const maxW = Math.max(minW, window.innerWidth - 440);
+      const nextW = Math.round(Math.min(Math.max(rawW, minW), maxW));
       onResizeWidth?.(nextW);
     };
 
@@ -213,7 +216,7 @@ export function NoteSheet({
 
       const deltaX = startX.current - upEvent.clientX;
       const minW = getAdaptiveMinW();
-      const maxW = Math.max(minW, window.innerWidth - 100);
+      const maxW = Math.max(minW, window.innerWidth - 440);
       const finalW = Math.round(Math.min(Math.max(startWidth.current + deltaX, minW), maxW));
       onResizeWidth?.(finalW);
       try {
@@ -578,15 +581,15 @@ export function NoteSheet({
                   ? "translate3d(0,106%,0)"
                   : "translate3d(106%,0,0)",
           opacity: phase === "pre" ? 0 : 1,
-          // entry: long soft landing + quick fade; exit keeps the plain 300ms ease-out
+          // entry: long soft landing + quick fade; maximize/restore: smooth spring
           transition:
-            isResizing.current || isMaximized
+            isResizing.current
               ? "none"
               : phase === "settled"
-                ? "none"
+                ? "width 420ms cubic-bezier(0.22, 1, 0.36, 1)"
                 : phase === "out"
                   ? "transform 300ms ease-out"
-                  : "transform 460ms cubic-bezier(0.32, 0.72, 0, 1), opacity 240ms ease-out",
+                  : "width 420ms cubic-bezier(0.22, 1, 0.36, 1), transform 460ms cubic-bezier(0.32, 0.72, 0, 1), opacity 240ms ease-out",
           willChange: phase === "settled" ? "auto" : "transform",
         }}
         className={cx(
@@ -724,13 +727,13 @@ export function NoteSheet({
         </div>
 
         {/* Row 2: Mode Toggle & Formatting Tools */}
-        <div className="flex shrink-0 items-center justify-between gap-2 px-3.5 sm:px-4 pb-2 pt-0.5 overflow-visible pointer-events-auto border-b border-white/[0.06]">
-          <div className="flex items-center gap-2">
-            <ModeToggle rawMode={rawMode} onChange={setMode} />
+        <div className="flex shrink-0 items-center justify-between gap-1.5 px-3 sm:px-4 pb-2 pt-0.5 overflow-x-auto scrollbar-none pointer-events-auto border-b border-white/[0.06]">
+          <div className="flex items-center gap-1.5 shrink-0">
+            <ModeToggle rawMode={rawMode} onChange={setMode} compact={!width || width < 520} />
             {external && (
-              <div className="flex min-w-0 items-center gap-2">
+              <div className="flex min-w-0 items-center gap-1.5">
                 {saveError && (
-                  <span className="max-w-[160px] truncate text-[10.5px] text-red-400" title={saveError}>
+                  <span className="max-w-[140px] truncate text-[10px] text-red-400" title={saveError}>
                     {saveError}
                   </span>
                 )}
@@ -740,7 +743,7 @@ export function NoteSheet({
                   onClick={() => void saveExternal()}
                   title="Save to the original file (Ctrl+S)"
                   className={cx(
-                    "flex h-6.5 items-center gap-1.5 rounded-[6px] border px-2.5 text-[11px] font-medium transition-colors duration-150",
+                    "flex h-6.5 items-center gap-1.5 rounded-[6px] border px-2 text-[10.5px] font-medium transition-colors duration-150",
                     dirty
                       ? "border-white bg-white text-black hover:bg-white/90"
                       : "border-white/[0.14] text-ink-3 hover:border-white/30 hover:text-ink-1",
@@ -763,13 +766,15 @@ export function NoteSheet({
                   e.stopPropagation();
                   setFontOpen((v) => !v);
                 }}
-                className="flex h-7 items-center gap-1.5 rounded-md px-1.5 sm:px-2 text-[11.5px] text-ink-3 transition-colors hover:bg-white/[0.06] hover:text-ink-1 cursor-pointer pointer-events-auto shrink-0"
+                className="flex h-7 items-center gap-1 rounded-md px-1.5 text-[11px] text-ink-3 transition-colors hover:bg-white/[0.06] hover:text-ink-1 cursor-pointer pointer-events-auto shrink-0"
                 title={`Note typeface: ${cleanText(draft.font_family) || "Instrument Sans"}`}
               >
-                <Type size={12} strokeWidth={1.7} />
-                <span className={cx("truncate", width && width < 460 ? "hidden" : "max-w-[76px] hidden sm:inline")}>
-                  {cleanText(draft.font_family) || "Instrument Sans"}
-                </span>
+                <Type size={12.5} strokeWidth={1.8} />
+                {width && width >= 520 && (
+                  <span className="max-w-[72px] truncate hidden sm:inline">
+                    {cleanText(draft.font_family) || "Instrument Sans"}
+                  </span>
+                )}
               </button>
 
               {fontOpen && createPortal(
@@ -922,7 +927,7 @@ export function NoteSheet({
 
             <span className="mx-0.5 h-4 w-px bg-white/[0.08]" />
             <HeadingSelect
-              compact={!width || width < 460}
+              compact={!width || width < 520}
               editorRef={editorRef}
               onSelect={(level) => runEditorCommand((ed) => applyHeading(ed, level))}
             />
@@ -1192,7 +1197,7 @@ export function NoteSheet({
           <div
             onPointerDown={(e) => e.stopPropagation()}
             onClick={(e) => e.stopPropagation()}
-            className="w-[calc(100%-32px)] max-w-[340px] min-w-[220px] rounded-2xl border border-white/15 bg-[#14151a] p-5 shadow-[0_25px_60px_rgba(0,0,0,0.95)] text-center whitespace-normal break-words animate-in zoom-in-95 duration-150"
+            className="w-[calc(100%-32px)] max-w-[340px] min-w-[220px] rounded-2xl border border-white/15 bg-[#14151a] p-5 shadow-[0_25px_60px_rgba(0,0,0,0.95)] text-center whitespace-normal break-words select-text animate-in zoom-in-95 duration-150"
           >
             <div className="mx-auto mb-3 grid size-10 place-items-center rounded-xl bg-red-500/10 text-red-400">
               <Trash size={18} strokeWidth={2} />
@@ -1201,7 +1206,8 @@ export function NoteSheet({
               Delete this note?
             </h3>
             <p className="mt-1.5 text-[12px] text-ink-3 leading-relaxed whitespace-normal break-words px-1">
-              Are you sure you want to delete this note? This action cannot be undone.
+              Are you sure you want to delete this note?
+              <span className="block mt-0.5 text-ink-4">This action cannot be undone.</span>
             </p>
             <div className="mt-5 grid grid-cols-2 gap-2">
               <button

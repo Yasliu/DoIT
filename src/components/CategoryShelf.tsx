@@ -130,7 +130,7 @@ export function CategoryShelf({
           transition: "grid-template-rows 460ms cubic-bezier(0.22,1,0.36,1)",
         }}
       >
-        <div className="min-h-0 overflow-hidden">
+        <div className="min-h-0 overflow-hidden @container">
           <motion.div
             layout
             transition={{ type: "spring", stiffness: 180, damping: 25, mass: 0.8 }}

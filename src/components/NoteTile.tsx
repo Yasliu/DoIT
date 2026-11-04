@@ -90,7 +90,7 @@ export function NoteTile({
         transform,
       }}
       className={cx(
-        "card group relative flex flex-col h-full p-[17px] text-left outline-none",
+        "card group relative flex flex-col h-full min-w-[190px] p-[17px] text-left outline-none",
         density.span,
         landed && "landed",
         reorderTarget && "ring-1 ring-white/50 !bg-white/[0.09] scale-[1.01] !shadow-[0_0_20px_rgba(255,255,255,0.12)]",

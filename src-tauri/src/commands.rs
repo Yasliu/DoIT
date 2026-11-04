@@ -399,8 +399,8 @@ pub fn position_tray_on_monitor(
     let scale_factor = monitor.scale_factor();
     let m_pos = monitor.position(); // PhysicalPosition<i32> { x, y }
 
-    let small_w_phys = (180.0 * scale_factor).round() as i32;
-    let small_h_phys = (44.0 * scale_factor).round() as i32;
+    let small_w_phys = (200.0 * scale_factor).round() as i32;
+    let small_h_phys = (52.0 * scale_factor).round() as i32;
     let (panel_w, panel_h) = tray_panel_logical(monitor);
     let expanded_w_phys = (panel_w * scale_factor).round() as i32;
     let expanded_h_phys = (panel_h * scale_factor).round() as i32;
@@ -784,7 +784,7 @@ pub fn set_tray_mode(app: AppHandle, mode: String) -> Result<QuadrantInfo, Strin
     let scale = tray.scale_factor().unwrap_or(1.0);
 
     let (lw, lh) = if mode == "pill" {
-        (180.0, 44.0)
+        (200.0, 52.0)
     } else {
         get_window_active_monitor(&tray)
             .map(|m| tray_panel_logical(&m))
