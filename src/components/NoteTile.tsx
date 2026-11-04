@@ -64,8 +64,6 @@ export function NoteTile({
 
   return (
     <motion.article
-      layout
-      transition={{ type: "spring", stiffness: 180, damping: 25, mass: 0.8 }}
       role="button"
       tabIndex={0}
       aria-label={`Open note: ${cleanText(note.title) || "Untitled"}`}

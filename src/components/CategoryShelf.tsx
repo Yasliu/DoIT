@@ -1,6 +1,5 @@
 import { ChevronDown, Plus, Trash2 } from "lucide-react";
 import type { PointerEvent as ReactPointerEvent } from "react";
-import { motion } from "motion/react";
 import type { NoteItem } from "../api/tauriBridge";
 import { cleanText, cx } from "../lib/text";
 import { NoteTile } from "./NoteTile";
@@ -131,11 +130,7 @@ export function CategoryShelf({
         }}
       >
         <div className="min-h-0 overflow-hidden @container">
-          <motion.div
-            layout
-            transition={{ type: "spring", stiffness: 180, damping: 25, mass: 0.8 }}
-            className="grid grid-cols-12 grid-flow-row-dense gap-3.5 auto-rows-[minmax(130px,auto)] pb-1 pt-3.5"
-          >
+          <div className="grid grid-cols-12 grid-flow-row-dense gap-3.5 auto-rows-[minmax(130px,auto)] pb-1 pt-3.5">
             {notes.length === 0 ? (
               <button
                 type="button"
@@ -170,7 +165,7 @@ export function CategoryShelf({
                 />
               ))
             )}
-          </motion.div>
+          </div>
         </div>
       </div>
     </section>

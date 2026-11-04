@@ -376,13 +376,18 @@ pub fn tray_panel_logical(monitor: &tauri::Monitor) -> (f64, f64) {
 }
 
 #[cfg(windows)]
-pub fn get_monitor_work_area_phys(window: &tauri::WebviewWindow, monitor: &tauri::Monitor) -> (i32, i32, i32, i32) {
+pub fn get_monitor_work_area_phys(_window: &tauri::WebviewWindow, monitor: &tauri::Monitor) -> (i32, i32, i32, i32) {
     #[repr(C)]
     struct RECT {
         left: i32,
         top: i32,
         right: i32,
         bottom: i32,
+    }
+    #[repr(C)]
+    struct POINT {
+        x: i32,
+        y: i32,
     }
     #[repr(C)]
     struct MONITORINFO {
@@ -393,37 +398,32 @@ pub fn get_monitor_work_area_phys(window: &tauri::WebviewWindow, monitor: &tauri
     }
 
     unsafe extern "system" {
-        fn MonitorFromWindow(hwnd: *mut std::ffi::c_void, dw_flags: u32) -> *mut std::ffi::c_void;
+        fn MonitorFromPoint(pt: POINT, dw_flags: u32) -> *mut std::ffi::c_void;
         fn GetMonitorInfoW(h_monitor: *mut std::ffi::c_void, lpmi: *mut MONITORINFO) -> i32;
-        fn SystemParametersInfoW(ui_action: u32, ui_param: u32, pv_param: *mut std::ffi::c_void, f_win_ini: u32) -> i32;
-    }
-
-    if let Ok(hwnd) = window.hwnd() {
-        unsafe {
-            let h_mon = MonitorFromWindow(hwnd.0, 2 /* MONITOR_DEFAULTTONEAREST */);
-            if !h_mon.is_null() {
-                let mut mi = MONITORINFO {
-                    cb_size: std::mem::size_of::<MONITORINFO>() as u32,
-                    rc_monitor: RECT { left: 0, top: 0, right: 0, bottom: 0 },
-                    rc_work: RECT { left: 0, top: 0, right: 0, bottom: 0 },
-                    dw_flags: 0,
-                };
-                if GetMonitorInfoW(h_mon, &mut mi) != 0 {
-                    return (mi.rc_work.left, mi.rc_work.top, mi.rc_work.right, mi.rc_work.bottom);
-                }
-            }
-        }
-    }
-
-    unsafe {
-        let mut rc = RECT { left: 0, top: 0, right: 0, bottom: 0 };
-        if SystemParametersInfoW(0x0030 /* SPI_GETWORKAREA */, 0, &mut rc as *mut _ as *mut std::ffi::c_void, 0) != 0 {
-            return (rc.left, rc.top, rc.right, rc.bottom);
-        }
     }
 
     let m_pos = monitor.position();
     let m_size = monitor.size();
+    let center = POINT {
+        x: m_pos.x + (m_size.width as i32) / 2,
+        y: m_pos.y + (m_size.height as i32) / 2,
+    };
+
+    unsafe {
+        let h_mon = MonitorFromPoint(center, 2 /* MONITOR_DEFAULTTONEAREST */);
+        if !h_mon.is_null() {
+            let mut mi = MONITORINFO {
+                cb_size: std::mem::size_of::<MONITORINFO>() as u32,
+                rc_monitor: RECT { left: 0, top: 0, right: 0, bottom: 0 },
+                rc_work: RECT { left: 0, top: 0, right: 0, bottom: 0 },
+                dw_flags: 0,
+            };
+            if GetMonitorInfoW(h_mon, &mut mi) != 0 {
+                return (mi.rc_work.left, mi.rc_work.top, mi.rc_work.right, mi.rc_work.bottom);
+            }
+        }
+    }
+
     (m_pos.x, m_pos.y, m_pos.x + m_size.width as i32, m_pos.y + m_size.height as i32 - 48)
 }
 

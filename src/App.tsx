@@ -536,7 +536,7 @@ export default function App() {
             ref={canvasRef}
             className={cx(
               "relative min-w-0 min-h-0 overflow-hidden transition-[opacity,flex] duration-300 ease-out",
-              isNoteMaximized
+              isNoteMaximized && !sheetClosing
                 ? "opacity-0 pointer-events-none flex-none !w-0 !h-0"
                 : "opacity-100 flex-1 w-full h-full",
             )}
@@ -591,19 +591,23 @@ export default function App() {
           {/* Sliding editor drawer: reserves space so the dashboard stays visible + interactive */}
           <aside
             className={cx(
-              "relative overflow-visible min-h-0 min-w-0",
+              "relative min-h-0 min-w-0 overflow-hidden",
               isNoteMaximized ? "w-full h-full flex-1" : "shrink-0",
             )}
             style={{
               width: isNoteMaximized
-                ? "100%"
+                ? sheetClosing
+                  ? 0
+                  : "100%"
                 : isVerticalScreen
                   ? "100%"
                   : openFresh && openNote && sheetReserve && !sheetClosing
                     ? drawerWidth
                     : 0,
               height: isNoteMaximized
-                ? "100%"
+                ? sheetClosing
+                  ? 0
+                  : "100%"
                 : isVerticalScreen
                   ? openFresh && openNote && sheetReserve && !sheetClosing
                     ? "54vh"

@@ -573,13 +573,17 @@ export function NoteSheet({
           width: "100%",
           height: "100%",
           transform:
-            phase === "settled" || isMaximized
-              ? "none"
-              : phase === "in"
-                ? "translate3d(0,0,0)"
-                : isBottomMode
-                  ? "translate3d(0,106%,0)"
-                  : "translate3d(106%,0,0)",
+            phase === "out"
+              ? isBottomMode
+                ? "translate3d(0,106%,0)"
+                : "translate3d(106%,0,0)"
+              : phase === "settled" || isMaximized
+                ? "none"
+                : phase === "in"
+                  ? "translate3d(0,0,0)"
+                  : isBottomMode
+                    ? "translate3d(0,106%,0)"
+                    : "translate3d(106%,0,0)",
           opacity: phase === "pre" ? 0 : 1,
           transition:
             phase === "out"
