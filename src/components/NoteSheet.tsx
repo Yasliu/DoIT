@@ -9,6 +9,8 @@ import {
   CornerDownLeft,
   Image as ImageIcon,
   Italic,
+  Maximize2,
+  Minimize2,
   Plus,
   Save,
   Trash,
@@ -38,6 +40,8 @@ import {
   normalizeEditor,
   applyHeading,
   insertTableAtCaret,
+  isCaretAtEditorStart,
+  placeCaretAtEditorStart,
 } from "../lib/format";
 import { accentFor, cleanText, cx, fullStamp, uid } from "../lib/text";
 
@@ -57,6 +61,8 @@ interface NoteSheetProps {
   onOpening?: () => void;
   width?: number;
   onResizeWidth?: (w: number) => void;
+  isMaximized?: boolean;
+  onToggleMaximize?: () => void;
 }
 
 export function NoteSheet({
@@ -72,6 +78,8 @@ export function NoteSheet({
   onOpening,
   width,
   onResizeWidth,
+  isMaximized = false,
+  onToggleMaximize,
 }: NoteSheetProps) {
   const frame = useRef<HTMLDivElement | null>(null);
   const [phase, setPhase] = useState<"pre" | "in" | "settled" | "out">(instant ? "settled" : "pre");
@@ -130,8 +138,9 @@ export function NoteSheet({
     const w = 240;
     const left = Math.max(8, Math.min(r.right - w, window.innerWidth - w - 8));
     const top = r.bottom + 6;
-    const cap = window.innerWidth >= 768 ? 320 : 260;
-    const maxHeight = Math.max(120, Math.min(cap, window.innerHeight - top - 12));    setFontMenuStyle({ position: "fixed", left, top, right: "auto", maxHeight });
+    const cap = window.innerWidth >= 768 ? 440 : 360;
+    const maxHeight = Math.max(160, Math.min(cap, window.innerHeight - top - 16));
+    setFontMenuStyle({ position: "fixed", left, top, right: "auto", maxHeight });
   }, [fontOpen]);
 
   useLayoutEffect(() => {
@@ -540,12 +549,12 @@ export function NoteSheet({
           if (e.target === e.currentTarget && e.propertyName === "transform" && phase === "in") setPhase("settled");
         }}
         style={{
-          width: width ? `${width}px` : "clamp(420px, 42vw, 600px)",
-          transform: phase === "settled" ? "none" : phase === "in" ? "translate3d(0,0,0)" : "translate3d(106%,0,0)",
+          width: isMaximized ? "100%" : width ? `${width}px` : "clamp(420px, 42vw, 600px)",
+          transform: phase === "settled" || isMaximized ? "none" : phase === "in" ? "translate3d(0,0,0)" : "translate3d(106%,0,0)",
           opacity: phase === "pre" ? 0 : 1,
           // entry: long soft landing + quick fade; exit keeps the plain 300ms ease-out
           transition:
-            isResizing.current
+            isResizing.current || isMaximized
               ? "none"
               : phase === "settled"
                 ? "none"
@@ -554,16 +563,21 @@ export function NoteSheet({
                   : "transform 460ms cubic-bezier(0.32, 0.72, 0, 1), opacity 240ms ease-out",
           willChange: phase === "settled" ? "auto" : "transform",
         }}
-        className="absolute inset-y-0 right-0 z-30 flex flex-col overflow-visible rounded-[22px] glass-sheet outline-none border border-white/10 shadow-[0_30px_90px_rgba(0,0,0,0.6)]"
+        className={cx(
+          "absolute z-30 flex flex-col overflow-visible rounded-[22px] glass-sheet outline-none border border-white/10 shadow-[0_30px_90px_rgba(0,0,0,0.6)]",
+          isMaximized ? "inset-0 !w-full" : "inset-y-0 right-0",
+        )}
       >
         {/* Interactive Resizable Handle Rail */}
-        <div
-          onMouseDown={handleResizeMouseDown}
-          className="w-1 hover:w-1.5 cursor-col-resize bg-white/10 hover:bg-white/30 transition-all absolute top-0 left-0 h-full z-40 select-none group/resize"
-          title="Drag to resize editor panel"
-        >
-          <div className="absolute top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 w-0.5 h-8 rounded-full bg-white/20 group-hover/resize:bg-white/50 transition-colors" />
-        </div>
+        {!isMaximized && (
+          <div
+            onMouseDown={handleResizeMouseDown}
+            className="w-1 hover:w-1.5 cursor-col-resize bg-white/10 hover:bg-white/30 transition-all absolute top-0 left-0 h-full z-40 select-none group/resize"
+            title="Drag to resize editor panel"
+          >
+            <div className="absolute top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 w-0.5 h-8 rounded-full bg-white/20 group-hover/resize:bg-white/50 transition-colors" />
+          </div>
+        )}
         <div
           className="h-[2px] shrink-0 origin-left"
           style={{ backgroundColor: accent, animation: "strip-in 620ms cubic-bezier(0.22,1,0.36,1) both" }}
@@ -686,59 +700,65 @@ export function NoteSheet({
                     onMouseDown={(e) => e.stopPropagation()}
                     onClick={(e) => e.stopPropagation()}
                     style={fontMenuStyle}
-                    className="z-50 w-[240px] max-h-[260px] md:max-h-[320px] overflow-y-auto no-scrollbar overscroll-contain rounded-[14px] bg-[#14151a] border border-white/20 p-2 shadow-[0_25px_60px_rgba(0,0,0,0.95)] pointer-events-auto overscroll-contain"
+                    className="z-50 w-[240px] max-h-[380px] sm:max-h-[440px] overflow-y-auto scrollbar-thin rounded-[14px] bg-[#14151a] border border-white/20 p-2 shadow-[0_25px_60px_rgba(0,0,0,0.95)] pointer-events-auto overscroll-contain flex flex-col"
                   >
-                    <div className="text-[10px] font-mono uppercase tracking-[0.12em] text-ink-4 px-2 py-1 select-none">
-                      Font Presets
+                    <div className="shrink-0">
+                      <div className="text-[10px] font-mono uppercase tracking-[0.12em] text-ink-4 px-2 py-1 select-none">
+                        Font Presets
+                      </div>
+                      {NOTE_FONTS.map((font) => (
+                        <button
+                          key={font.name}
+                          type="button"
+                          onMouseDown={(e) => {
+                            e.preventDefault();
+                            e.stopPropagation();
+                          }}
+                          onClick={(e) => {
+                            e.stopPropagation();
+                            edit({ font_family: font.name }, true);
+                            if (editorRef.current) {
+                              editorRef.current.style.fontFamily = font.stack;
+                              editorRef.current.focus();
+                            }
+                            setFontOpen(false);
+                          }}
+                          className={cx(
+                            "flex h-7.5 w-full items-center justify-between rounded-md px-2 text-left text-[12.5px] cursor-pointer pointer-events-auto",
+                            font.name === draft.font_family
+                              ? "bg-white/[0.08] text-white"
+                              : "text-ink-2 hover:bg-white/[0.06] hover:text-white",
+                          )}
+                          style={{ fontFamily: font.stack }}
+                        >
+                          <span className="truncate">{font.label}</span>
+                          {font.name === draft.font_family && <Check size={11} />}
+                        </button>
+                      ))}
+                      <div className="my-1.5 h-px bg-white/10" />
                     </div>
-                    {NOTE_FONTS.map((font) => (
-                      <button
-                        key={font.name}
-                        type="button"
-                        onMouseDown={(e) => {
-                          e.preventDefault();
-                          e.stopPropagation();
-                        }}
-                        onClick={(e) => {
-                          e.stopPropagation();
-                          edit({ font_family: font.name }, true);
-                          if (editorRef.current) {
-                            editorRef.current.style.fontFamily = font.stack;
-                            editorRef.current.focus();
-                          }
-                          setFontOpen(false);
-                        }}
-                        className={cx(
-                          "flex h-7.5 w-full items-center justify-between rounded-md px-2 text-left text-[12.5px] cursor-pointer pointer-events-auto",
-                          font.name === draft.font_family
-                            ? "bg-white/[0.08] text-white"
-                            : "text-ink-2 hover:bg-white/[0.06] hover:text-white",
-                        )}
-                        style={{ fontFamily: font.stack }}
-                      >
-                        <span className="truncate">{font.label}</span>
-                        {font.name === draft.font_family && <Check size={11} />}
-                      </button>
-                    ))}
-                    <div className="my-1.5 h-px bg-white/10" />
-                    <div>
-                      <div className="flex items-center justify-between px-2 py-1 select-none">
-                        <span className="text-[10px] font-mono uppercase tracking-[0.12em] text-ink-4">
-                          System Fonts ({filteredSystemFonts.length})
-                        </span>
+
+                    <div className="flex flex-col flex-1">
+                      <div className="sticky -top-2 bg-[#14151a]/95 backdrop-blur-md z-10 pt-1 pb-1 px-1 border-b border-white/10 select-none shadow-sm -mx-1">
+                        <div className="flex items-center justify-between px-1 pb-1 select-none">
+                          <span className="text-[10px] font-mono uppercase tracking-[0.12em] text-ink-4">
+                            System Fonts ({filteredSystemFonts.length})
+                          </span>
+                        </div>
+                        <div className="px-1 pb-1">
+                          <input
+                            type="text"
+                            value={fontSearch}
+                            onChange={(e) => setFontSearch(e.target.value)}
+                            onMouseDown={(e) => e.stopPropagation()}
+                            onClick={(e) => e.stopPropagation()}
+                            placeholder="Search installed fonts..."
+                            className="w-full h-7 rounded-lg bg-white/[0.05] border border-white/15 px-2 text-[11px] text-ink-1 placeholder:text-ink-4 outline-none focus:border-white/30"
+                          />
+                        </div>
                       </div>
-                      <div className="px-1 pb-1.5">
-                        <input
-                          type="text"
-                          value={fontSearch}
-                          onChange={(e) => setFontSearch(e.target.value)}
-                          onMouseDown={(e) => e.stopPropagation()}
-                          onClick={(e) => e.stopPropagation()}
-                          placeholder="Search installed fonts..."
-                          className="w-full h-7 rounded-lg bg-white/[0.05] border border-white/15 px-2 text-[11px] text-ink-1 placeholder:text-ink-4 outline-none focus:border-white/30"
-                        />
-                      </div>
-                      <div className="max-h-[170px] overflow-y-auto scrollbar-thin px-0.5 space-y-0.5">
+
+                      <div className="pt-1.5 px-0.5 space-y-0.5">
                         {filteredSystemFonts.length === 0 ? (
                           <div className="px-2 py-3 text-center text-[11px] text-ink-4">
                             {systemFonts.length === 0 ? "Loading system fonts..." : "No matching fonts found"}
@@ -889,6 +909,17 @@ export function NoteSheet({
                 <Trash size={12.5} strokeWidth={1.7} />
               </button>
             )}
+            {onToggleMaximize && (
+              <button
+                type="button"
+                onClick={onToggleMaximize}
+                aria-label={isMaximized ? "Restore panel size" : "Maximize note"}
+                className="icon-btn !size-7 cursor-pointer"
+                title={isMaximized ? "Restore panel size" : "Maximize note"}
+              >
+                {isMaximized ? <Minimize2 size={12.5} strokeWidth={1.7} /> : <Maximize2 size={12.5} strokeWidth={1.7} />}
+              </button>
+            )}
             <button
               type="button"
               onClick={close}
@@ -936,6 +967,21 @@ export function NoteSheet({
               onChange={(event) => edit({ title: event.target.value })}
               onKeyDown={(e) => {
                 e.stopPropagation();
+                if (e.key === "ArrowDown") {
+                  if (rawMode) {
+                    const textarea = frame.current?.querySelector("textarea");
+                    if (textarea) {
+                      e.preventDefault();
+                      textarea.focus();
+                      textarea.setSelectionRange(0, 0);
+                      return;
+                    }
+                  } else if (editorRef.current) {
+                    e.preventDefault();
+                    placeCaretAtEditorStart(editorRef.current);
+                    return;
+                  }
+                }
                 handleUndoKeys(e);
               }}
               data-undo="title"
@@ -1001,6 +1047,13 @@ export function NoteSheet({
                   minHeight={300}
                   className="text-[13px]"
                   onChange={(content) => commit({ ...draftRef.current, content, last_edited: Date.now() })}
+                  onArrowUpAtStart={() => {
+                    if (titleRef.current) {
+                      titleRef.current.focus();
+                      const len = titleRef.current.value.length;
+                      titleRef.current.setSelectionRange(len, len);
+                    }
+                  }}
                 />
               ) : (
               <div className="min-h-[220px]">
@@ -1027,6 +1080,15 @@ export function NoteSheet({
                     if (handleCheckboxClick(e, editorRef.current)) handleEditorInput();
                   }}
                   onKeyDown={(e) => {
+                    if (e.key === "ArrowUp" && editorRef.current && isCaretAtEditorStart(editorRef.current)) {
+                      e.preventDefault();
+                      if (titleRef.current) {
+                        titleRef.current.focus();
+                        const len = titleRef.current.value.length;
+                        titleRef.current.setSelectionRange(len, len);
+                      }
+                      return;
+                    }
                     const sc = getMarkdownShortcuts();
                     if (matchesCombo(e, sc.bold)) {
                       e.preventDefault();

@@ -51,6 +51,8 @@ import {
   applyHeading,
   insertTableAtCaret,
   setMarkdownBaseDir,
+  isCaretAtEditorStart,
+  placeCaretAtEditorStart,
 } from "../lib/format";
 import { accentFor, cleanText, cx, relativeShort, uid } from "../lib/text";
 
@@ -113,6 +115,7 @@ export function TrayCompanion() {
   const [fontOpen, setFontOpen] = useState(false);
   const fontTriggerRef = useRef<HTMLButtonElement | null>(null);
   const [fontMenuStyle, setFontMenuStyle] = useState<React.CSSProperties>({});
+  const titleRef = useRef<HTMLInputElement | null>(null);
 
   useEffect(() => {
     if (fontOpen && fontTriggerRef.current) {
@@ -121,7 +124,7 @@ export function TrayCompanion() {
       const w = 210;
       const left = Math.max(8, Math.min(rect.right - w, window.innerWidth - w - 8));
       const top = rect.bottom + 6;
-      const maxHeight = Math.max(120, Math.min(320, window.innerHeight - top - 12));
+      const maxHeight = Math.max(160, Math.min(380, window.innerHeight - top - 12));
       setFontMenuStyle({ position: "fixed", left, top, maxHeight });
     }
   }, [fontOpen]);
@@ -776,54 +779,60 @@ export function TrayCompanion() {
                       onPointerDown={(e) => e.stopPropagation()}
                       onMouseDown={(e) => e.stopPropagation()}
                       style={fontMenuStyle}
-                      className="z-[120] w-[210px] max-h-[260px] md:max-h-[320px] overflow-y-auto no-scrollbar rounded-xl bg-[#14151a] border border-white/20 p-2 shadow-[0_25px_60px_rgba(0,0,0,0.95)] pointer-events-auto overscroll-contain"
+                      className="z-[120] w-[210px] max-h-[380px] overflow-y-auto scrollbar-thin rounded-xl bg-[#14151a] border border-white/20 p-2 shadow-[0_25px_60px_rgba(0,0,0,0.95)] pointer-events-auto overscroll-contain flex flex-col"
                     >
-                      <div className="text-[9.5px] font-mono uppercase tracking-[0.12em] text-ink-4 px-1.5 py-0.5 select-none">
-                        Font Presets
+                      <div className="shrink-0">
+                        <div className="text-[9.5px] font-mono uppercase tracking-[0.12em] text-ink-4 px-1.5 py-0.5 select-none">
+                          Font Presets
+                        </div>
+                        {NOTE_FONTS.map((font) => (
+                          <button
+                            key={font.name}
+                            type="button"
+                            onMouseDown={(e) => {
+                              e.preventDefault();
+                              e.stopPropagation();
+                            }}
+                            onClick={(e) => {
+                              e.stopPropagation();
+                              editActive({ font_family: font.name });
+                              if (editorRef.current) {
+                                editorRef.current.style.fontFamily = font.stack;
+                                editorRef.current.focus();
+                              }
+                              setFontOpen(false);
+                            }}
+                            className="flex h-6 w-full items-center justify-between rounded px-2 text-[11px] text-ink-2 hover:bg-white/10 hover:text-white cursor-pointer pointer-events-auto"
+                            style={{ fontFamily: font.stack }}
+                          >
+                            <span className="truncate">{font.label}</span>
+                            {font.name === activeNote.font_family && <Check size={10} />}
+                          </button>
+                        ))}
+                        <div className="my-1.5 h-px bg-white/10" />
                       </div>
-                      {NOTE_FONTS.map((font) => (
-                        <button
-                          key={font.name}
-                          type="button"
-                          onMouseDown={(e) => {
-                            e.preventDefault();
-                            e.stopPropagation();
-                          }}
-                          onClick={(e) => {
-                            e.stopPropagation();
-                            editActive({ font_family: font.name });
-                            if (editorRef.current) {
-                              editorRef.current.style.fontFamily = font.stack;
-                              editorRef.current.focus();
-                            }
-                            setFontOpen(false);
-                          }}
-                          className="flex h-6 w-full items-center justify-between rounded px-2 text-[11px] text-ink-2 hover:bg-white/10 hover:text-white cursor-pointer pointer-events-auto"
-                          style={{ fontFamily: font.stack }}
-                        >
-                          <span className="truncate">{font.label}</span>
-                          {font.name === activeNote.font_family && <Check size={10} />}
-                        </button>
-                      ))}
-                      <div className="my-1.5 h-px bg-white/10" />
-                      <div>
-                        <div className="flex items-center justify-between px-1 py-0.5 select-none">
-                          <span className="text-[9.5px] font-mono uppercase tracking-[0.12em] text-ink-4">
-                            System Fonts ({filteredSystemFonts.length})
-                          </span>
+
+                      <div className="flex flex-col flex-1">
+                        <div className="sticky -top-2 bg-[#14151a]/95 backdrop-blur-md z-10 pt-1 pb-1 px-1 border-b border-white/10 select-none shadow-sm -mx-1">
+                          <div className="flex items-center justify-between px-1 py-0.5 select-none">
+                            <span className="text-[9.5px] font-mono uppercase tracking-[0.12em] text-ink-4">
+                              System Fonts ({filteredSystemFonts.length})
+                            </span>
+                          </div>
+                          <div className="px-0.5 pb-1">
+                            <input
+                              type="text"
+                              value={fontSearch}
+                              onChange={(e) => setFontSearch(e.target.value)}
+                              onMouseDown={(e) => e.stopPropagation()}
+                              onClick={(e) => e.stopPropagation()}
+                              placeholder="Search installed fonts..."
+                              className="w-full h-6 rounded bg-white/[0.05] border border-white/15 px-1.5 text-[10.5px] text-ink-1 placeholder:text-ink-4 outline-none focus:border-white/30 pointer-events-auto"
+                            />
+                          </div>
                         </div>
-                        <div className="px-0.5 pb-1">
-                          <input
-                            type="text"
-                            value={fontSearch}
-                            onChange={(e) => setFontSearch(e.target.value)}
-                            onMouseDown={(e) => e.stopPropagation()}
-                            onClick={(e) => e.stopPropagation()}
-                            placeholder="Search installed fonts..."
-                            className="w-full h-6 rounded bg-white/[0.05] border border-white/15 px-1.5 text-[10.5px] text-ink-1 placeholder:text-ink-4 outline-none focus:border-white/30 pointer-events-auto"
-                          />
-                        </div>
-                        <div className="max-h-[140px] overflow-y-auto scrollbar-thin px-0.5 space-y-0.5">
+
+                        <div className="pt-1.5 px-0.5 space-y-0.5">
                           {filteredSystemFonts.length === 0 ? (
                             <div className="px-2 py-2 text-center text-[10px] text-ink-4">
                               {systemFonts.length === 0 ? "Loading fonts..." : "No matching fonts"}
@@ -980,11 +989,27 @@ export function TrayCompanion() {
             </div>
             {/* Title Input */}
             <input
+              ref={titleRef}
               type="text"
               value={activeNote.title ?? ""}
               onChange={(e) => editActive({ title: e.target.value })}
               onKeyDown={(e) => {
                 e.stopPropagation();
+                if (e.key === "ArrowDown") {
+                  if (rawMode) {
+                    const textarea = document.querySelector(".tray-note-scroll textarea") as HTMLTextAreaElement | null;
+                    if (textarea) {
+                      e.preventDefault();
+                      textarea.focus();
+                      textarea.setSelectionRange(0, 0);
+                      return;
+                    }
+                  } else if (editorRef.current) {
+                    e.preventDefault();
+                    placeCaretAtEditorStart(editorRef.current);
+                    return;
+                  }
+                }
                 handleUndoKeys(e);
               }}
               data-undo="title"
@@ -1050,6 +1075,13 @@ export function TrayCompanion() {
                   minHeight={180}
                   className="text-[11.5px]"
                   onChange={(content) => editActive({ content })}
+                  onArrowUpAtStart={() => {
+                    if (titleRef.current) {
+                      titleRef.current.focus();
+                      const len = titleRef.current.value.length;
+                      titleRef.current.setSelectionRange(len, len);
+                    }
+                  }}
                 />
               ) : (
               <div
@@ -1075,6 +1107,15 @@ export function TrayCompanion() {
                   if (handleCheckboxClick(e, editorRef.current)) handleEditorInput();
                 }}
                 onKeyDown={(e) => {
+                  if (e.key === "ArrowUp" && editorRef.current && isCaretAtEditorStart(editorRef.current)) {
+                    e.preventDefault();
+                    if (titleRef.current) {
+                      titleRef.current.focus();
+                      const len = titleRef.current.value.length;
+                      titleRef.current.setSelectionRange(len, len);
+                    }
+                    return;
+                  }
                   const sc = getMarkdownShortcuts();
                   if (matchesCombo(e, sc.bold)) {
                     e.preventDefault();
@@ -1117,9 +1158,6 @@ export function TrayCompanion() {
               <Plus size={15} strokeWidth={2} className="text-white/80 shrink-0" />
             </span>
             <span className="whitespace-nowrap overflow-hidden text-ellipsis truncate">New note</span>
-            <span className="ml-auto shrink-0 whitespace-nowrap rounded-md bg-white/[0.06] px-1.5 py-0.5 font-mono text-[10px] text-white/40 border border-white/[0.08]">
-              âŒ˜N
-            </span>
           </button>
 
           {/* Pull up an old note input matching Screenshot 3 */}

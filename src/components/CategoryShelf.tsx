@@ -20,7 +20,7 @@ interface CategoryShelfProps {
   onNewNote: (shelf: string) => void;
   onDeleteCategory?: (shelf: string) => void;
   onCategoryContextMenu?: (event: React.MouseEvent, shelf: string) => void;
-  onOpen: (note: NoteItem, rect: DOMRect) => void;
+  onOpen: (note: NoteItem, rect: DOMRect, maximize?: boolean) => void;
   onArm: (event: ReactPointerEvent, note: NoteItem) => void;
   onToggleItem: (note: NoteItem, itemId: string) => void;
   onContextMenu?: (event: React.MouseEvent, note: NoteItem) => void;

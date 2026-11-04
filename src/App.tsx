@@ -14,6 +14,7 @@ import { TitleBar } from "./components/TitleBar";
 import { UpdateInfo, UpdateModal } from "./components/UpdateModal";
 import { ReleaseLogModal } from "./components/ReleaseLogModal";
 import { useWorkspace } from "./hooks/useWorkspace";
+import { cx } from "./lib/text";
 
 interface OpenNote {
   note: NoteItem;
@@ -27,7 +28,7 @@ interface Toast {
 }
 
 const COLLAPSE_KEY = "doit.collapsed";
-const CURRENT_VERSION = "1.1.6";
+const CURRENT_VERSION = "1.1.7";
 const VERSION_TRACKER_KEY = "doit.release_notes_version";
 
 function isVersionLower(current: string | null, target: string): boolean {
@@ -83,6 +84,8 @@ export default function App() {
   const [query, setQuery] = useState("");
   const [active, setActive] = useState<string | null>(null);
   const [openNote, setOpenNote] = useState<OpenNote | null>(null);
+  const [isNoteMaximized, setIsNoteMaximized] = useState(false);
+  const [isVerticalScreen, setIsVerticalScreen] = useState(() => window.innerHeight > window.innerWidth || window.innerWidth < 840);
   const [drawerWidth, setDrawerWidth] = useState<number>(getStoredDrawerWidth);
   const [contextMenu, setContextMenu] = useState<{ x: number; y: number; note: NoteItem } | null>(null);
   const [categoryMenu, setCategoryMenu] = useState<{ x: number; y: number; shelf: string } | null>(null);
@@ -338,7 +341,16 @@ export default function App() {
     };
   }, [openExternal]);
 
-  const openTile = useCallback((note: NoteItem, rect: DOMRect) => {
+  useEffect(() => {
+    const handleResize = () => {
+      setIsVerticalScreen(window.innerHeight > window.innerWidth || window.innerWidth < 840);
+    };
+    window.addEventListener("resize", handleResize);
+    return () => window.removeEventListener("resize", handleResize);
+  }, []);
+
+  const openTile = useCallback((note: NoteItem, rect: DOMRect, maximize = false) => {
+    setIsNoteMaximized(maximize);
     setSheetClosing(false);
     setOpenNote({ note, origin: rect });
   }, []);
@@ -347,6 +359,7 @@ export default function App() {
     (shelf?: string) => {
       const target = shelf ?? active ?? shelves[0] ?? "Uncategorized";
       const created = create(target);
+      setIsNoteMaximized(false);
       setSheetClosing(false);
       setOpenNote({ note: created, origin: originFromCanvas() });
       if (shelf) setActive(shelf);
@@ -355,6 +368,7 @@ export default function App() {
   );
 
   const closeSheet = useCallback(() => {
+    setIsNoteMaximized(false);
     const id = openNote?.note.id;
     setSheetClosing(false);
     setOpenNote(null);
@@ -516,8 +530,11 @@ export default function App() {
           isSettings={isSettings}
         />
 
-        <div className="flex min-h-0 flex-1 px-3 pb-3">
-          <main ref={canvasRef} className="relative min-w-0 flex-1 overflow-hidden">
+        <div className={cx("min-h-0 flex-1 px-3 pb-3", isVerticalScreen ? "flex flex-col" : "flex")}>
+          <main
+            ref={canvasRef}
+            className={cx("relative min-w-0 overflow-hidden", isNoteMaximized ? "hidden" : "flex-1")}
+          >
             <div aria-hidden="true" className="lightscape" />
             <div className="relative z-10 h-full">
             {isSettings ? (
@@ -565,15 +582,31 @@ export default function App() {
             </div>
           </main>
 
-          {/* Right-side sliding editor drawer: reserves space so the dashboard stays visible + interactive */}
+          {/* Sliding editor drawer: reserves space so the dashboard stays visible + interactive */}
           <aside
-            className="relative shrink-0 overflow-visible"
+            className={cx("relative overflow-visible", isNoteMaximized ? "w-full h-full flex-1" : "shrink-0")}
             style={{
-              width: openFresh && openNote && sheetReserve && !sheetClosing ? drawerWidth : 0,
-              marginLeft: openFresh && openNote && sheetReserve && !sheetClosing ? 12 : 0,
+              width: isNoteMaximized
+                ? "100%"
+                : isVerticalScreen
+                  ? "100%"
+                  : openFresh && openNote && sheetReserve && !sheetClosing
+                    ? drawerWidth
+                    : 0,
+              height: isVerticalScreen && !isNoteMaximized
+                ? openFresh && openNote && sheetReserve && !sheetClosing
+                  ? "55vh"
+                  : 0
+                : undefined,
+              marginLeft: !isVerticalScreen && !isNoteMaximized && openFresh && openNote && sheetReserve && !sheetClosing ? 12 : 0,
+              marginTop: isVerticalScreen && !isNoteMaximized && openFresh && openNote && sheetReserve && !sheetClosing ? 12 : 0,
               transition: sheetClosing
-                ? "width 300ms ease-out, margin-left 300ms ease-out"
-                : "width 460ms cubic-bezier(0.32, 0.72, 0, 1), margin-left 460ms cubic-bezier(0.32, 0.72, 0, 1)",
+                ? isVerticalScreen
+                  ? "height 300ms ease-out, margin-top 300ms ease-out"
+                  : "width 300ms ease-out, margin-left 300ms ease-out"
+                : isVerticalScreen
+                  ? "height 460ms cubic-bezier(0.32, 0.72, 0, 1), margin-top 460ms cubic-bezier(0.32, 0.72, 0, 1)"
+                  : "width 460ms cubic-bezier(0.32, 0.72, 0, 1), margin-left 460ms cubic-bezier(0.32, 0.72, 0, 1)",
             }}
           >
             {openFresh && openNote && (
@@ -584,8 +617,10 @@ export default function App() {
                 canvas={canvasRef.current}
                 shelves={shelves}
                 instant={wasSheetOpen.current}
-                width={drawerWidth}
+                width={isNoteMaximized || isVerticalScreen ? undefined : drawerWidth}
                 onResizeWidth={setDrawerWidth}
+                isMaximized={isNoteMaximized}
+                onToggleMaximize={() => setIsNoteMaximized((v) => !v)}
                 onClosing={() => setSheetClosing(true)}
                 onOpening={() => setSheetReserve(true)}
                 onCommit={commitSheet}

@@ -14,7 +14,7 @@ interface BentoCanvasProps {
   locked: boolean;
   collapsed: Record<string, boolean>;
   onToggleCollapse: (shelf: string) => void;
-  onOpen: (note: NoteItem, rect: DOMRect) => void;
+  onOpen: (note: NoteItem, rect: DOMRect, maximize?: boolean) => void;
   onNewNote: (shelf?: string) => void;
   onNewCategory?: (name: string) => void;
   onToggleItem: (note: NoteItem, itemId: string) => void;
@@ -344,7 +344,6 @@ export function BentoCanvas({
             <button type="button" onClick={() => onNewNote()} className="btn">
               <Plus size={14} strokeWidth={1.9} />
               <span>New note</span>
-              <span className="kbd ml-1">⌘N</span>
             </button>
           </div>
         </header>

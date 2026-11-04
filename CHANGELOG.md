@@ -1,5 +1,41 @@
 # DoIT Developer Architecture & Engineering Changelog
 
+## [2026-11-04] - Version 1.1.7: Full Note Maximization, Peak Arrow Navigation, Bullet Exit Mechanics & Taskbar Clamping
+
+### 1. Full Note Maximization Engine (`src/components/NoteSheet.tsx`, `src/components/NoteTile.tsx`, `src/App.tsx`)
+- **Note Header Maximize / Restore Toggle**: Added dedicated `Maximize2` / `Minimize2` toggle button to the editor header, seamlessly expanding the note panel to fill 100% of the canvas workspace without distraction.
+- **Direct Card Maximize Trigger**: Added a hover action icon button to note cards (`NoteTile.tsx`) allowing instant opening directly into maximized mode.
+- **State Synchronization**: Integrated `isNoteMaximized` state tracking across `App.tsx` and `NoteSheet.tsx`, cleanly hiding dashboard background overhead when notes are maximized.
+
+### 2. Bullet Point List Exit on Enter (`src/lib/format.tsx`)
+- **Clean List Termination**: Enhanced `handleRichEditorKeyDown` to detect empty bullet items (`md-li`, `md-task`, `md-quote`) and immediately convert them back to plain text paragraphs on `Enter` or `Backspace`, eliminating infinite empty bullet creation loops.
+- **Explicit Next Bullet Creation**: Intercepts `Enter` on non-empty list items to cleanly generate the next bullet element with appropriate class and attributes.
+
+### 3. Peak Arrow Key Navigation (`src/lib/format.tsx`, `src/components/NoteSheet.tsx`, `src/components/TrayCompanion.tsx`, `src/components/RawEditor.tsx`)
+- **Title to Body Transition**: Pressing `ArrowDown` inside the note title input automatically transfers caret focus to the start of the editor body across both rich text and raw text modes.
+- **Body to Title Transition**: Pressing `ArrowUp` while at the start of the first line in the editor (or raw textarea) smoothly transfers focus to the note title input with the cursor positioned at the end.
+
+### 4. Taskbar-Aware Work Area Dock Clamping (`src-tauri/src/commands.rs`)
+- **Usable Work Area Query**: Implemented `get_monitor_work_area_phys` utilizing Windows `GetMonitorInfoW` (`rcWork`) and `SystemParametersInfoW(SPI_GETWORKAREA)` to query the screen area excluding the Windows taskbar.
+- **Taskbar Glitch Elimination**: Clamped dock positioning (`clamp_to_monitor`, `position_tray_on_monitor`, and window dragging) to `rcWork.bottom - 8`, preventing the floating dock from overlapping or dropping behind the taskbar.
+- **Topmost Z-Order Reinforcement**: Enforced `HWND_TOPMOST` in `set_window_bounds_atomic` on Windows so the dock reliably stays in front of standard applications.
+
+### 5. Floating Dock Hover Bubble Animation (`src/components/TrayPill.tsx`)
+- **Spring Physics Expansion**: Configured `motion.div` with `whileHover={{ scale: 1.055 }}` and spring stiffness `420` / damping `22`, delivering a smooth tactile bubble effect on hover that snaps back seamlessly on cursor leave.
+
+### 6. Vertical & Portrait Screen Responsive Optimization (`src/App.tsx`, `src/components/NoteSheet.tsx`)
+- **Adaptive Layout Switching**: Detected portrait orientation (`height > width`) and narrow viewports (`< 840px`), transitioning the drawer from a horizontal squeeze into a vertical stacked layout where the note slides into the bottom half.
+- **Zero Horizontal Squeeze**: Prevents notes and the dashboard from getting crushed below minimum usability thresholds on vertical monitors.
+
+### 7. System Fonts Auto-Expansion on Scroll (`src/components/NoteSheet.tsx`, `src/components/TrayCompanion.tsx`)
+- **Unified Single-Scroll Container**: Removed nested inner max-height constraints in favor of a single scroll container.
+- **Sticky Header**: Styled the `System Fonts` header and search bar with `sticky top-0 bg-[#14151a]/95 backdrop-blur-md z-10`, allowing `Font Presets` to naturally scroll out of view and maximizing visible space for system fonts.
+
+### 8. Settings Table Shortcut Tiles & Clean Button Surfaces (`src/components/SettingsPanel.tsx`, `src/components/Sidebar.tsx`, `src/components/TitleBar.tsx`, `src/components/Seek.tsx`, `src/components/BentoCanvas.tsx`, `src/components/DeskWidget.tsx`)
+- **Spacious Table Shortcut Cards**: Redesigned the table keys reference in Settings into large, readable tile cards with high-contrast keycaps (`Tab`, `Shift+Tab`, `Enter`, `Right-Click`).
+- **Clean Button Surfaces**: Removed shortcut text badges (`⌘N`, `⌘J`, `⌘K`) from buttons across the UI, consolidating all shortcut documentation into the Settings panel.
+- **Ingestion Button Spacing**: Expanded sidebar padding and removed width caps, eliminating label truncation dots on `Scan Folder`.
+
 ## [2026-11-01] - Version 1.1.6: Dynamic Quadrant-Based Dock Expansion, Full-Height Scrolling & Production Release
 
 ### 1. Screen Quadrant Calculation Engine (`src-tauri/src/commands.rs`, `src-tauri/src/models.rs`)

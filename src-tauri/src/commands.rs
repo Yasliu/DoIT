@@ -332,6 +332,65 @@ pub fn tray_panel_logical(monitor: &tauri::Monitor) -> (f64, f64) {
     (TRAY_PANEL_W.min(mw * 0.9), TRAY_PANEL_H.min(mh * 0.88))
 }
 
+#[cfg(windows)]
+pub fn get_monitor_work_area_phys(window: &tauri::WebviewWindow, monitor: &tauri::Monitor) -> (i32, i32, i32, i32) {
+    #[repr(C)]
+    struct RECT {
+        left: i32,
+        top: i32,
+        right: i32,
+        bottom: i32,
+    }
+    #[repr(C)]
+    struct MONITORINFO {
+        cb_size: u32,
+        rc_monitor: RECT,
+        rc_work: RECT,
+        dw_flags: u32,
+    }
+
+    unsafe extern "system" {
+        fn MonitorFromWindow(hwnd: *mut std::ffi::c_void, dw_flags: u32) -> *mut std::ffi::c_void;
+        fn GetMonitorInfoW(h_monitor: *mut std::ffi::c_void, lpmi: *mut MONITORINFO) -> i32;
+        fn SystemParametersInfoW(ui_action: u32, ui_param: u32, pv_param: *mut std::ffi::c_void, f_win_ini: u32) -> i32;
+    }
+
+    if let Ok(hwnd) = window.hwnd() {
+        unsafe {
+            let h_mon = MonitorFromWindow(hwnd.0, 2 /* MONITOR_DEFAULTTONEAREST */);
+            if !h_mon.is_null() {
+                let mut mi = MONITORINFO {
+                    cb_size: std::mem::size_of::<MONITORINFO>() as u32,
+                    rc_monitor: RECT { left: 0, top: 0, right: 0, bottom: 0 },
+                    rc_work: RECT { left: 0, top: 0, right: 0, bottom: 0 },
+                    dw_flags: 0,
+                };
+                if GetMonitorInfoW(h_mon, &mut mi) != 0 {
+                    return (mi.rc_work.left, mi.rc_work.top, mi.rc_work.right, mi.rc_work.bottom);
+                }
+            }
+        }
+    }
+
+    unsafe {
+        let mut rc = RECT { left: 0, top: 0, right: 0, bottom: 0 };
+        if SystemParametersInfoW(0x0030 /* SPI_GETWORKAREA */, 0, &mut rc as *mut _ as *mut std::ffi::c_void, 0) != 0 {
+            return (rc.left, rc.top, rc.right, rc.bottom);
+        }
+    }
+
+    let m_pos = monitor.position();
+    let m_size = monitor.size();
+    (m_pos.x, m_pos.y, m_pos.x + m_size.width as i32, m_pos.y + m_size.height as i32 - 48)
+}
+
+#[cfg(not(windows))]
+pub fn get_monitor_work_area_phys(_window: &tauri::WebviewWindow, monitor: &tauri::Monitor) -> (i32, i32, i32, i32) {
+    let m_pos = monitor.position();
+    let m_size = monitor.size();
+    (m_pos.x, m_pos.y, m_pos.x + m_size.width as i32, m_pos.y + m_size.height as i32)
+}
+
 pub fn position_tray_on_monitor(
     window: &tauri::WebviewWindow,
     monitor: &tauri::Monitor,
@@ -339,7 +398,6 @@ pub fn position_tray_on_monitor(
 ) {
     let scale_factor = monitor.scale_factor();
     let m_pos = monitor.position(); // PhysicalPosition<i32> { x, y }
-    let m_size = monitor.size();     // PhysicalSize<u32> { width, height }
 
     let small_w_phys = (180.0 * scale_factor).round() as i32;
     let small_h_phys = (44.0 * scale_factor).round() as i32;
@@ -350,16 +408,18 @@ pub fn position_tray_on_monitor(
     let margin_x = (24.0 * scale_factor).round() as i32;
     let margin_y = (72.0 * scale_factor).round() as i32;
 
-    let min_offset_x = 8;
-    let min_offset_y = 8;
-    let max_small_offset_x = (m_size.width as i32 - small_w_phys - 8).max(min_offset_x);
-    let max_small_offset_y = (m_size.height as i32 - small_h_phys - 8).max(min_offset_y);
+    let (work_l, work_t, work_r, work_b) = get_monitor_work_area_phys(window, monitor);
 
-    let max_expanded_offset_x = (m_size.width as i32 - expanded_w_phys - 8).max(min_offset_x);
-    let max_expanded_offset_y = (m_size.height as i32 - expanded_h_phys - 8).max(min_offset_y);
+    let min_offset_x = (work_l - m_pos.x) + 8;
+    let min_offset_y = (work_t - m_pos.y) + 8;
+    let max_small_offset_x = (work_r - m_pos.x - small_w_phys - 8).max(min_offset_x);
+    let max_small_offset_y = (work_b - m_pos.y - small_h_phys - 8).max(min_offset_y);
 
-    let default_pill_offset_x = (m_size.width as i32 - small_w_phys - margin_x).clamp(min_offset_x, max_small_offset_x);
-    let default_pill_offset_y = (m_size.height as i32 - small_h_phys - margin_y).clamp(min_offset_y, max_small_offset_y);
+    let max_expanded_offset_x = (work_r - m_pos.x - expanded_w_phys - 8).max(min_offset_x);
+    let max_expanded_offset_y = (work_b - m_pos.y - expanded_h_phys - 8).max(min_offset_y);
+
+    let default_pill_offset_x = (work_r - m_pos.x - small_w_phys - margin_x).clamp(min_offset_x, max_small_offset_x);
+    let default_pill_offset_y = (work_b - m_pos.y - small_h_phys - margin_y).clamp(min_offset_y, max_small_offset_y);
 
     let mut mem = TRAY_POSITION_STATE.lock().unwrap();
 
@@ -422,18 +482,17 @@ pub fn set_window_bounds_atomic(window: &tauri::WebviewWindow, x: i32, y: i32, w
                 flags: u32,
             ) -> i32;
         }
-        const SWP_NOZORDER: u32 = 0x0004;
+        const HWND_TOPMOST: *mut std::ffi::c_void = -1isize as *mut std::ffi::c_void;
         const SWP_NOACTIVATE: u32 = 0x0010;
-        const SWP_NOOWNERZORDER: u32 = 0x0200;
         unsafe {
             SetWindowPos(
                 hwnd.0,
-                std::ptr::null_mut(),
+                HWND_TOPMOST,
                 x,
                 y,
                 w as i32,
                 h as i32,
-                SWP_NOZORDER | SWP_NOACTIVATE | SWP_NOOWNERZORDER,
+                SWP_NOACTIVATE,
             );
         }
         return;
@@ -772,12 +831,11 @@ fn clamp_to_monitor(
     h: i32,
 ) -> (i32, i32) {
     if let Some(mon) = get_window_active_monitor(window).or_else(|| app.primary_monitor().ok().flatten()) {
-        let m_pos = mon.position();
-        let m_size = mon.size();
-        let min_x = m_pos.x + 8;
-        let min_y = m_pos.y + 8;
-        let max_x = (m_pos.x + m_size.width as i32 - w - 8).max(min_x);
-        let max_y = (m_pos.y + m_size.height as i32 - h - 8).max(min_y);
+        let (work_l, work_t, work_r, work_b) = get_monitor_work_area_phys(window, &mon);
+        let min_x = work_l + 8;
+        let min_y = work_t + 8;
+        let max_x = (work_r - w - 8).max(min_x);
+        let max_y = (work_b - h - 8).max(min_y);
         (x.clamp(min_x, max_x), y.clamp(min_y, max_y))
     } else {
         (x, y)
@@ -901,15 +959,14 @@ pub fn save_tray_position(app: AppHandle) -> Result<(), String> {
                 .or_else(|| app.primary_monitor().ok().flatten());
 
             if let Some(mon) = target_mon {
-                let m_pos = mon.position();
-                let m_size = mon.size();
                 let scale = mon.scale_factor();
                 let small_w = (160.0 * scale).round() as i32;
 
-                let min_x = m_pos.x + 8;
-                let min_y = m_pos.y + 8;
-                let max_x = (m_pos.x + m_size.width as i32 - win_size.width as i32 - 8).max(min_x);
-                let max_y = (m_pos.y + m_size.height as i32 - win_size.height as i32 - 8).max(min_y);
+                let (work_l, work_t, work_r, work_b) = get_monitor_work_area_phys(&tray_win, &mon);
+                let min_x = work_l + 8;
+                let min_y = work_t + 8;
+                let max_x = (work_r - win_size.width as i32 - 8).max(min_x);
+                let max_y = (work_b - win_size.height as i32 - 8).max(min_y);
 
                 let clamped_x = pos.x.clamp(min_x, max_x);
                 let clamped_y = pos.y.clamp(min_y, max_y);

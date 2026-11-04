@@ -1,4 +1,5 @@
 import { useEffect, useRef, useState } from "react";
+import { motion } from "motion/react";
 import { Mark } from "./Mark";
 import { tauriApi } from "../api/tauriBridge";
 
@@ -41,15 +42,18 @@ export function TrayPill({ onOpen }: { onOpen: () => void }) {
   };
 
   return (
-    <div className="flex h-screen w-screen items-center justify-center bg-transparent select-none" style={{ background: "transparent" }}>
-      <div
+    <div className="flex h-screen w-screen items-center justify-center p-1 bg-transparent select-none" style={{ background: "transparent" }}>
+      <motion.div
         onPointerDown={onPointerDown}
         onContextMenu={(e) => {
           e.preventDefault();
           void tauriApi.showTrayContextMenu();
         }}
+        whileHover={{ scale: 1.055 }}
+        whileTap={{ scale: 0.96 }}
+        transition={{ type: "spring", stiffness: 420, damping: 22 }}
         title="Click to open Docking Mode · Hold and drag to move"
-        className="box-border flex h-full w-full cursor-pointer items-center justify-center gap-2 overflow-hidden whitespace-nowrap rounded-2xl border border-white/10 text-ink-1 transition-opacity duration-200 ease-out"
+        className="box-border flex h-full w-full cursor-pointer items-center justify-center gap-2 overflow-hidden whitespace-nowrap rounded-2xl border border-white/10 text-ink-1"
         style={{
           opacity: shown ? 1 : 0,
           backgroundColor: "var(--theme-tray-bg)",
@@ -62,7 +66,7 @@ export function TrayPill({ onOpen }: { onOpen: () => void }) {
         <span className="pointer-events-none text-[13px] font-semibold leading-none tracking-[0.02em] text-white/85 whitespace-nowrap">
           DoIT
         </span>
-      </div>
+      </motion.div>
     </div>
   );
 }

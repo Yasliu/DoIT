@@ -720,19 +720,29 @@ export function handleRichEditorKeyDown(
   }
 
   const block = currentBlock(editor);
-  if (!block || block.tagName !== "DIV" || !block.hasAttribute("data-p") || !sel.isCollapsed) return false;
+  if (!block || block.tagName !== "DIV" || !sel.isCollapsed) return false;
+
+  const isList = block.classList.contains("md-li") || block.classList.contains("md-quote");
+  const isTask = block.classList.contains("md-task");
+  const isHeading = /\bmd-h\d\b/.test(block.className);
+  const hasPrefix = block.hasAttribute("data-p");
+
+  if (!hasPrefix && !isList && !isTask && !isHeading) return false;
+
+  // Clean empty check: ignore zero-width spaces, non-breaking spaces, trailing newlines and spaces
+  const cleanContent = (block.textContent || "").replace(/[\u200B\u00A0\r\n\s]/g, "");
+  const isEmpty = cleanContent === "" || cleanContent === "-" || cleanContent === "*" || cleanContent === "•";
 
   if (e.key === "Enter") {
-    const isEmpty = (block.textContent || "") === "";
-    const isList = block.classList.contains("md-li") || block.classList.contains("md-quote");
-    const isTask = block.classList.contains("md-task");
-    if (isEmpty && (isList || isTask)) {
-      // empty bullet / quote / task line: leave the list
+    if (isEmpty && (isList || isTask || isHeading)) {
+      // Empty bullet / task / quote / heading line: exit to normal text paragraph!
       e.preventDefault();
       clearPrefix(block);
+      placeCaretStart(block);
       onInput();
       return true;
     }
+
     if (isTask && caretAtEnd(block, range)) {
       e.preventDefault();
       const next = document.createElement("div");
@@ -749,7 +759,20 @@ export function handleRichEditorKeyDown(
       onInput();
       return true;
     }
-    if (/\bmd-h\d\b/.test(block.className) && caretAtEnd(block, range)) {
+
+    if (isList && caretAtEnd(block, range)) {
+      e.preventDefault();
+      const next = document.createElement("div");
+      next.setAttribute("data-p", block.getAttribute("data-p") || "- ");
+      next.className = block.className || "md-li";
+      next.appendChild(document.createElement("br"));
+      block.after(next);
+      placeCaretStart(next);
+      onInput();
+      return true;
+    }
+
+    if (isHeading && caretAtEnd(block, range)) {
       e.preventDefault();
       const next = document.createElement("div");
       next.appendChild(document.createElement("br"));
@@ -760,14 +783,43 @@ export function handleRichEditorKeyDown(
     }
   }
 
-  if (e.key === "Backspace" && caretOffsetIn(block, range) === 0) {
-    e.preventDefault();
-    clearPrefix(block);
-    onInput();
-    return true;
+  if (e.key === "Backspace" && (caretOffsetIn(block, range) === 0 || isEmpty)) {
+    if (isList || isTask || isHeading || hasPrefix) {
+      e.preventDefault();
+      clearPrefix(block);
+      placeCaretStart(block);
+      onInput();
+      return true;
+    }
   }
 
   return false;
+}
+
+export function isCaretAtEditorStart(editor: HTMLElement): boolean {
+  const sel = window.getSelection();
+  if (!sel || sel.rangeCount === 0 || !sel.isCollapsed) return false;
+  const range = sel.getRangeAt(0);
+  const firstBlock = editor.firstElementChild as HTMLElement | null;
+  if (!firstBlock) return true;
+  if (!firstBlock.contains(range.startContainer) && range.startContainer !== editor && range.startContainer !== firstBlock) {
+    return false;
+  }
+  const pre = document.createRange();
+  pre.selectNodeContents(firstBlock);
+  try {
+    pre.setEnd(range.startContainer, range.startOffset);
+    return pre.toString().replace(/[\u200B\u00A0\r\n\s]/g, "").length === 0;
+  } catch {
+    return false;
+  }
+}
+
+export function placeCaretAtEditorStart(editor: HTMLElement): void {
+  editor.focus();
+  const firstBlock = editor.firstElementChild as HTMLElement | null;
+  if (!firstBlock) return;
+  placeCaretStart(firstBlock);
 }
 // ---------------------------------------------------------------------------
 // Markdown editing helpers (headings, tables, toolbar commands)

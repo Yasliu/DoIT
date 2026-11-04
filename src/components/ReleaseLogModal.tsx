@@ -38,26 +38,42 @@ export function ReleaseLogModal({ onClose }: ReleaseLogModalProps) {
             <Sparkles size={14} />
           </div>
           <span className="font-mono text-[10px] uppercase tracking-[0.14em] text-ink-4">
-            Version 1.1.6 Update
+            Version 1.1.7 Update
           </span>
         </div>
 
         <h2 className="text-[17px] font-semibold text-white tracking-tight mb-3">
-          What&apos;s New in v1.1.6
+          What&apos;s New in v1.1.7
         </h2>
 
-        <ul className="space-y-2.5 mb-5 text-[12.5px] text-ink-2 leading-relaxed">
+        <ul className="space-y-2 mb-5 text-[12px] text-ink-2 leading-relaxed">
           <li className="flex items-start gap-2">
             <span className="size-1.5 rounded-full bg-white/60 mt-2 shrink-0" />
-            <span>Dynamic quadrant-based dock expansion paths without jumping.</span>
+            <span>Maximize note button to expand notes to full-canvas view instantly.</span>
           </li>
           <li className="flex items-start gap-2">
             <span className="size-1.5 rounded-full bg-white/60 mt-2 shrink-0" />
-            <span>Full-height vertical scrolling & draggable scrollbars in Dock Mode editor.</span>
+            <span>Peak arrow key navigation seamlessly flowing between title and editor.</span>
           </li>
           <li className="flex items-start gap-2">
             <span className="size-1.5 rounded-full bg-white/60 mt-2 shrink-0" />
-            <span>Responsive confirmation dialogs with proper multi-line text wrapping.</span>
+            <span>Clean bullet points handling: pressing Enter on empty items exits back to text.</span>
+          </li>
+          <li className="flex items-start gap-2">
+            <span className="size-1.5 rounded-full bg-white/60 mt-2 shrink-0" />
+            <span>Taskbar work area clamping & topmost lock prevents dock hiding behind taskbar.</span>
+          </li>
+          <li className="flex items-start gap-2">
+            <span className="size-1.5 rounded-full bg-white/60 mt-2 shrink-0" />
+            <span>Vertical screen optimization: adaptive layout prevents narrow screen squeezing.</span>
+          </li>
+          <li className="flex items-start gap-2">
+            <span className="size-1.5 rounded-full bg-white/60 mt-2 shrink-0" />
+            <span>Smooth spring hover bubble animation on floating dock pill.</span>
+          </li>
+          <li className="flex items-start gap-2">
+            <span className="size-1.5 rounded-full bg-white/60 mt-2 shrink-0" />
+            <span>Spacious table shortcut tiles & consolidated keyboard reference in Settings.</span>
           </li>
         </ul>
 

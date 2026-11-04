@@ -90,21 +90,20 @@ export function Sidebar({
           className={cx(
             "flex items-center gap-1.5 w-full transition-all duration-300 ease-out",
             open
-              ? "max-w-[200px] opacity-100 translate-x-0 pointer-events-auto"
+              ? "opacity-100 translate-x-0 pointer-events-auto"
               : "max-w-0 opacity-0 -translate-x-3 overflow-hidden pointer-events-none",
           )}
         >
           <button
             type="button"
             onClick={onNew}
-            title="New note  ⌘N"
+            title="New note"
             className="flex h-8 flex-1 items-center justify-between rounded-[10px] bg-white/[0.055] px-3 text-[12.5px] font-medium text-ink-2 transition-colors duration-150 hover:bg-white/[0.1] hover:text-ink-1 overflow-hidden"
           >
             <div className="flex items-center gap-2 min-w-0">
               <Plus size={14} strokeWidth={2} className="shrink-0" />
               <span className="truncate">New note</span>
             </div>
-            <span className="kbd shrink-0">⌘N</span>
           </button>
           <button
             type="button"
@@ -126,7 +125,7 @@ export function Sidebar({
           <button
             type="button"
             onClick={onNew}
-            title="New note  ⌘N"
+            title="New note"
             className="grid size-8 place-items-center rounded-[10px] bg-white/[0.055] text-ink-2 transition-colors duration-150 hover:bg-white/[0.1] hover:text-ink-1 cursor-pointer"
           >
             <Plus size={14} strokeWidth={2} />
@@ -135,7 +134,7 @@ export function Sidebar({
       </div>
 
       {/* Main Dashboard Ingestion Portal */}
-      <div className="px-3 pt-2 pb-3.5 relative min-h-[38px] shrink-0">
+      <div className="px-3 pt-2.5 pb-5 relative min-h-[44px] shrink-0">
         {/* Expanded Ingestion Bar */}
         <div
           className={cx(
@@ -149,18 +148,18 @@ export function Sidebar({
             type="button"
             onClick={onImportFile}
             title="Import single markdown or text file"
-            className="flex h-7 flex-1 items-center justify-center gap-1 rounded-[8px] bg-white/[0.04] px-1.5 text-[11px] font-medium text-ink-3 transition-colors duration-150 hover:bg-white/[0.08] hover:text-ink-1 cursor-pointer"
+            className="flex h-7.5 flex-1 items-center justify-center gap-1.5 rounded-[8px] bg-white/[0.04] px-2 text-[11px] font-medium text-ink-3 transition-colors duration-150 hover:bg-white/[0.08] hover:text-ink-1 cursor-pointer"
           >
-            <FileDown size={12.5} strokeWidth={1.8} className="shrink-0" />
+            <FileDown size={13} strokeWidth={1.8} className="shrink-0" />
             <span className="whitespace-nowrap">File Import</span>
           </button>
           <button
             type="button"
             onClick={onScanFolder}
             title="Scan & import custom folder"
-            className="flex h-7 flex-1 items-center justify-center gap-1 rounded-[8px] bg-white/[0.04] px-1.5 text-[11px] font-medium text-ink-3 transition-colors duration-150 hover:bg-white/[0.08] hover:text-ink-1 cursor-pointer"
+            className="flex h-7.5 flex-1 items-center justify-center gap-1.5 rounded-[8px] bg-white/[0.04] px-2 text-[11px] font-medium text-ink-3 transition-colors duration-150 hover:bg-white/[0.08] hover:text-ink-1 cursor-pointer"
           >
-            <FolderInput size={12.5} strokeWidth={1.8} className="shrink-0" />
+            <FolderInput size={13} strokeWidth={1.8} className="shrink-0" />
             <span className="whitespace-nowrap">Scan Folder</span>
           </button>
         </div>
