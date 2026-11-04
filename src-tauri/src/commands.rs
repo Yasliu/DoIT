@@ -406,7 +406,7 @@ pub fn position_tray_on_monitor(
     let expanded_h_phys = (panel_h * scale_factor).round() as i32;
 
     let margin_x = (24.0 * scale_factor).round() as i32;
-    let margin_y = (72.0 * scale_factor).round() as i32;
+    let margin_y = (12.0 * scale_factor).round() as i32;
 
     let (work_l, work_t, work_r, work_b) = get_monitor_work_area_phys(window, monitor);
 
@@ -536,6 +536,7 @@ pub const WEBVIEW_ARGS: &str = "--disable-features=msWebOOUI,msPdfOOUI,msSmartSc
 
 pub static MAIN_SUSPENDED: AtomicBool = AtomicBool::new(false);
 pub static MAIN_SHOW_PENDING: AtomicBool = AtomicBool::new(false);
+pub static TRAY_START_EXPANDED: AtomicBool = AtomicBool::new(false);
 /// Set by the frontend while an externally opened file has unsaved edits (never blank the canvas then)
 pub static EXTERNAL_DIRTY: AtomicBool = AtomicBool::new(false);
 
@@ -660,15 +661,25 @@ fn ensure_tray(app: &AppHandle) -> Result<(tauri::WebviewWindow, bool), String> 
 }
 
 #[tauri::command]
-pub fn open_tray_mode(app: AppHandle) -> Result<(), String> {
+pub fn open_tray_mode(
+    app: AppHandle,
+    has_active_note: Option<bool>,
+    note_id: Option<String>,
+) -> Result<(), String> {
+    let should_expand = has_active_note.unwrap_or(false);
+    TRAY_START_EXPANDED.store(should_expand, Ordering::SeqCst);
     // window creation must never run on the main/UI thread of a command
     std::thread::spawn(move || {
-        let _ = open_tray_mode_inner(&app);
+        let _ = open_tray_mode_inner(&app, should_expand, note_id);
     });
     Ok(())
 }
 
-fn open_tray_mode_inner(app: &AppHandle) -> Result<(), String> {
+fn open_tray_mode_inner(
+    app: &AppHandle,
+    should_expand: bool,
+    note_id: Option<String>,
+) -> Result<(), String> {
     let main_win_opt = app.get_webview_window("main");
 
     let active_monitor = if let Some(ref main_win) = main_win_opt {
@@ -716,9 +727,13 @@ fn open_tray_mode_inner(app: &AppHandle) -> Result<(), String> {
 
     if let Some(mon) = target_mon {
         lock_window_transition(350);
-        position_tray_on_monitor(&tray, &mon, true);
+        position_tray_on_monitor(&tray, &mon, should_expand);
         if let Ok(pos) = tray.outer_position() {
-            PRE_STATE_BUFFER.lock().unwrap().expanded_physical_pos = Some(pos);
+            if should_expand {
+                PRE_STATE_BUFFER.lock().unwrap().expanded_physical_pos = Some(pos);
+            } else {
+                PRE_STATE_BUFFER.lock().unwrap().pill_physical_pos = Some(pos);
+            }
         }
     }
 
@@ -728,7 +743,12 @@ fn open_tray_mode_inner(app: &AppHandle) -> Result<(), String> {
         let _ = tray.show();
         let _ = tray.set_always_on_top(true);
         let _ = tray.set_focus();
-        let _ = tray.emit("set-expanded", true);
+        let _ = tray.emit("set-expanded", should_expand);
+        if should_expand {
+            if let Some(id) = note_id {
+                let _ = tray.emit("open-note", id);
+            }
+        }
     }
 
     suspend_main(app);
@@ -738,16 +758,18 @@ fn open_tray_mode_inner(app: &AppHandle) -> Result<(), String> {
 /// Called by the tray page after mount: reveals the (already positioned) window.
 #[tauri::command]
 pub fn tray_ready(window: tauri::WebviewWindow) -> String {
-    // The frame is created on one monitor and then moved: Windows may have rescaled it (DPI change) during
-    // that move, which left the very first panel too small. Re-apply the exact geometry now that it sits on
-    // its final monitor.
+    let start_expanded = TRAY_START_EXPANDED.load(Ordering::SeqCst);
     if let Some(mon) = get_window_active_monitor(&window) {
-        position_tray_on_monitor(&window, &mon, true);
+        position_tray_on_monitor(&window, &mon, start_expanded);
     }
     let _ = window.show();
     let _ = window.set_always_on_top(true);
     let _ = window.set_focus();
-    "panel".to_string()
+    if start_expanded {
+        "panel".to_string()
+    } else {
+        "pill".to_string()
+    }
 }
 
 /// Mutates the one tray frame between "panel" (380x480) and "pill" (180x44), keeping the

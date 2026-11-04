@@ -313,10 +313,10 @@ export const tauriApi = {
     }
   },
 
-  async openTrayMode(): Promise<void> {
+  async openTrayMode(hasActiveNote?: boolean, noteId?: string): Promise<void> {
     if (!isTauri()) return;
     try {
-      await invoke("open_tray_mode");
+      await invoke("open_tray_mode", { hasActiveNote: hasActiveNote ?? false, noteId: noteId ?? null });
     } catch (err) {
     }
   },

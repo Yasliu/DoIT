@@ -42,6 +42,7 @@ import {
   insertTableAtCaret,
   isCaretAtEditorStart,
   placeCaretAtEditorStart,
+  fixCheckboxCaret,
 } from "../lib/format";
 import { accentFor, cleanText, cx, fullStamp, uid } from "../lib/text";
 
@@ -61,8 +62,10 @@ interface NoteSheetProps {
   onOpening?: () => void;
   width?: number;
   onResizeWidth?: (w: number) => void;
+  onResizeStateChange?: (resizing: boolean) => void;
   isMaximized?: boolean;
   onToggleMaximize?: () => void;
+  isBottomMode?: boolean;
 }
 
 export function NoteSheet({
@@ -78,8 +81,10 @@ export function NoteSheet({
   onOpening,
   width,
   onResizeWidth,
+  onResizeStateChange,
   isMaximized = false,
   onToggleMaximize,
+  isBottomMode = false,
 }: NoteSheetProps) {
   const frame = useRef<HTMLDivElement | null>(null);
   const [phase, setPhase] = useState<"pre" | "in" | "settled" | "out">(instant ? "settled" : "pre");
@@ -135,12 +140,11 @@ export function NoteSheet({
     if (!fontOpen || !fontWrapRef.current) return;
     // viewport coordinates (the menu is portaled to <body>, so no clipping / containing-block surprises)
     const r = fontWrapRef.current.getBoundingClientRect();
-    const w = 240;
+    const w = 260;
     const left = Math.max(8, Math.min(r.right - w, window.innerWidth - w - 8));
     const top = r.bottom + 6;
-    const cap = window.innerWidth >= 768 ? 440 : 360;
-    const maxHeight = Math.max(160, Math.min(cap, window.innerHeight - top - 16));
-    setFontMenuStyle({ position: "fixed", left, top, right: "auto", maxHeight });
+    const maxHeight = Math.max(260, Math.min(520, window.innerHeight - top - 16));
+    setFontMenuStyle({ position: "fixed", left, top, right: "auto", maxHeight, width: `${w}px` });
   }, [fontOpen]);
 
   useLayoutEffect(() => {
@@ -170,6 +174,7 @@ export function NoteSheet({
     e.preventDefault();
     e.stopPropagation();
     isResizing.current = true;
+    onResizeStateChange?.(true);
     startX.current = e.clientX;
     startWidth.current = width || frame.current?.offsetWidth || 520;
 
@@ -182,12 +187,25 @@ export function NoteSheet({
       const minW = getAdaptiveMinW();
       const maxW = Math.max(minW, window.innerWidth - 100);
       const nextW = Math.round(Math.min(Math.max(startWidth.current + deltaX, minW), maxW));
+
+      // Dragged past threshold snaps straight into maximize mode
+      if (nextW >= window.innerWidth * 0.78 || nextW >= window.innerWidth - 120) {
+        isResizing.current = false;
+        onResizeStateChange?.(false);
+        document.body.style.userSelect = "";
+        document.body.style.cursor = "";
+        window.removeEventListener("mousemove", onMouseMove);
+        window.removeEventListener("mouseup", onMouseUp);
+        onToggleMaximize?.();
+        return;
+      }
       onResizeWidth?.(nextW);
     };
 
     const onMouseUp = (upEvent: MouseEvent) => {
       if (!isResizing.current) return;
       isResizing.current = false;
+      onResizeStateChange?.(false);
       document.body.style.userSelect = "";
       document.body.style.cursor = "";
       window.removeEventListener("mousemove", onMouseMove);
@@ -549,8 +567,16 @@ export function NoteSheet({
           if (e.target === e.currentTarget && e.propertyName === "transform" && phase === "in") setPhase("settled");
         }}
         style={{
-          width: isMaximized ? "100%" : width ? `${width}px` : "clamp(420px, 42vw, 600px)",
-          transform: phase === "settled" || isMaximized ? "none" : phase === "in" ? "translate3d(0,0,0)" : "translate3d(106%,0,0)",
+          width: isMaximized || isBottomMode ? "100%" : width ? `${width}px` : "clamp(420px, 42vw, 600px)",
+          height: isMaximized || isBottomMode ? "100%" : undefined,
+          transform:
+            phase === "settled" || isMaximized
+              ? "none"
+              : phase === "in"
+                ? "translate3d(0,0,0)"
+                : isBottomMode
+                  ? "translate3d(0,106%,0)"
+                  : "translate3d(106%,0,0)",
           opacity: phase === "pre" ? 0 : 1,
           // entry: long soft landing + quick fade; exit keeps the plain 300ms ease-out
           transition:
@@ -565,11 +591,11 @@ export function NoteSheet({
         }}
         className={cx(
           "absolute z-30 flex flex-col overflow-visible rounded-[22px] glass-sheet outline-none border border-white/10 shadow-[0_30px_90px_rgba(0,0,0,0.6)]",
-          isMaximized ? "inset-0 !w-full" : "inset-y-0 right-0",
+          isMaximized || isBottomMode ? "inset-0 !w-full !h-full" : "inset-y-0 right-0",
         )}
       >
         {/* Interactive Resizable Handle Rail */}
-        {!isMaximized && (
+        {!isMaximized && !isBottomMode && (
           <div
             onMouseDown={handleResizeMouseDown}
             className="w-1 hover:w-1.5 cursor-col-resize bg-white/10 hover:bg-white/30 transition-all absolute top-0 left-0 h-full z-40 select-none group/resize"
@@ -583,8 +609,9 @@ export function NoteSheet({
           style={{ backgroundColor: accent, animation: "strip-in 620ms cubic-bezier(0.22,1,0.36,1) both" }}
         />
 
-        <div className="flex min-h-[52px] shrink-0 flex-nowrap items-center justify-between gap-x-2 px-3.5 sm:px-4 py-1.5 overflow-visible pointer-events-auto">
-          <div className="flex min-w-0 max-w-[130px] shrink items-center gap-2">
+        {/* Row 1: Context & Window Controls */}
+        <div className="flex min-h-[46px] shrink-0 items-center justify-between gap-x-2 px-3.5 sm:px-4 pt-2 pb-1 overflow-visible pointer-events-auto">
+          <div className="flex min-w-0 max-w-[200px] shrink items-center gap-2">
             {external ? (
               <span
                 title={draft.source_path}
@@ -598,10 +625,10 @@ export function NoteSheet({
               <button
                 type="button"
                 onClick={() => setShelfOpen((v) => !v)}
-                className="flex h-6 items-center gap-1.5 rounded-md px-1.5 font-mono text-[9.5px] uppercase tracking-[0.11em] text-ink-3 transition-colors hover:bg-white/[0.06] hover:text-ink-1 shrink-0"
+                className="flex h-6.5 items-center gap-1.5 rounded-lg px-2 font-mono text-[9.5px] uppercase tracking-[0.11em] text-ink-3 transition-colors hover:bg-white/[0.08] hover:text-ink-1 shrink-0 bg-white/[0.04]"
               >
-                <span className="size-[4px] shrink-0 rounded-full" style={{ backgroundColor: accent }} />
-                <span className="fade-end max-w-[80px] overflow-hidden whitespace-nowrap">{cleanText(draft.category)}</span>
+                <span className="size-[5px] shrink-0 rounded-full" style={{ backgroundColor: accent }} />
+                <span className="fade-end max-w-[120px] overflow-hidden whitespace-nowrap">{cleanText(draft.category)}</span>
                 <ChevronDown size={10} strokeWidth={2} />
               </button>
 
@@ -661,9 +688,73 @@ export function NoteSheet({
             )}
           </div>
 
+          {/* Right: Window Controls (Trash, Maximize, Close) */}
+          <div className="flex shrink-0 items-center gap-1 pointer-events-auto">
+            {!external && (
+              <button
+                type="button"
+                onClick={() => setShowDeleteConfirm(true)}
+                aria-label="Delete note"
+                className="icon-btn !size-7 hover:!text-red-400 hover:!bg-red-500/10 cursor-pointer"
+                title="Delete note"
+              >
+                <Trash size={12.5} strokeWidth={1.7} />
+              </button>
+            )}
+            {onToggleMaximize && (
+              <button
+                type="button"
+                onClick={onToggleMaximize}
+                aria-label={isMaximized ? "Restore panel size" : "Maximize note"}
+                className="icon-btn !size-7 cursor-pointer"
+                title={isMaximized ? "Restore panel size" : "Maximize note"}
+              >
+                {isMaximized ? <Minimize2 size={12.5} strokeWidth={1.7} /> : <Maximize2 size={12.5} strokeWidth={1.7} />}
+              </button>
+            )}
+            <button
+              type="button"
+              onClick={close}
+              aria-label="Close note"
+              className="icon-btn !size-7 cursor-pointer"
+            >
+              <X size={13} strokeWidth={1.8} />
+            </button>
+          </div>
+        </div>
+
+        {/* Row 2: Mode Toggle & Formatting Tools */}
+        <div className="flex shrink-0 items-center justify-between gap-2 px-3.5 sm:px-4 pb-2 pt-0.5 overflow-visible pointer-events-auto border-b border-white/[0.06]">
+          <div className="flex items-center gap-2">
+            <ModeToggle rawMode={rawMode} onChange={setMode} />
+            {external && (
+              <div className="flex min-w-0 items-center gap-2">
+                {saveError && (
+                  <span className="max-w-[160px] truncate text-[10.5px] text-red-400" title={saveError}>
+                    {saveError}
+                  </span>
+                )}
+                {dirty && !savedFlash && <span className="font-mono text-[9px] uppercase tracking-[0.1em] text-ink-4">Unsaved</span>}
+                <button
+                  type="button"
+                  onClick={() => void saveExternal()}
+                  title="Save to the original file (Ctrl+S)"
+                  className={cx(
+                    "flex h-6.5 items-center gap-1.5 rounded-[6px] border px-2.5 text-[11px] font-medium transition-colors duration-150",
+                    dirty
+                      ? "border-white bg-white text-black hover:bg-white/90"
+                      : "border-white/[0.14] text-ink-3 hover:border-white/30 hover:text-ink-1",
+                  )}
+                >
+                  <Save size={11.5} strokeWidth={2} />
+                  {savedFlash ? "Saved" : "Save"}
+                </button>
+              </div>
+            )}
+          </div>
+
+          {!rawMode && (
           <div className="flex shrink-0 items-center gap-0.5 overflow-visible pointer-events-auto">
-            {!rawMode && (
-            <>
             <div ref={fontWrapRef} className="relative pointer-events-auto">
               <button
                 type="button"
@@ -845,20 +936,18 @@ export function NoteSheet({
             >
               <TableIcon size={13} strokeWidth={1.8} />
             </button>
-            <button
-              type="button"
-              onMouseDown={(e) => e.preventDefault()}
-              onClick={() => runEditorCommand((ed) => applyTask(ed))}
-              aria-label="Task checkbox"
-              title="Task checkbox (- [ ])"
-              className="icon-btn !size-7 cursor-pointer shrink-0"
-            >
-              <ListChecks size={13.5} strokeWidth={1.8} />
-            </button>
-            <span className="mx-0.5 h-4 w-px bg-white/[0.08]" />
-            </>
-            )}
-            <input
+              <button
+                type="button"
+                onMouseDown={(e) => e.preventDefault()}
+                onClick={() => runEditorCommand((ed) => applyTask(ed))}
+                aria-label="Task checkbox"
+                title="Task checkbox (- [ ])"
+                className="icon-btn !size-7 cursor-pointer shrink-0"
+              >
+                <ListChecks size={13.5} strokeWidth={1.8} />
+              </button>
+              <span className="mx-0.5 h-4 w-px bg-white/[0.08]" />
+              <input
               ref={fileInputRef}
               type="file"
               accept="image/*"
@@ -896,65 +985,6 @@ export function NoteSheet({
               <ImageIcon size={12.5} strokeWidth={1.7} />
             </button>
 
-            <span className="mx-1 h-4 w-px bg-white/[0.08]" />
-
-            {!external && (
-              <button
-                type="button"
-                onClick={() => setShowDeleteConfirm(true)}
-                aria-label="Delete note"
-                className="icon-btn !size-7 hover:!text-red-400 hover:!bg-red-500/10 cursor-pointer"
-                title="Delete note"
-              >
-                <Trash size={12.5} strokeWidth={1.7} />
-              </button>
-            )}
-            {onToggleMaximize && (
-              <button
-                type="button"
-                onClick={onToggleMaximize}
-                aria-label={isMaximized ? "Restore panel size" : "Maximize note"}
-                className="icon-btn !size-7 cursor-pointer"
-                title={isMaximized ? "Restore panel size" : "Maximize note"}
-              >
-                {isMaximized ? <Minimize2 size={12.5} strokeWidth={1.7} /> : <Maximize2 size={12.5} strokeWidth={1.7} />}
-              </button>
-            )}
-            <button
-              type="button"
-              onClick={close}
-              aria-label="Close note"
-              className="icon-btn !size-7"
-            >
-              <X size={13} strokeWidth={1.8} />
-            </button>
-          </div>
-        </div>
-
-        <div className="flex shrink-0 items-center justify-between gap-3 px-5 pb-2">
-          <ModeToggle rawMode={rawMode} onChange={setMode} />
-          {external && (
-            <div className="flex min-w-0 items-center gap-2">
-              {saveError && (
-                <span className="max-w-[200px] truncate text-[10.5px] text-red-400" title={saveError}>
-                  {saveError}
-                </span>
-              )}
-              {dirty && !savedFlash && <span className="font-mono text-[9px] uppercase tracking-[0.1em] text-ink-4">Unsaved</span>}
-              <button
-                type="button"
-                onClick={() => void saveExternal()}
-                title="Save to the original file (Ctrl+S)"
-                className={cx(
-                  "flex h-7 items-center gap-1.5 rounded-[8px] border px-3 text-[11.5px] font-medium transition-colors duration-150",
-                  dirty
-                    ? "border-white bg-white text-black hover:bg-white/90"
-                    : "border-white/[0.14] text-ink-3 hover:border-white/30 hover:text-ink-1",
-                )}
-              >
-                <Save size={12.5} strokeWidth={2} />
-                {savedFlash ? "Saved" : "Save"}
-              </button>
             </div>
           )}
         </div>
@@ -1078,6 +1108,7 @@ export function NoteSheet({
                   }}
                   onClick={(e) => {
                     if (handleCheckboxClick(e, editorRef.current)) handleEditorInput();
+                    if (editorRef.current) fixCheckboxCaret(editorRef.current);
                   }}
                   onKeyDown={(e) => {
                     if (e.key === "ArrowUp" && editorRef.current && isCaretAtEditorStart(editorRef.current)) {
@@ -1104,8 +1135,14 @@ export function NoteSheet({
                       return;
                     }
                   }}
-                  onKeyUp={updateActiveFormatting}
-                  onMouseUp={updateActiveFormatting}
+                  onKeyUp={() => {
+                    updateActiveFormatting();
+                    if (editorRef.current) fixCheckboxCaret(editorRef.current);
+                  }}
+                  onMouseUp={() => {
+                    updateActiveFormatting();
+                    if (editorRef.current) fixCheckboxCaret(editorRef.current);
+                  }}
                   className="w-full min-h-[300px] whitespace-pre-wrap break-words bg-transparent text-[15.5px] leading-relaxed text-ink-2 outline-none scroll select-text"
                   style={{
                     fontFamily: fontStack(draft.font_family),

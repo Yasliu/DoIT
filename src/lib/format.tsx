@@ -783,6 +783,30 @@ export function handleRichEditorKeyDown(
     }
   }
 
+  // Checkbox navigation guard: never allow cursor to step behind/left of the checkbox
+  if (isTask && (e.key === "ArrowLeft" || e.key === "Home")) {
+    const cb = block.querySelector(".md-cb");
+    if (cb) {
+      if (e.key === "Home") {
+        e.preventDefault();
+        placeCaretAfterCheckbox(block, cb);
+        return true;
+      }
+      if (isCaretRightAfterCheckbox(block, cb, range)) {
+        e.preventDefault();
+        const prev = block.previousElementSibling as HTMLElement | null;
+        if (prev) {
+          const r = document.createRange();
+          r.selectNodeContents(prev);
+          r.collapse(false);
+          sel.removeAllRanges();
+          sel.addRange(r);
+        }
+        return true;
+      }
+    }
+  }
+
   if (e.key === "Backspace" && (caretOffsetIn(block, range) === 0 || isEmpty)) {
     if (isList || isTask || isHeading || hasPrefix) {
       e.preventDefault();
@@ -794,6 +818,57 @@ export function handleRichEditorKeyDown(
   }
 
   return false;
+}
+
+export function placeCaretAfterCheckbox(block: HTMLElement, cb: Element): void {
+  const sel = window.getSelection();
+  if (!sel) return;
+  const r = document.createRange();
+  const next = cb.nextSibling;
+  if (next && next.nodeType === Node.TEXT_NODE) {
+    r.setStart(next, 0);
+  } else if (next) {
+    r.setStartBefore(next);
+  } else {
+    const br = document.createElement("br");
+    block.appendChild(br);
+    r.setStartBefore(br);
+  }
+  r.collapse(true);
+  sel.removeAllRanges();
+  sel.addRange(r);
+}
+
+function isCaretRightAfterCheckbox(block: HTMLElement, cb: Element, range: Range): boolean {
+  if (range.startContainer === block && range.startOffset === 1) return true;
+  const next = cb.nextSibling;
+  if (next && range.startContainer === next && range.startOffset === 0) return true;
+  return false;
+}
+
+export function fixCheckboxCaret(editor: HTMLElement): void {
+  const sel = window.getSelection();
+  if (!sel || sel.rangeCount === 0 || !sel.isCollapsed) return;
+  const range = sel.getRangeAt(0);
+  if (!editor.contains(range.startContainer)) return;
+
+  const node = range.startContainer;
+  const taskBlock = (node instanceof HTMLElement ? node : node.parentElement)?.closest(".md-task") as HTMLElement | null;
+  if (!taskBlock) return;
+
+  const cb = taskBlock.querySelector(".md-cb");
+  if (!cb) return;
+
+  let isBefore = false;
+  if (range.startContainer === taskBlock && range.startOffset === 0) {
+    isBefore = true;
+  } else if (cb.contains(range.startContainer) || range.startContainer === cb) {
+    isBefore = true;
+  }
+
+  if (isBefore) {
+    placeCaretAfterCheckbox(taskBlock, cb);
+  }
 }
 
 export function isCaretAtEditorStart(editor: HTMLElement): boolean {

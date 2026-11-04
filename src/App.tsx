@@ -86,6 +86,7 @@ export default function App() {
   const [openNote, setOpenNote] = useState<OpenNote | null>(null);
   const [isNoteMaximized, setIsNoteMaximized] = useState(false);
   const [isVerticalScreen, setIsVerticalScreen] = useState(() => window.innerHeight > window.innerWidth || window.innerWidth < 840);
+  const [isResizingSheet, setIsResizingSheet] = useState(false);
   const [drawerWidth, setDrawerWidth] = useState<number>(getStoredDrawerWidth);
   const [contextMenu, setContextMenu] = useState<{ x: number; y: number; note: NoteItem } | null>(null);
   const [categoryMenu, setCategoryMenu] = useState<{ x: number; y: number; shelf: string } | null>(null);
@@ -422,8 +423,8 @@ export default function App() {
   }, []);
 
   const toggleMini = useCallback(() => {
-    void tauriApi.openTrayMode();
-  }, []);
+    void tauriApi.openTrayMode(Boolean(openNote), openNote?.note.id);
+  }, [openNote]);
 
   const handleImportNote = useCallback(async () => {
     try {
@@ -595,18 +596,20 @@ export default function App() {
                     : 0,
               height: isVerticalScreen && !isNoteMaximized
                 ? openFresh && openNote && sheetReserve && !sheetClosing
-                  ? "55vh"
+                  ? "54vh"
                   : 0
                 : undefined,
               marginLeft: !isVerticalScreen && !isNoteMaximized && openFresh && openNote && sheetReserve && !sheetClosing ? 12 : 0,
               marginTop: isVerticalScreen && !isNoteMaximized && openFresh && openNote && sheetReserve && !sheetClosing ? 12 : 0,
-              transition: sheetClosing
-                ? isVerticalScreen
-                  ? "height 300ms ease-out, margin-top 300ms ease-out"
-                  : "width 300ms ease-out, margin-left 300ms ease-out"
-                : isVerticalScreen
-                  ? "height 460ms cubic-bezier(0.32, 0.72, 0, 1), margin-top 460ms cubic-bezier(0.32, 0.72, 0, 1)"
-                  : "width 460ms cubic-bezier(0.32, 0.72, 0, 1), margin-left 460ms cubic-bezier(0.32, 0.72, 0, 1)",
+              transition: isResizingSheet
+                ? "none"
+                : sheetClosing
+                  ? isVerticalScreen
+                    ? "height 300ms ease-out, margin-top 300ms ease-out"
+                    : "width 300ms ease-out, margin-left 300ms ease-out"
+                  : isVerticalScreen
+                    ? "height 460ms cubic-bezier(0.32, 0.72, 0, 1), margin-top 460ms cubic-bezier(0.32, 0.72, 0, 1)"
+                    : "width 460ms cubic-bezier(0.32, 0.72, 0, 1), margin-left 460ms cubic-bezier(0.32, 0.72, 0, 1)",
             }}
           >
             {openFresh && openNote && (
@@ -619,8 +622,10 @@ export default function App() {
                 instant={wasSheetOpen.current}
                 width={isNoteMaximized || isVerticalScreen ? undefined : drawerWidth}
                 onResizeWidth={setDrawerWidth}
+                onResizeStateChange={setIsResizingSheet}
                 isMaximized={isNoteMaximized}
                 onToggleMaximize={() => setIsNoteMaximized((v) => !v)}
+                isBottomMode={isVerticalScreen && !isNoteMaximized}
                 onClosing={() => setSheetClosing(true)}
                 onOpening={() => setSheetReserve(true)}
                 onCommit={commitSheet}

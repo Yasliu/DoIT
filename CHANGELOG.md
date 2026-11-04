@@ -36,6 +36,27 @@
 - **Clean Button Surfaces**: Removed shortcut text badges (`⌘N`, `⌘J`, `⌘K`) from buttons across the UI, consolidating all shortcut documentation into the Settings panel.
 - **Ingestion Button Spacing**: Expanded sidebar padding and removed width caps, eliminating label truncation dots on `Scan Folder`.
 
+### 9. Checkbox Caret Position Guard (`src/lib/format.tsx`, `src/components/NoteSheet.tsx`, `src/components/TrayCompanion.tsx`)
+- **Front-Only Caret Enforcement**: Implemented `fixCheckboxCaret`, `placeCaretAfterCheckbox`, and navigation guards on `ArrowLeft` and `Home` keys, guaranteeing that the editor cursor never gets trapped behind (to the left of) the task checkbox.
+
+### 10. De-Crowded Two-Tier NoteSheet Toolbar & Bottom Drawer Layout (`src/components/NoteSheet.tsx`, `src/App.tsx`)
+- **Two-Tier Balanced Header**: Re-architected the note editor toolbar into two clean rows:
+  - **Row 1**: Document shelf / external file badge on the left, and Window actions (Delete, Maximize, Close) on the right.
+  - **Row 2**: Mode toggle (`MD MODE` / `TEXT MODE`) on the left, and rich formatting tools (Typeface, Bold, Italic, Heading, Table, Task, Image) on the right.
+- **Vertical Screen Slide-Down**: When screen aspect ratio is portrait or width is constrained, the note panel slides down cleanly to occupy the bottom half (`w-full h-full`), entering/exiting with vertical translation and zero crowded buttons.
+
+### 11. Dock Taskbar Clamping Calibration & Closed-Start Logic (`src-tauri/src/commands.rs`, `src/App.tsx`, `src/components/TrayCompanion.tsx`)
+- **Exact Taskbar Boundary Offset**: Calibrated `margin_y` from `72px` to `12px` relative to `rcWork.bottom`, ensuring the dock sits neatly directly above the taskbar in the bottom-right corner without hovering excessively high.
+- **Context-Aware Initial State**: Opening Docking Mode without an active note starts the dock collapsed as the small `TrayPill`; opening it while inside a note opens the full panel with that note.
+
+### 12. Zero-Lag Resizing with Auto-Maximize Snapping (`src/components/NoteSheet.tsx`, `src/App.tsx`)
+- **Transition Suppression**: Disabled CSS transitions on `<aside>` during active dragging via `isResizingSheet`, delivering instantaneous 60 FPS cursor tracking.
+- **Auto-Maximize Snapping**: Dragging the resize handle past ~78% screen width automatically snaps the editor into full-canvas Maximize Mode.
+
+### 13. System Fonts Header Slide-Up & Dynamic Delete Dialog (`src/components/NoteSheet.tsx`, `src/components/TrayCompanion.tsx`)
+- **System Fonts Title Slide-Off**: Placed the `System Fonts` count title above the sticky search bar, allowing it to naturally scroll out of the way on mouse wheel to display more font items at once.
+- **Dynamic Delete Modal**: Converted the delete note confirmation modal to responsive percentage-based bounds (`w-[90%] max-w-[340px]`) with `whitespace-normal break-words`, preventing text truncation and dots.
+
 ## [2026-11-01] - Version 1.1.6: Dynamic Quadrant-Based Dock Expansion, Full-Height Scrolling & Production Release
 
 ### 1. Screen Quadrant Calculation Engine (`src-tauri/src/commands.rs`, `src-tauri/src/models.rs`)
