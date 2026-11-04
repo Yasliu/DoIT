@@ -535,10 +535,10 @@ export default function App() {
           <main
             ref={canvasRef}
             className={cx(
-              "relative min-w-0 min-h-0 overflow-hidden transition-[opacity,flex] duration-300 ease-out",
+              "relative min-w-0 min-h-0 overflow-hidden flex-1 w-full h-full transition-opacity duration-300 ease-out",
               isNoteMaximized && !sheetClosing
-                ? "opacity-0 pointer-events-none flex-none !w-0 !h-0"
-                : "opacity-100 flex-1 w-full h-full",
+                ? "opacity-0 pointer-events-none"
+                : "opacity-100",
             )}
           >
             <div aria-hidden="true" className="lightscape" />
@@ -590,24 +590,17 @@ export default function App() {
 
           {/* Sliding editor drawer: reserves space so the dashboard stays visible + interactive */}
           <aside
-            className={cx(
-              "relative min-h-0 min-w-0 overflow-hidden",
-              isNoteMaximized ? "w-full h-full flex-1" : "shrink-0",
-            )}
+            className="relative min-h-0 min-w-0 overflow-hidden shrink-0"
             style={{
               width: isNoteMaximized
-                ? sheetClosing
-                  ? 0
-                  : "100%"
+                ? "100%"
                 : isVerticalScreen
                   ? "100%"
                   : openFresh && openNote && sheetReserve && !sheetClosing
                     ? drawerWidth
                     : 0,
               height: isNoteMaximized
-                ? sheetClosing
-                  ? 0
-                  : "100%"
+                ? "100%"
                 : isVerticalScreen
                   ? openFresh && openNote && sheetReserve && !sheetClosing
                     ? "54vh"
@@ -639,7 +632,7 @@ export default function App() {
                 onResizeStateChange={setIsResizingSheet}
                 isMaximized={isNoteMaximized}
                 onToggleMaximize={() => setIsNoteMaximized((v) => !v)}
-                isBottomMode={isVerticalScreen && !isNoteMaximized}
+                isBottomMode={isVerticalScreen}
                 onClosing={() => setSheetClosing(true)}
                 onOpening={() => setSheetReserve(true)}
                 onCommit={commitSheet}

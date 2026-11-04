@@ -134,14 +134,14 @@ export function Sidebar({
       </div>
 
       {/* Main Dashboard Ingestion Portal */}
-      <div className="px-3 pt-2.5 pb-5 relative min-h-[44px] shrink-0">
+      <div className="px-3 h-8 relative shrink-0 flex items-center mt-2">
         {/* Expanded Ingestion Bar */}
         <div
           className={cx(
             "flex items-center gap-1.5 w-full transition-all duration-300 ease-out",
             open
               ? "opacity-100 translate-x-0 pointer-events-auto"
-              : "opacity-0 -translate-x-3 overflow-hidden pointer-events-none hidden",
+              : "max-w-0 opacity-0 -translate-x-3 overflow-hidden pointer-events-none hidden",
           )}
         >
           <button
@@ -175,7 +175,7 @@ export function Sidebar({
             type="button"
             onClick={onImportFile}
             title="File Import"
-            className="grid size-7 place-items-center rounded-[8px] bg-white/[0.04] text-ink-3 transition-colors duration-150 hover:bg-white/[0.08] hover:text-ink-1 cursor-pointer"
+            className="grid size-7.5 place-items-center rounded-[8px] bg-white/[0.04] text-ink-3 transition-colors duration-150 hover:bg-white/[0.08] hover:text-ink-1 cursor-pointer"
           >
             <FileDown size={13} strokeWidth={1.8} />
           </button>
@@ -183,7 +183,7 @@ export function Sidebar({
             type="button"
             onClick={onScanFolder}
             title="Scan & Import Custom Folder"
-            className="grid size-7 place-items-center rounded-[8px] bg-white/[0.04] text-ink-3 transition-colors duration-150 hover:bg-white/[0.08] hover:text-ink-1 cursor-pointer"
+            className="grid size-7.5 place-items-center rounded-[8px] bg-white/[0.04] text-ink-3 transition-colors duration-150 hover:bg-white/[0.08] hover:text-ink-1 cursor-pointer"
           >
             <FolderInput size={13} strokeWidth={1.8} />
           </button>
@@ -191,21 +191,19 @@ export function Sidebar({
       </div>
 
       {/* Categories Navigation */}
-      <nav className="scroll mt-3 min-h-0 flex-1 overflow-y-auto px-3 overflow-x-hidden">
+      <nav className="scroll mt-2 min-h-0 flex-1 overflow-y-auto px-3 overflow-x-hidden">
         {/* Shelves Header */}
         <div
           className={cx(
-            "micro mb-2 flex items-center justify-between whitespace-nowrap transition-all duration-300 ease-out",
-            open
-              ? "max-w-[200px] opacity-100 max-h-6 px-2"
-              : "max-w-0 opacity-0 max-h-0 px-0 overflow-hidden pointer-events-none",
+            "h-5 mb-1 px-2 flex items-center justify-between whitespace-nowrap shrink-0 transition-opacity duration-300 ease-out",
+            open ? "opacity-100" : "opacity-0 pointer-events-none",
           )}
         >
-          <span>Shelves</span>
+          <span className="micro">Shelves</span>
           <button
             type="button"
             onClick={() => setCreatingCategory((v) => !v)}
-            className="text-ink-4 hover:text-ink-1 transition-colors"
+            className="text-ink-4 hover:text-ink-1 transition-colors cursor-pointer"
             title="Add shelf"
           >
             <Plus size={12} strokeWidth={2} />

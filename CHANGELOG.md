@@ -48,6 +48,10 @@
 ### 12. Responsive Container Query Canvas & Anti-Crush Protection (`src/lib/text.ts`, `src/components/CategoryShelf.tsx`, `src/components/NoteTile.tsx`, `src/components/BentoCanvas.tsx`, `src/components/NoteSheet.tsx`)
 - **Container Queries for Note Shelves**: Migrated `SPANS` from global viewport breakpoints (`md:col-span-6`) to container query constraints (`@[540px]:col-span-6`). When the canvas is resized beside an open note drawer, cards automatically collapse into full-width single-column tiles (`col-span-12`) instead of crushing into 80px vertical slivers.
 - **Canvas Minimum Width Clamp**: Clamped drawer resize so that the canvas preserves at least 420px. Pulling the drawer past 72% of the window width or within 180px of the edge smoothly transitions into full Maximize mode rather than squishing the canvas.
+
+### 13. Maximized Note Right Edge Anchoring & Static Sidebar Icon Heights (`src/App.tsx`, `src/components/Sidebar.tsx`)
+- **Right Edge Anchoring During Maximize Close**: Eliminated the right-side panel detachment bug when closing or restoring a maximized note. The `<aside>` container maintains its full `100%` width and height without flex width shrinkage while `NoteSheet` slides out with `translate3d(106%, 0, 0)` (or `translate3d(0, 106%, 0)` in portrait orientation), keeping the panel flush against the window boundary at all times.
+- **Static Sidebar Icon Heights**: Resolved vertical jumping of sidebar category icons when collapsing and expanding the left panel. Fixed the Ingestion Bar height to `h-8` with consistent vertical centering and converted the Shelves section header to a static `h-5` container with opacity transition, ensuring every icon remains locked to its exact vertical pixel coordinates.
 - **Responsive Canvas Header**: Replaced rigid `gap-8` flex headers with wrapping flex layout so titles, dates, and category buttons never truncate each other in compact widths.
 
 ### 13. Dynamic Compact Toolbar, Boundary-Free Dock Hover, & Standalone Release (`src/components/NoteSheet.tsx`, `src/components/TrayCompanion.tsx`, `src/components/TrayPill.tsx`, `src-tauri/src/commands.rs`)
