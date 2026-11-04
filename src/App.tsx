@@ -535,8 +535,10 @@ export default function App() {
           <main
             ref={canvasRef}
             className={cx(
-              "relative min-w-0 overflow-hidden transition-[opacity,flex,width] duration-300 ease-out",
-              isNoteMaximized ? "opacity-0 pointer-events-none flex-none w-0" : "opacity-100 flex-1",
+              "relative min-w-0 min-h-0 overflow-hidden transition-[opacity,flex] duration-300 ease-out",
+              isNoteMaximized
+                ? "opacity-0 pointer-events-none flex-none !w-0 !h-0"
+                : "opacity-100 flex-1 w-full h-full",
             )}
           >
             <div aria-hidden="true" className="lightscape" />
@@ -588,7 +590,10 @@ export default function App() {
 
           {/* Sliding editor drawer: reserves space so the dashboard stays visible + interactive */}
           <aside
-            className={cx("relative overflow-visible", isNoteMaximized ? "w-full h-full flex-1" : "shrink-0")}
+            className={cx(
+              "relative overflow-visible min-h-0 min-w-0",
+              isNoteMaximized ? "w-full h-full flex-1" : "shrink-0",
+            )}
             style={{
               width: isNoteMaximized
                 ? "100%"
@@ -597,11 +602,13 @@ export default function App() {
                   : openFresh && openNote && sheetReserve && !sheetClosing
                     ? drawerWidth
                     : 0,
-              height: isVerticalScreen && !isNoteMaximized
-                ? openFresh && openNote && sheetReserve && !sheetClosing
-                  ? "54vh"
-                  : 0
-                : undefined,
+              height: isNoteMaximized
+                ? "100%"
+                : isVerticalScreen
+                  ? openFresh && openNote && sheetReserve && !sheetClosing
+                    ? "54vh"
+                    : 0
+                  : "100%",
               marginLeft: !isVerticalScreen && !isNoteMaximized && openFresh && openNote && sheetReserve && !sheetClosing ? 12 : 0,
               marginTop: isVerticalScreen && !isNoteMaximized && openFresh && openNote && sheetReserve && !sheetClosing ? 12 : 0,
               transition: isResizingSheet
@@ -611,8 +618,8 @@ export default function App() {
                     ? "height 300ms ease-out, margin-top 300ms ease-out"
                     : "width 300ms ease-out, margin-left 300ms ease-out"
                   : isVerticalScreen
-                    ? "height 420ms cubic-bezier(0.22, 1, 0.36, 1), margin-top 420ms cubic-bezier(0.22, 1, 0.36, 1)"
-                    : "width 420ms cubic-bezier(0.22, 1, 0.36, 1), margin-left 420ms cubic-bezier(0.22, 1, 0.36, 1), flex 420ms cubic-bezier(0.22, 1, 0.36, 1)",
+                    ? "height 380ms cubic-bezier(0.22, 1, 0.36, 1), margin-top 380ms cubic-bezier(0.22, 1, 0.36, 1)"
+                    : "width 380ms cubic-bezier(0.22, 1, 0.36, 1), margin-left 380ms cubic-bezier(0.22, 1, 0.36, 1)",
             }}
           >
             {openFresh && openNote && (

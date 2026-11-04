@@ -570,8 +570,8 @@ export function NoteSheet({
           if (e.target === e.currentTarget && e.propertyName === "transform" && phase === "in") setPhase("settled");
         }}
         style={{
-          width: isMaximized || isBottomMode ? "100%" : width ? `${width}px` : "clamp(420px, 42vw, 600px)",
-          height: isMaximized || isBottomMode ? "100%" : undefined,
+          width: "100%",
+          height: "100%",
           transform:
             phase === "settled" || isMaximized
               ? "none"
@@ -581,21 +581,15 @@ export function NoteSheet({
                   ? "translate3d(0,106%,0)"
                   : "translate3d(106%,0,0)",
           opacity: phase === "pre" ? 0 : 1,
-          // entry: long soft landing + quick fade; maximize/restore: smooth spring
           transition:
-            isResizing.current
-              ? "none"
-              : phase === "settled"
-                ? "width 420ms cubic-bezier(0.22, 1, 0.36, 1)"
-                : phase === "out"
-                  ? "transform 300ms ease-out"
-                  : "width 420ms cubic-bezier(0.22, 1, 0.36, 1), transform 460ms cubic-bezier(0.32, 0.72, 0, 1), opacity 240ms ease-out",
+            phase === "out"
+              ? "transform 300ms ease-out"
+              : phase === "in"
+                ? "transform 460ms cubic-bezier(0.32, 0.72, 0, 1), opacity 240ms ease-out"
+                : "none",
           willChange: phase === "settled" ? "auto" : "transform",
         }}
-        className={cx(
-          "absolute z-30 flex flex-col overflow-visible rounded-[22px] glass-sheet outline-none border border-white/10 shadow-[0_30px_90px_rgba(0,0,0,0.6)]",
-          isMaximized || isBottomMode ? "inset-0 !w-full !h-full" : "inset-y-0 right-0",
-        )}
+        className="relative z-30 flex flex-col h-full w-full overflow-visible rounded-[22px] glass-sheet outline-none border border-white/10 shadow-[0_30px_90px_rgba(0,0,0,0.6)]"
       >
         {/* Interactive Resizable Handle Rail */}
         {!isMaximized && !isBottomMode && (
@@ -766,15 +760,18 @@ export function NoteSheet({
                   e.stopPropagation();
                   setFontOpen((v) => !v);
                 }}
-                className="flex h-7 items-center gap-1 rounded-md px-1.5 text-[11px] text-ink-3 transition-colors hover:bg-white/[0.06] hover:text-ink-1 cursor-pointer pointer-events-auto shrink-0"
+                className="flex h-7 items-center gap-1 rounded-md px-1.5 text-[11px] text-ink-3 transition-all duration-200 ease-out hover:bg-white/[0.06] hover:text-ink-1 cursor-pointer pointer-events-auto shrink-0"
                 title={`Note typeface: ${cleanText(draft.font_family) || "Instrument Sans"}`}
               >
-                <Type size={12.5} strokeWidth={1.8} />
-                {width && width >= 520 && (
-                  <span className="max-w-[72px] truncate hidden sm:inline">
-                    {cleanText(draft.font_family) || "Instrument Sans"}
-                  </span>
-                )}
+                <Type size={12.5} strokeWidth={1.8} className="shrink-0" />
+                <span
+                  className={cx(
+                    "truncate transition-all duration-200 ease-out overflow-hidden hidden sm:inline-block",
+                    width && width >= 520 ? "max-w-[72px] opacity-100" : "max-w-0 opacity-0",
+                  )}
+                >
+                  {cleanText(draft.font_family) || "Instrument Sans"}
+                </span>
               </button>
 
               {fontOpen && createPortal(
@@ -909,7 +906,7 @@ export function NoteSheet({
               aria-label="Toggle Bold"
               title="Bold text (Ctrl+B)"
               data-active={isBoldActive || undefined}
-              className={cx("icon-btn !size-7 cursor-pointer shrink-0", isBoldActive && "!bg-white/20 !text-white")}
+              className={cx("icon-btn !size-7 cursor-pointer shrink-0 transition-all duration-200 ease-out", isBoldActive && "!bg-white/20 !text-white")}
             >
               <Bold size={12.5} strokeWidth={2.4} />
             </button>
@@ -920,7 +917,7 @@ export function NoteSheet({
               aria-label="Toggle Italic"
               title="Italic text (Ctrl+I)"
               data-active={isItalicActive || undefined}
-              className={cx("icon-btn !size-7 cursor-pointer shrink-0", isItalicActive && "!bg-white/20 !text-white")}
+              className={cx("icon-btn !size-7 cursor-pointer shrink-0 transition-all duration-200 ease-out", isItalicActive && "!bg-white/20 !text-white")}
             >
               <Italic size={12.5} strokeWidth={2.4} />
             </button>
@@ -937,7 +934,7 @@ export function NoteSheet({
               onClick={() => runEditorCommand((ed) => insertTableAtCaret(ed))}
               aria-label="Insert table"
               title="Insert table (Ctrl+T)"
-              className="icon-btn !size-7 cursor-pointer shrink-0"
+              className="icon-btn !size-7 cursor-pointer shrink-0 transition-all duration-200 ease-out"
             >
               <TableIcon size={13} strokeWidth={1.8} />
             </button>
@@ -947,7 +944,7 @@ export function NoteSheet({
                 onClick={() => runEditorCommand((ed) => applyTask(ed))}
                 aria-label="Task checkbox"
                 title="Task checkbox (- [ ])"
-                className="icon-btn !size-7 cursor-pointer shrink-0"
+                className="icon-btn !size-7 cursor-pointer shrink-0 transition-all duration-200 ease-out"
               >
                 <ListChecks size={13.5} strokeWidth={1.8} />
               </button>

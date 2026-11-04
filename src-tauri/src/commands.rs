@@ -269,7 +269,50 @@ pub fn toggle_window_minimize(window: Window) -> Result<(), String> {
     window.minimize().map_err(|e| e.to_string())
 }
 
+static TARGET_TRAY_MONITOR_NAME: Mutex<Option<String>> = Mutex::new(None);
+
+#[cfg(windows)]
+pub fn get_monitor_from_hwnd(window: &tauri::WebviewWindow) -> Option<tauri::Monitor> {
+    #[repr(C)]
+    struct RECT { left: i32, top: i32, right: i32, bottom: i32 }
+    #[repr(C)]
+    struct MONITORINFO { cb_size: u32, rc_monitor: RECT, rc_work: RECT, dw_flags: u32 }
+
+    unsafe extern "system" {
+        fn MonitorFromWindow(hwnd: *mut std::ffi::c_void, dw_flags: u32) -> *mut std::ffi::c_void;
+        fn GetMonitorInfoW(h_monitor: *mut std::ffi::c_void, lpmi: *mut MONITORINFO) -> i32;
+    }
+
+    if let Ok(hwnd) = window.hwnd() {
+        let h_mon = unsafe { MonitorFromWindow(hwnd.0, 2 /* MONITOR_DEFAULTTONEAREST */) };
+        if !h_mon.is_null() {
+            let mut mi = MONITORINFO {
+                cb_size: std::mem::size_of::<MONITORINFO>() as u32,
+                rc_monitor: RECT { left: 0, top: 0, right: 0, bottom: 0 },
+                rc_work: RECT { left: 0, top: 0, right: 0, bottom: 0 },
+                dw_flags: 0,
+            };
+            if unsafe { GetMonitorInfoW(h_mon, &mut mi) } != 0 {
+                if let Ok(monitors) = window.available_monitors() {
+                    for mon in monitors {
+                        let mp = mon.position();
+                        if mp.x == mi.rc_monitor.left && mp.y == mi.rc_monitor.top {
+                            return Some(mon);
+                        }
+                    }
+                }
+            }
+        }
+    }
+    None
+}
+
 pub fn get_window_active_monitor(window: &tauri::WebviewWindow) -> Option<tauri::Monitor> {
+    #[cfg(windows)]
+    if let Some(mon) = get_monitor_from_hwnd(window) {
+        return Some(mon);
+    }
+
     if let Ok(Some(mon)) = window.current_monitor() {
         return Some(mon);
     }
@@ -725,9 +768,10 @@ fn open_tray_mode_inner(
         buf.expanded_physical_pos = None;
     }
 
-    if let Some(mon) = target_mon {
+    if let Some(ref mon) = target_mon {
+        *TARGET_TRAY_MONITOR_NAME.lock().unwrap() = mon.name().cloned();
         lock_window_transition(350);
-        position_tray_on_monitor(&tray, &mon, should_expand);
+        position_tray_on_monitor(&tray, mon, should_expand);
         if let Ok(pos) = tray.outer_position() {
             if should_expand {
                 PRE_STATE_BUFFER.lock().unwrap().expanded_physical_pos = Some(pos);
@@ -759,8 +803,17 @@ fn open_tray_mode_inner(
 #[tauri::command]
 pub fn tray_ready(window: tauri::WebviewWindow) -> String {
     let start_expanded = TRAY_START_EXPANDED.load(Ordering::SeqCst);
-    if let Some(mon) = get_window_active_monitor(&window) {
-        position_tray_on_monitor(&window, &mon, start_expanded);
+    let target_name = TARGET_TRAY_MONITOR_NAME.lock().unwrap().take();
+    let mon = if let Some(ref name) = target_name {
+        window.available_monitors().ok().and_then(|mons| {
+            mons.into_iter().find(|m| m.name() == Some(name))
+        })
+    } else {
+        None
+    }.or_else(|| get_window_active_monitor(&window));
+
+    if let Some(ref m) = mon {
+        position_tray_on_monitor(&window, m, start_expanded);
     }
     let _ = window.show();
     let _ = window.set_always_on_top(true);

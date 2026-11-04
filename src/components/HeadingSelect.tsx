@@ -101,13 +101,15 @@ export function HeadingSelect({ editorRef, onSelect, compact = false, disabled =
         aria-haspopup="listbox"
         aria-expanded={open}
         className={cx(
-          "flex items-center gap-1 rounded-md text-ink-3 transition-colors hover:bg-white/[0.08] hover:text-ink-1 disabled:opacity-30 cursor-pointer pointer-events-auto",
-          compact ? "h-6 px-1.5 text-[10.5px]" : "h-7 px-2 text-[11.5px]",
+          "flex items-center rounded-md text-ink-3 transition-all duration-200 ease-out hover:bg-white/[0.08] hover:text-ink-1 disabled:opacity-30 cursor-pointer pointer-events-auto",
+          compact ? "h-6 px-1.5 text-[10.5px] gap-0.5" : "h-7 px-2 text-[11.5px] gap-1",
           open && "bg-white/[0.08] text-ink-1",
         )}
       >
-        <span className="whitespace-nowrap">{compact ? current.shortLabel : current.label}</span>
-        <ChevronDown size={compact ? 9 : 10} strokeWidth={2} className={cx("transition-transform duration-200", open && "rotate-180")} />
+        <span className="whitespace-nowrap transition-all duration-200 ease-out">
+          {compact ? current.shortLabel : current.label}
+        </span>
+        <ChevronDown size={compact ? 9 : 10} strokeWidth={2} className={cx("transition-transform duration-200 shrink-0", open && "rotate-180")} />
       </button>
 
       {open && (

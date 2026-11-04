@@ -58,6 +58,12 @@
 - **Fluid Synchronized Maximization**: Replaced abrupt `display: none` layout switches with synchronized `420ms cubic-bezier(0.22, 1, 0.36, 1)` transitions across both canvas and note drawer.
 - **Standalone Offline Binary**: Compiled release executable `doit.exe` with embedded assets, completely eliminating `localhost` connection errors.
 
+### 14. Multi-Monitor Dock Retention, Smooth Sliding Maximization & Vertical Screen Full-Height (`src-tauri/src/commands.rs`, `src/App.tsx`, `src/components/NoteSheet.tsx`, `src/components/ModeToggle.tsx`, `src/components/HeadingSelect.tsx`)
+- **Multi-Monitor Screen 2 Dock Targeting**: Implemented Windows Win32 `MonitorFromWindow(hwnd, MONITOR_DEFAULTTONEAREST)` and `TARGET_TRAY_MONITOR_NAME` state caching. When switching to Dock Mode while maximized on a secondary monitor, the dock now reliably positions and stays on Screen 2 instead of defaulting back to Screen 1.
+- **Vertical Screen Full-Height Maximization**: Fixed the vertical screen maximize bug where `<main>` remained in the layout without vertical collapse. Now, in `flex-col` layout, `<main>` collapses to `!w-0 !h-0` while `<aside>` transitions to `100%` height, seamlessly showing the maximized note across the full vertical display.
+- **Detach-Free Single-Slide Maximization**: Eliminated the jarring right-side detachment and left-side bounce during note maximization. `<NoteSheet>` now cleanly matches `<aside>` (`relative w-full h-full`), allowing a single, unified `380ms cubic-bezier(0.22, 1, 0.36, 1)` sliding curve without dual-width conflicts or anchor flips (`inset-0` vs `right-0`).
+- **Fluid Morphing for Compact Toolbar Controls**: Replaced abrupt size snaps with `200ms ease-out` animated transitions across `ModeToggle` (sliding "Mode" text label), `HeadingSelect`, and font selector buttons when resizing the drawer.
+
 ### 12. Zero-Lag Resizing with Auto-Maximize Snapping (`src/components/NoteSheet.tsx`, `src/App.tsx`)
 - **Transition Suppression**: Disabled CSS transitions on `<aside>` during active dragging via `isResizingSheet`, delivering instantaneous 60 FPS cursor tracking.
 - **Auto-Maximize Snapping**: Dragging the resize handle past ~78% screen width automatically snaps the editor into full-canvas Maximize Mode.
