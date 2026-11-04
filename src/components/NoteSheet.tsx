@@ -611,12 +611,18 @@ export function NoteSheet({
         />
 
         {/* Row 1: Context & Window Controls */}
-        <div className="flex min-h-[46px] shrink-0 items-center justify-between gap-x-2 px-3.5 sm:px-4 pt-2 pb-1 overflow-visible pointer-events-auto">
-          <div className="flex min-w-0 max-w-[200px] shrink items-center gap-2">
+        <div className={cx(
+          "flex w-full shrink-0 items-center justify-between gap-x-2 pt-2 pb-1 overflow-visible pointer-events-auto",
+          isMaximized ? "min-h-[52px] px-6" : "min-h-[46px] px-3.5 sm:px-4",
+        )}>
+          <div className="flex min-w-0 max-w-[260px] shrink items-center gap-2">
             {external ? (
               <span
                 title={draft.source_path}
-                className="flex h-6 max-w-[220px] items-center gap-1.5 truncate rounded-md px-1.5 font-mono text-[9.5px] tracking-[0.06em] text-ink-3"
+                className={cx(
+                  "flex items-center gap-1.5 truncate rounded-md font-mono tracking-[0.06em] text-ink-3",
+                  isMaximized ? "h-7.5 max-w-[280px] px-2 text-[11px]" : "h-6 max-w-[220px] px-1.5 text-[9.5px]",
+                )}
               >
                 <span className="size-[4px] shrink-0 rounded-full bg-white/60" />
                 <span className="truncate">{(draft.source_path || "").split(/[\\/]/).pop()}</span>
@@ -626,11 +632,14 @@ export function NoteSheet({
               <button
                 type="button"
                 onClick={() => setShelfOpen((v) => !v)}
-                className="flex h-6.5 items-center gap-1.5 rounded-lg px-2 font-mono text-[9.5px] uppercase tracking-[0.11em] text-ink-3 transition-colors hover:bg-white/[0.08] hover:text-ink-1 shrink-0 bg-white/[0.04]"
+                className={cx(
+                  "flex items-center gap-1.5 rounded-lg font-mono uppercase tracking-[0.11em] text-ink-3 transition-colors hover:bg-white/[0.08] hover:text-ink-1 shrink-0 bg-white/[0.04] cursor-pointer",
+                  isMaximized ? "h-8 px-3 text-[11px]" : "h-6.5 px-2 text-[9.5px]",
+                )}
               >
-                <span className="size-[5px] shrink-0 rounded-full" style={{ backgroundColor: accent }} />
-                <span className="fade-end max-w-[120px] overflow-hidden whitespace-nowrap">{cleanText(draft.category)}</span>
-                <ChevronDown size={10} strokeWidth={2} />
+                <span className={cx("shrink-0 rounded-full", isMaximized ? "size-[6px]" : "size-[5px]")} style={{ backgroundColor: accent }} />
+                <span className={cx("fade-end overflow-hidden whitespace-nowrap", isMaximized ? "max-w-[200px]" : "max-w-[120px]")}>{cleanText(draft.category)}</span>
+                <ChevronDown size={isMaximized ? 12 : 10} strokeWidth={2} />
               </button>
 
               {shelfOpen && (
@@ -690,16 +699,19 @@ export function NoteSheet({
           </div>
 
           {/* Right: Window Controls (Trash, Maximize, Close) */}
-          <div className="flex shrink-0 items-center gap-1 pointer-events-auto">
+          <div className="flex shrink-0 items-center gap-1.5 pointer-events-auto">
             {!external && (
               <button
                 type="button"
                 onClick={() => setShowDeleteConfirm(true)}
                 aria-label="Delete note"
-                className="icon-btn !size-7 hover:!text-red-400 hover:!bg-red-500/10 cursor-pointer"
+                className={cx(
+                  "icon-btn hover:!text-red-400 hover:!bg-red-500/10 cursor-pointer",
+                  isMaximized ? "!size-8.5" : "!size-7",
+                )}
                 title="Delete note"
               >
-                <Trash size={12.5} strokeWidth={1.7} />
+                <Trash size={isMaximized ? 15 : 12.5} strokeWidth={1.7} />
               </button>
             )}
             {onToggleMaximize && (
@@ -707,27 +719,30 @@ export function NoteSheet({
                 type="button"
                 onClick={onToggleMaximize}
                 aria-label={isMaximized ? "Restore panel size" : "Maximize note"}
-                className="icon-btn !size-7 cursor-pointer"
+                className={cx("icon-btn cursor-pointer", isMaximized ? "!size-8.5" : "!size-7")}
                 title={isMaximized ? "Restore panel size" : "Maximize note"}
               >
-                {isMaximized ? <Minimize2 size={12.5} strokeWidth={1.7} /> : <Maximize2 size={12.5} strokeWidth={1.7} />}
+                {isMaximized ? <Minimize2 size={15} strokeWidth={1.7} /> : <Maximize2 size={12.5} strokeWidth={1.7} />}
               </button>
             )}
             <button
               type="button"
               onClick={close}
               aria-label="Close note"
-              className="icon-btn !size-7 cursor-pointer"
+              className={cx("icon-btn cursor-pointer", isMaximized ? "!size-8.5" : "!size-7")}
             >
-              <X size={13} strokeWidth={1.8} />
+              <X size={isMaximized ? 15.5 : 13} strokeWidth={1.8} />
             </button>
           </div>
         </div>
 
         {/* Row 2: Mode Toggle & Formatting Tools */}
-        <div className="flex shrink-0 items-center justify-between gap-1.5 px-3 sm:px-4 pb-2 pt-0.5 overflow-x-auto scrollbar-none pointer-events-auto border-b border-white/[0.06]">
+        <div className={cx(
+          "flex w-full shrink-0 items-center justify-between gap-2 pb-2.5 pt-1 overflow-x-auto scrollbar-none pointer-events-auto border-b border-white/[0.06]",
+          isMaximized ? "px-6" : "px-3 sm:px-4",
+        )}>
           <div className="flex items-center gap-1.5 shrink-0">
-            <ModeToggle rawMode={rawMode} onChange={setMode} compact={!width || width < 520} />
+            <ModeToggle rawMode={rawMode} onChange={setMode} compact={!isMaximized && (!width || width < 520)} large={isMaximized} />
             {external && (
               <div className="flex min-w-0 items-center gap-1.5">
                 {saveError && (
@@ -741,13 +756,14 @@ export function NoteSheet({
                   onClick={() => void saveExternal()}
                   title="Save to the original file (Ctrl+S)"
                   className={cx(
-                    "flex h-6.5 items-center gap-1.5 rounded-[6px] border px-2 text-[10.5px] font-medium transition-colors duration-150",
+                    "flex items-center gap-1.5 rounded-[6px] border font-medium transition-colors duration-150",
+                    isMaximized ? "h-7.5 px-2.5 text-[11.5px]" : "h-6.5 px-2 text-[10.5px]",
                     dirty
                       ? "border-white bg-white text-black hover:bg-white/90"
                       : "border-white/[0.14] text-ink-3 hover:border-white/30 hover:text-ink-1",
                   )}
                 >
-                  <Save size={11.5} strokeWidth={2} />
+                  <Save size={isMaximized ? 13 : 11.5} strokeWidth={2} />
                   {savedFlash ? "Saved" : "Save"}
                 </button>
               </div>
@@ -755,7 +771,7 @@ export function NoteSheet({
           </div>
 
           {!rawMode && (
-          <div className="flex shrink-0 items-center gap-0.5 overflow-visible pointer-events-auto">
+          <div className="flex shrink-0 items-center gap-1 overflow-visible pointer-events-auto">
             <div ref={fontWrapRef} className="relative pointer-events-auto">
               <button
                 type="button"
@@ -764,14 +780,19 @@ export function NoteSheet({
                   e.stopPropagation();
                   setFontOpen((v) => !v);
                 }}
-                className="flex h-7 items-center gap-1 rounded-md px-1.5 text-[11px] text-ink-3 transition-all duration-200 ease-out hover:bg-white/[0.06] hover:text-ink-1 cursor-pointer pointer-events-auto shrink-0"
+                className={cx(
+                  "flex items-center gap-1.5 rounded-md text-ink-3 transition-all duration-200 ease-out hover:bg-white/[0.06] hover:text-ink-1 cursor-pointer pointer-events-auto shrink-0",
+                  isMaximized ? "h-8.5 px-2.5 text-[12px]" : "h-7 px-1.5 text-[11px]",
+                )}
                 title={`Note typeface: ${cleanText(draft.font_family) || "Instrument Sans"}`}
               >
-                <Type size={12.5} strokeWidth={1.8} className="shrink-0" />
+                <Type size={isMaximized ? 14.5 : 12.5} strokeWidth={1.8} className="shrink-0" />
                 <span
                   className={cx(
-                    "truncate transition-all duration-200 ease-out overflow-hidden hidden sm:inline-block",
-                    width && width >= 520 ? "max-w-[72px] opacity-100" : "max-w-0 opacity-0",
+                    "truncate transition-all duration-200 ease-out overflow-hidden inline-block",
+                    isMaximized
+                      ? "max-w-[140px] opacity-100"
+                      : (width && width >= 520 ? "max-w-[72px] opacity-100 hidden sm:inline-block" : "max-w-0 opacity-0 hidden sm:inline-block"),
                   )}
                 >
                   {cleanText(draft.font_family) || "Instrument Sans"}
@@ -910,9 +931,13 @@ export function NoteSheet({
               aria-label="Toggle Bold"
               title="Bold text (Ctrl+B)"
               data-active={isBoldActive || undefined}
-              className={cx("icon-btn !size-7 cursor-pointer shrink-0 transition-all duration-200 ease-out", isBoldActive && "!bg-white/20 !text-white")}
+              className={cx(
+                "icon-btn cursor-pointer shrink-0 transition-all duration-200 ease-out",
+                isMaximized ? "!size-8.5" : "!size-7",
+                isBoldActive && "!bg-white/20 !text-white",
+              )}
             >
-              <Bold size={12.5} strokeWidth={2.4} />
+              <Bold size={isMaximized ? 14.5 : 12.5} strokeWidth={2.4} />
             </button>
             <button
               type="button"
@@ -921,14 +946,19 @@ export function NoteSheet({
               aria-label="Toggle Italic"
               title="Italic text (Ctrl+I)"
               data-active={isItalicActive || undefined}
-              className={cx("icon-btn !size-7 cursor-pointer shrink-0 transition-all duration-200 ease-out", isItalicActive && "!bg-white/20 !text-white")}
+              className={cx(
+                "icon-btn cursor-pointer shrink-0 transition-all duration-200 ease-out",
+                isMaximized ? "!size-8.5" : "!size-7",
+                isItalicActive && "!bg-white/20 !text-white",
+              )}
             >
-              <Italic size={12.5} strokeWidth={2.4} />
+              <Italic size={isMaximized ? 14.5 : 12.5} strokeWidth={2.4} />
             </button>
 
             <span className="mx-0.5 h-4 w-px bg-white/[0.08]" />
             <HeadingSelect
-              compact={!width || width < 520}
+              compact={!isMaximized && (!width || width < 520)}
+              large={isMaximized}
               editorRef={editorRef}
               onSelect={(level) => runEditorCommand((ed) => applyHeading(ed, level))}
             />
@@ -938,22 +968,28 @@ export function NoteSheet({
               onClick={() => runEditorCommand((ed) => insertTableAtCaret(ed))}
               aria-label="Insert table"
               title="Insert table (Ctrl+T)"
-              className="icon-btn !size-7 cursor-pointer shrink-0 transition-all duration-200 ease-out"
+              className={cx(
+                "icon-btn cursor-pointer shrink-0 transition-all duration-200 ease-out",
+                isMaximized ? "!size-8.5" : "!size-7",
+              )}
             >
-              <TableIcon size={13} strokeWidth={1.8} />
+              <TableIcon size={isMaximized ? 15 : 13} strokeWidth={1.8} />
             </button>
-              <button
-                type="button"
-                onMouseDown={(e) => e.preventDefault()}
-                onClick={() => runEditorCommand((ed) => applyTask(ed))}
-                aria-label="Task checkbox"
-                title="Task checkbox (- [ ])"
-                className="icon-btn !size-7 cursor-pointer shrink-0 transition-all duration-200 ease-out"
-              >
-                <ListChecks size={13.5} strokeWidth={1.8} />
-              </button>
-              <span className="mx-0.5 h-4 w-px bg-white/[0.08]" />
-              <input
+            <button
+              type="button"
+              onMouseDown={(e) => e.preventDefault()}
+              onClick={() => runEditorCommand((ed) => applyTask(ed))}
+              aria-label="Task checkbox"
+              title="Task checkbox (- [ ])"
+              className={cx(
+                "icon-btn cursor-pointer shrink-0 transition-all duration-200 ease-out",
+                isMaximized ? "!size-8.5" : "!size-7",
+              )}
+            >
+              <ListChecks size={isMaximized ? 15.5 : 13.5} strokeWidth={1.8} />
+            </button>
+            <span className="mx-0.5 h-4 w-px bg-white/[0.08]" />
+            <input
               ref={fileInputRef}
               type="file"
               accept="image/*"
@@ -986,17 +1022,17 @@ export function NoteSheet({
               aria-label="Attach media"
               title="Attach image (or paste screenshot directly with Ctrl+V)"
               data-active={(draft.media_urls && draft.media_urls.length > 0) || !!draft.media_url || undefined}
-              className="icon-btn !size-7"
+              className={cx("icon-btn", isMaximized ? "!size-8.5" : "!size-7")}
             >
-              <ImageIcon size={12.5} strokeWidth={1.7} />
+              <ImageIcon size={isMaximized ? 15 : 12.5} strokeWidth={1.7} />
             </button>
 
             </div>
           )}
         </div>
 
-        <div className="scroll min-h-0 flex-1 overflow-y-auto px-6">
-          <div className="mx-auto w-full max-w-[760px] pb-8 pt-2">
+        <div className={cx("scroll min-h-0 flex-1 overflow-y-auto", isMaximized ? "px-8 md:px-12" : "px-6")}>
+          <div className={cx("mx-auto w-full pb-8 pt-2", isMaximized ? "max-w-[960px] pt-4" : "max-w-[760px]")}>
             <input
               ref={titleRef}
               value={draft.title ?? ""}
@@ -1023,7 +1059,10 @@ export function NoteSheet({
               data-undo="title"
               placeholder="Untitled"
               aria-label="Note title"
-              className="w-full bg-transparent text-[27px] leading-[1.18] tracking-[-0.032em] text-ink-1 outline-none placeholder:text-ink-4/70"
+              className={cx(
+                "w-full bg-transparent tracking-[-0.032em] text-ink-1 outline-none placeholder:text-ink-4/70 transition-all",
+                isMaximized ? "text-[36px] leading-[1.16] py-2 mb-2" : "text-[27px] leading-[1.18]",
+              )}
               style={{
                 fontFamily: fontStack(draft.font_family),
                 fontWeight: 560,
@@ -1149,7 +1188,10 @@ export function NoteSheet({
                     updateActiveFormatting();
                     if (editorRef.current) fixCheckboxCaret(editorRef.current);
                   }}
-                  className="w-full min-h-[300px] whitespace-pre-wrap break-words bg-transparent text-[15.5px] leading-relaxed text-ink-2 outline-none scroll select-text"
+                  className={cx(
+                    "w-full min-h-[300px] whitespace-pre-wrap break-words bg-transparent text-ink-2 outline-none scroll select-text transition-all",
+                    isMaximized ? "text-[16.5px] leading-[1.8]" : "text-[15.5px] leading-relaxed",
+                  )}
                   style={{
                     fontFamily: fontStack(draft.font_family),
                   }}

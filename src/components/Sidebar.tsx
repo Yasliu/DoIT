@@ -1,7 +1,8 @@
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import { Check, ChevronsLeft, ChevronsRight, FileDown, FolderInput, FolderPlus, Plus, Settings, Trash2, X } from "lucide-react";
 import { Mark } from "./Mark";
 import { accentFor, cleanText, cx, initials } from "../lib/text";
+import { CATEGORY_ICONS, getStoredCategoryIcons } from "../lib/categoryIcons";
 
 interface SidebarProps {
   shelves: string[];
@@ -40,6 +41,13 @@ export function Sidebar({
 }: SidebarProps) {
   const [creatingCategory, setCreatingCategory] = useState(false);
   const [categoryName, setCategoryName] = useState("");
+  const [categoryIcons, setCategoryIcons] = useState<Record<string, string>>(getStoredCategoryIcons);
+
+  useEffect(() => {
+    const handleUpdate = () => setCategoryIcons(getStoredCategoryIcons());
+    window.addEventListener("category-icons-changed", handleUpdate);
+    return () => window.removeEventListener("category-icons-changed", handleUpdate);
+  }, []);
 
   // Build the list of category items: index 0 is All Notes, 1..N are shelves
   const dockItems = [
@@ -68,10 +76,10 @@ export function Sidebar({
         <Mark size={32} className="shrink-0" />
         <div
           className={cx(
-            "flex flex-col min-w-0 overflow-hidden whitespace-nowrap transition-all duration-300 ease-out",
+            "flex flex-col min-w-0 overflow-hidden whitespace-nowrap ml-3 transition-[opacity,transform] ease-out",
             open
-              ? "max-w-[180px] opacity-100 translate-x-0 ml-3"
-              : "max-w-0 opacity-0 -translate-x-3 ml-0 overflow-hidden pointer-events-none",
+              ? "opacity-100 translate-x-0 duration-200 delay-75"
+              : "opacity-0 -translate-x-2 duration-150 pointer-events-none",
           )}
         >
           <div className="truncate text-[13px] font-semibold tracking-[-0.015em] text-ink-1">
@@ -88,10 +96,10 @@ export function Sidebar({
         {/* Expanded Action Bar */}
         <div
           className={cx(
-            "flex items-center gap-1.5 w-full transition-all duration-300 ease-out",
+            "flex items-center gap-1.5 w-full transition-[opacity,transform] ease-out",
             open
-              ? "opacity-100 translate-x-0 pointer-events-auto"
-              : "max-w-0 opacity-0 -translate-x-3 overflow-hidden pointer-events-none",
+              ? "opacity-100 translate-x-0 duration-200 delay-75 pointer-events-auto"
+              : "opacity-0 -translate-x-2 duration-150 pointer-events-none",
           )}
         >
           <button
@@ -138,10 +146,10 @@ export function Sidebar({
         {/* Expanded Ingestion Bar */}
         <div
           className={cx(
-            "flex items-center gap-1.5 w-full transition-all duration-300 ease-out",
+            "flex items-center gap-1.5 w-full transition-[opacity,transform] ease-out",
             open
-              ? "opacity-100 translate-x-0 pointer-events-auto"
-              : "max-w-0 opacity-0 -translate-x-3 overflow-hidden pointer-events-none hidden",
+              ? "opacity-100 translate-x-0 duration-200 delay-75 pointer-events-auto"
+              : "opacity-0 -translate-x-2 duration-150 pointer-events-none hidden",
           )}
         >
           <button
@@ -263,6 +271,9 @@ export function Sidebar({
         {/* Shelf rows */}
         {dockItems.map((item) => {
           const isActive = active === item.key;
+          const iconKey = item.key ? categoryIcons[item.key.toLowerCase()] : null;
+          const CustomIcon = iconKey ? CATEGORY_ICONS[iconKey] : null;
+
           return (
             <button
               key={item.key ?? "__all__"}
@@ -291,6 +302,13 @@ export function Sidebar({
                     <span className="size-[4px] rounded-[1px] bg-current opacity-30" />
                   </span>
                 </span>
+              ) : CustomIcon ? (
+                <CustomIcon
+                  size={14}
+                  strokeWidth={isActive ? 2.2 : 1.8}
+                  style={{ color: item.accent }}
+                  className="shrink-0 transition-transform duration-200 pointer-events-none"
+                />
               ) : (
                 <span
                   className="shrink-0 size-2 rounded-full transition-all duration-300 ease-out pointer-events-none"
@@ -305,10 +323,10 @@ export function Sidebar({
               {/* Sliding and fading label + count */}
               <div
                 className={cx(
-                  "flex flex-1 items-center justify-between min-w-0 overflow-hidden whitespace-nowrap transition-all duration-300 ease-out",
+                  "flex flex-1 items-center justify-between min-w-0 overflow-hidden whitespace-nowrap ml-2.5 transition-[opacity,transform] ease-out",
                   open
-                    ? "max-w-[180px] opacity-100 translate-x-0 ml-2.5"
-                    : "max-w-0 opacity-0 -translate-x-3 ml-0 overflow-hidden pointer-events-none",
+                    ? "opacity-100 translate-x-0 duration-200 delay-75"
+                    : "opacity-0 -translate-x-2 duration-150 pointer-events-none",
                 )}
               >
                 <span className="truncate text-[12.5px]">{item.label}</span>
@@ -326,7 +344,7 @@ export function Sidebar({
                       e.stopPropagation();
                       onDeleteCategory(item.key!);
                     }}
-                    className="hidden size-5 place-items-center rounded text-ink-4 hover:text-red-400 group-hover/row:grid shrink-0 ml-1"
+                    className="hidden size-5 place-items-center rounded text-ink-4 hover:text-red-400 group-hover/row:grid shrink-0 ml-1 cursor-pointer"
                     title={`Delete ${item.label} category`}
                   >
                     <Trash2 size={11} />
@@ -357,10 +375,10 @@ export function Sidebar({
             <Settings size={14} strokeWidth={1.8} className="shrink-0" />
             <span
               className={cx(
-                "text-left truncate transition-all duration-300 ease-out",
+                "text-left truncate whitespace-nowrap ml-2.5 transition-[opacity,transform] ease-out",
                 open
-                  ? "max-w-[150px] opacity-100 translate-x-0 ml-2.5"
-                  : "max-w-0 opacity-0 -translate-x-3 ml-0 overflow-hidden pointer-events-none",
+                  ? "opacity-100 translate-x-0 duration-200 delay-75"
+                  : "opacity-0 -translate-x-2 duration-150 pointer-events-none",
               )}
             >
               Settings
@@ -383,10 +401,10 @@ export function Sidebar({
             )}
             <span
               className={cx(
-                "text-left truncate transition-all duration-300 ease-out",
+                "text-left truncate whitespace-nowrap ml-2.5 transition-[opacity,transform] ease-out",
                 open
-                  ? "max-w-[150px] opacity-100 translate-x-0 ml-2.5"
-                  : "max-w-0 opacity-0 -translate-x-3 ml-0 overflow-hidden pointer-events-none",
+                  ? "opacity-100 translate-x-0 duration-200 delay-75"
+                  : "opacity-0 -translate-x-2 duration-150 pointer-events-none",
               )}
             >
               Collapse

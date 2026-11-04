@@ -14,10 +14,11 @@ interface HeadingSelectProps {
   editorRef: React.RefObject<HTMLElement | null>;
   onSelect: (level: number) => void;
   compact?: boolean;
+  large?: boolean;
   disabled?: boolean;
 }
 
-export function HeadingSelect({ editorRef, onSelect, compact = false, disabled = false }: HeadingSelectProps) {
+export function HeadingSelect({ editorRef, onSelect, compact = false, large = false, disabled = false }: HeadingSelectProps) {
   const [open, setOpen] = useState(false);
   const [level, setLevel] = useState(0);
   const savedRangeRef = useRef<Range | null>(null);
@@ -102,14 +103,14 @@ export function HeadingSelect({ editorRef, onSelect, compact = false, disabled =
         aria-expanded={open}
         className={cx(
           "flex items-center rounded-md text-ink-3 transition-all duration-200 ease-out hover:bg-white/[0.08] hover:text-ink-1 disabled:opacity-30 cursor-pointer pointer-events-auto",
-          compact ? "h-6 px-1.5 text-[10.5px] gap-0.5" : "h-7 px-2 text-[11.5px] gap-1",
+          large ? "h-8.5 px-2.5 text-[12.5px] gap-1.5" : (compact ? "h-6 px-1.5 text-[10.5px] gap-0.5" : "h-7 px-2 text-[11.5px] gap-1"),
           open && "bg-white/[0.08] text-ink-1",
         )}
       >
         <span className="whitespace-nowrap transition-all duration-200 ease-out">
           {compact ? current.shortLabel : current.label}
         </span>
-        <ChevronDown size={compact ? 9 : 10} strokeWidth={2} className={cx("transition-transform duration-200 shrink-0", open && "rotate-180")} />
+        <ChevronDown size={large ? 11 : (compact ? 9 : 10)} strokeWidth={2} className={cx("transition-transform duration-200 shrink-0", open && "rotate-180")} />
       </button>
 
       {open && (

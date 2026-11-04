@@ -396,6 +396,24 @@ export function normalizeEditor(editor: HTMLElement): void {
       continue;
     }
 
+    // Horizontal rule / line divider: typed "---", "----", "***", "___" on a line
+    const rawText = child.textContent || "";
+    if (HR_RE.test(rawText)) {
+      const hrNode = firstElement(`<div class="md-hr" data-raw="${escapeAttr(rawText.trim())}" contenteditable="false"><hr></div>`);
+      if (hrNode) {
+        child.replaceWith(hrNode);
+        if (child === caretBlock) {
+          const nextLine = document.createElement("div");
+          nextLine.appendChild(document.createElement("br"));
+          hrNode.after(nextLine);
+          placeCaretStart(nextLine);
+        } else {
+          ensureTrailingLine(hrNode);
+        }
+        continue;
+      }
+    }
+
     const info = blockPrefix(child.textContent || "", true);
     if (!info) continue;
 
@@ -727,11 +745,37 @@ export function handleRichEditorKeyDown(
   const isHeading = /\bmd-h\d\b/.test(block.className);
   const hasPrefix = block.hasAttribute("data-p");
 
-  if (!hasPrefix && !isList && !isTask && !isHeading) return false;
-
   // Clean empty check: ignore zero-width spaces, non-breaking spaces, trailing newlines and spaces
   const cleanContent = (block.textContent || "").replace(/[\u200B\u00A0\r\n\s]/g, "");
   const isEmpty = cleanContent === "" || cleanContent === "-" || cleanContent === "*" || cleanContent === "•";
+  const isHr = HR_RE.test(cleanContent) || HR_RE.test(block.textContent || "");
+
+  if (e.key === "Enter" && isHr) {
+    e.preventDefault();
+    const hrNode = firstElement(`<div class="md-hr" data-raw="${escapeAttr(cleanContent)}" contenteditable="false"><hr></div>`);
+    if (hrNode) {
+      block.replaceWith(hrNode);
+      const next = document.createElement("div");
+      next.appendChild(document.createElement("br"));
+      hrNode.after(next);
+      placeCaretStart(next);
+      onInput();
+      return true;
+    }
+  }
+
+  if (!hasPrefix && !isList && !isTask && !isHeading) {
+    if (e.key === "Backspace" && caretOffsetIn(block, range) === 0) {
+      const prev = block.previousElementSibling;
+      if (prev && prev instanceof HTMLElement && (prev.classList.contains("md-hr") || prev.hasAttribute("data-raw"))) {
+        e.preventDefault();
+        prev.remove();
+        onInput();
+        return true;
+      }
+    }
+    return false;
+  }
 
   if (e.key === "Enter") {
     if (isEmpty && (isList || isTask || isHeading)) {
@@ -808,6 +852,13 @@ export function handleRichEditorKeyDown(
   }
 
   if (e.key === "Backspace" && (caretOffsetIn(block, range) === 0 || isEmpty)) {
+    const prev = block.previousElementSibling;
+    if (prev && prev instanceof HTMLElement && (prev.classList.contains("md-hr") || prev.hasAttribute("data-raw"))) {
+      e.preventDefault();
+      prev.remove();
+      onInput();
+      return true;
+    }
     if (isList || isTask || isHeading || hasPrefix) {
       e.preventDefault();
       clearPrefix(block);

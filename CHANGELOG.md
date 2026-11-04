@@ -69,6 +69,14 @@
 - **Vertical Screen Full-Height Maximization**: Fixed vertical layout maximize behavior where `<main>` remained in the layout without vertical collapse. Now, in `flex-col`, `<main>` collapses to `!w-0 !h-0` while `<aside>` transitions to `100%` height.
 - **Fluid Morphing for Compact Toolbar Controls**: Replaced abrupt size snaps with `200ms ease-out` animated transitions across `ModeToggle` (sliding "Mode" text label), `HeadingSelect`, and font selector buttons when resizing the drawer.
 
+### 15. Custom Category Icons, GPU-Composited Sidebar, Live Markdown Rules & Maximized UI Scaling (`src/lib/categoryIcons.tsx`, `src/components/CategoryMenu.tsx`, `src/components/Sidebar.tsx`, `src/lib/format.tsx`, `src/components/NoteSheet.tsx`, `src/lib/text.ts`)
+- **Custom Category Icons**: Introduced a curated library of 24 Lucide icons in `categoryIcons.tsx` (`Folder`, `BookOpen`, `Code`, `Terminal`, `Sparkles`, `Flame`, `CheckSquare`, `GraduationCap`, `Briefcase`, etc.). Users can assign any icon to their shelves via right-click -> "Choose icon", visible in both expanded and collapsed sidebar modes with shelf accent tinting and `localStorage` persistence.
+- **Glitch-Free Sidebar Transitions**: Replaced width-animating text containers that triggered mid-animation ellipsis jitter with GPU-accelerated opacity and subtle horizontal translation (`opacity-100 translate-x-0 duration-200 delay-75` on expand, `opacity-0 -translate-x-2 duration-150` on collapse).
+- **Live Markdown Horizontal Rule (`----`)**: Added auto-detection in `normalizeEditor` for `---` and `----` lines, instantly converting them into native `<div class="md-hr"><hr></div>` dividers with automated trailing line creation and clean `Backspace` deletion.
+- **Maximized Note UI Scaling**: Scaled all note sheet buttons, toolbars, font pickers, and titles to spacious ergonomic dimensions when maximized (34px buttons, 15px icons, full font titles, 36px note titles, and 960px reading container) while maintaining compact sizing for docked modes.
+- **Responsive Note Card Container Thresholds**: Elevated container query thresholds in `text.ts` to prevent cards from squeezing into 2 ultra-narrow columns below 640px, ensuring note titles and todo items always remain spacious and readable.
+- **Full-Width Toolbar Alignment**: Explicitly assigned `w-full` across both toolbar rows in `NoteSheet.tsx`, ensuring window actions always align to the outer top right.
+
 ### 12. Zero-Lag Resizing with Auto-Maximize Snapping (`src/components/NoteSheet.tsx`, `src/App.tsx`)
 - **Transition Suppression**: Disabled CSS transitions on `<aside>` during active dragging via `isResizingSheet`, delivering instantaneous 60 FPS cursor tracking.
 - **Auto-Maximize Snapping**: Dragging the resize handle past ~78% screen width automatically snaps the editor into full-canvas Maximize Mode.

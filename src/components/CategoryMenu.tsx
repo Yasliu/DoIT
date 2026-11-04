@@ -1,6 +1,14 @@
 import { useEffect, useRef, useState } from "react";
-import { Pencil, Trash2 } from "lucide-react";
+import { Palette, Pencil, Trash2, X } from "lucide-react";
 import { cleanText } from "../lib/text";
+import {
+  CATEGORY_ICON_NAMES,
+  CATEGORY_ICONS,
+  getCategoryIconName,
+  renameCategoryIcon,
+  removeCategoryIcon,
+  setCategoryIcon,
+} from "../lib/categoryIcons";
 
 interface CategoryMenuProps {
   x: number;
@@ -12,14 +20,15 @@ interface CategoryMenuProps {
 }
 
 export function CategoryMenu({ x, y, shelf, onClose, onRename, onDelete }: CategoryMenuProps) {
-  const [mode, setMode] = useState<"menu" | "rename">("menu");
+  const [mode, setMode] = useState<"menu" | "rename" | "icon">("menu");
   const [name, setName] = useState(cleanText(shelf));
   const [error, setError] = useState<string | null>(null);
   const [busy, setBusy] = useState(false);
   const inputRef = useRef<HTMLInputElement | null>(null);
+  const currentIcon = getCategoryIconName(shelf);
 
-  const menuWidth = 190;
-  const menuHeight = 120;
+  const menuWidth = 200;
+  const menuHeight = 150;
   const posX = Math.max(12, Math.min(x, window.innerWidth - menuWidth - 16));
   const posY = Math.max(12, Math.min(y, window.innerHeight - menuHeight - 16));
 
@@ -51,8 +60,17 @@ export function CategoryMenu({ x, y, shelf, onClose, onRename, onDelete }: Categ
     setBusy(true);
     const err = await onRename(shelf, next);
     setBusy(false);
-    if (err) setError(err);
-    else onClose();
+    if (err) {
+      setError(err);
+    } else {
+      renameCategoryIcon(shelf, next);
+      onClose();
+    }
+  };
+
+  const handleDelete = () => {
+    removeCategoryIcon(shelf);
+    onDelete(shelf);
   };
 
   return (
@@ -72,7 +90,7 @@ export function CategoryMenu({ x, y, shelf, onClose, onRename, onDelete }: Categ
       {mode === "menu" ? (
         <div
           style={{ left: posX, top: posY, animation: "bubblePop 160ms cubic-bezier(0.16, 1, 0.3, 1) both" }}
-          className="fixed z-[95] w-[190px] rounded-[15px] border border-white/15 bg-[#131418]/95 p-1.5 shadow-[0_20px_50px_rgba(0,0,0,0.88)] backdrop-blur-2xl select-none"
+          className="fixed z-[95] w-[200px] rounded-[15px] border border-white/15 bg-[#131418]/95 p-1.5 shadow-[0_20px_50px_rgba(0,0,0,0.88)] backdrop-blur-2xl select-none"
           onContextMenu={(e) => e.preventDefault()}
         >
           <div className="truncate px-2.5 py-1.5 font-mono text-[9px] uppercase tracking-[0.1em] text-white/40">
@@ -82,19 +100,90 @@ export function CategoryMenu({ x, y, shelf, onClose, onRename, onDelete }: Categ
           <button
             type="button"
             onClick={() => setMode("rename")}
-            className="flex h-8 w-full items-center gap-2 rounded-[8px] px-2 text-[12px] text-ink-2 transition-colors hover:bg-white/[0.08] hover:text-white"
+            className="flex h-8 w-full items-center gap-2 rounded-[8px] px-2 text-[12px] text-ink-2 transition-colors hover:bg-white/[0.08] hover:text-white cursor-pointer"
           >
             <Pencil size={12.5} strokeWidth={1.8} className="shrink-0 text-white/70" />
             Rename category
           </button>
           <button
             type="button"
-            onClick={() => onDelete(shelf)}
-            className="flex h-8 w-full items-center gap-2 rounded-[8px] px-2 text-[12px] text-ink-2 transition-colors hover:bg-red-500/10 hover:text-red-400"
+            onClick={() => setMode("icon")}
+            className="flex h-8 w-full items-center gap-2 rounded-[8px] px-2 text-[12px] text-ink-2 transition-colors hover:bg-white/[0.08] hover:text-white cursor-pointer"
+          >
+            <Palette size={12.5} strokeWidth={1.8} className="shrink-0 text-white/70" />
+            Choose icon
+          </button>
+          <button
+            type="button"
+            onClick={handleDelete}
+            className="flex h-8 w-full items-center gap-2 rounded-[8px] px-2 text-[12px] text-ink-2 transition-colors hover:bg-red-500/10 hover:text-red-400 cursor-pointer"
           >
             <Trash2 size={12.5} strokeWidth={1.8} className="shrink-0" />
             Delete category
           </button>
+        </div>
+      ) : mode === "icon" ? (
+        <div className="pointer-events-none fixed inset-0 z-[95] flex items-center justify-center">
+          <div
+            style={{ animation: "bubblePop 160ms cubic-bezier(0.16, 1, 0.3, 1) both" }}
+            className="pointer-events-auto w-[320px] rounded-[16px] border border-white/15 bg-[#131418]/95 p-4 shadow-[0_20px_50px_rgba(0,0,0,0.88)] backdrop-blur-2xl"
+          >
+            <div className="mb-2 flex items-center justify-between">
+              <div className="text-[12px] font-semibold text-white/90">
+                Choose icon for {cleanText(shelf)}
+              </div>
+              <button
+                type="button"
+                onClick={() => setMode("menu")}
+                className="grid size-6 place-items-center rounded text-ink-4 hover:text-ink-1"
+              >
+                <X size={13} />
+              </button>
+            </div>
+            <div className="my-2 grid grid-cols-6 gap-1.5 max-h-[220px] overflow-y-auto p-1 scroll">
+              {CATEGORY_ICON_NAMES.map((iconName) => {
+                const IconComp = CATEGORY_ICONS[iconName];
+                const isSelected = currentIcon === iconName;
+                return (
+                  <button
+                    key={iconName}
+                    type="button"
+                    onClick={() => {
+                      setCategoryIcon(shelf, iconName);
+                      onClose();
+                    }}
+                    title={iconName}
+                    className={`grid size-10 place-items-center rounded-[8px] transition-colors cursor-pointer ${
+                      isSelected
+                        ? "bg-white text-black font-semibold shadow-sm"
+                        : "bg-white/[0.04] text-ink-2 hover:bg-white/[0.1] hover:text-white"
+                    }`}
+                  >
+                    <IconComp size={16} strokeWidth={isSelected ? 2.4 : 1.8} />
+                  </button>
+                );
+              })}
+            </div>
+            <div className="mt-3 flex items-center justify-between border-t border-white/[0.08] pt-2">
+              <button
+                type="button"
+                onClick={() => {
+                  setCategoryIcon(shelf, null);
+                  onClose();
+                }}
+                className="text-[11px] text-ink-4 hover:text-red-400 transition-colors cursor-pointer"
+              >
+                Reset to default dot
+              </button>
+              <button
+                type="button"
+                onClick={onClose}
+                className="h-7 rounded-[6px] px-2.5 text-[11.5px] text-ink-3 transition-colors hover:bg-white/[0.06] hover:text-white cursor-pointer"
+              >
+                Close
+              </button>
+            </div>
+          </div>
         </div>
       ) : (
         <div className="pointer-events-none fixed inset-0 z-[95] flex items-center justify-center">
@@ -124,14 +213,14 @@ export function CategoryMenu({ x, y, shelf, onClose, onRename, onDelete }: Categ
               <button
                 type="button"
                 onClick={onClose}
-                className="h-8 rounded-[8px] px-3 text-[12px] text-ink-3 transition-colors hover:bg-white/[0.06] hover:text-white"
+                className="h-8 rounded-[8px] px-3 text-[12px] text-ink-3 transition-colors hover:bg-white/[0.06] hover:text-white cursor-pointer"
               >
                 Cancel
               </button>
               <button
                 type="submit"
                 disabled={busy}
-                className="h-8 rounded-[8px] bg-white px-3 text-[12px] font-medium text-black transition-opacity hover:opacity-90 disabled:opacity-50"
+                className="h-8 rounded-[8px] bg-white px-3 text-[12px] font-medium text-black transition-opacity hover:opacity-90 disabled:opacity-50 cursor-pointer"
               >
                 Save
               </button>
