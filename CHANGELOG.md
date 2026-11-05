@@ -2,6 +2,9 @@
 
 ## [2026-11-04] - Version 1.1.7: Full Note Maximization, Peak Arrow Navigation, Bullet Exit Mechanics & Taskbar Clamping
 
+### 16. Microsoft Store Packaging Restoration (`src-tauri/tauri.conf.json`)
+- **Microsoft Store MSIX Packaging Target**: Re-enabled MSIX bundler target alongside NSIS in `tauri.conf.json` with store publisher and packageName "Yasliu.DoIT".
+
 ### 15. Pixel-Perfect Sidebar Alignment, Canvas Squeeze Shield & Responsive Toolbar (`src/components/Sidebar.tsx`, `src/components/NoteSheet.tsx`, `src/App.tsx`, `src/components/CategoryShelf.tsx`, `src/components/NoteTile.tsx`)
 - **Pixel-Perfect Collapsed Sidebar Centerline ($x = 32\text{px}$)**:
   - Fixed collapsed action buttons (`+` New note, Import Note, Scan Folder, Settings, and Collapse) previously clipping on the right and hugging the left border.

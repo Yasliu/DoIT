@@ -44,7 +44,7 @@
   },
   "bundle": {
     "active": true,
-    "targets": ["nsis"],
+    "targets": ["nsis", "msix"],
     "createUpdaterArtifacts": true,
     "fileAssociations": [
       {
@@ -66,6 +66,10 @@
     "windows": {
       "nsis": {
         "installerHooks": "hooks.nsh"
+      },
+      "msix": {
+        "publisher": "CN=Yasliu",
+        "packageName": "Yasliu.DoIT"
       }
     },
     "icon": [
