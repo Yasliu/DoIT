@@ -67,22 +67,24 @@ export function Sidebar({
     <aside
       className={cx(
         "relative flex shrink-0 flex-col overflow-hidden h-full border-r border-white/[0.07] bg-[#0e0f13] z-20 select-none",
-        "transition-[width] duration-220 ease-[cubic-bezier(0.16,1,0.3,1)] will-change-[width]",
+        "transition-[width] duration-240 ease-[cubic-bezier(0.16,1,0.3,1)]",
       )}
       style={{
-        width: open ? 246 : 66,
+        width: open ? 246 : 64,
+        contain: "paint layout",
       }}
     >
-      {/* Brand Header */}
-      <div
-        className={cx(
-          "flex h-[58px] shrink-0 items-center overflow-hidden",
-          open ? "px-4" : "justify-center px-0",
-        )}
-      >
-        <Mark size={32} className="shrink-0" />
-        {open && (
-          <div className="flex flex-col min-w-0 overflow-hidden whitespace-nowrap ml-3 animate-fade-in">
+      {/* Pinned Inner Track: 246px fixed layout so the screen border and icons NEVER shift */}
+      <div className="w-[246px] h-full flex flex-col shrink-0">
+        {/* Brand Header */}
+        <div className="flex h-[58px] shrink-0 items-center px-4 overflow-hidden">
+          <Mark size={32} className="shrink-0" />
+          <div
+            className={cx(
+              "flex flex-col min-w-0 overflow-hidden whitespace-nowrap ml-3 transition-opacity duration-180 ease-out",
+              open ? "opacity-100" : "opacity-0 pointer-events-none",
+            )}
+          >
             <div className="truncate text-[13px] font-semibold tracking-[-0.015em] text-ink-1">
               DoIT
             </div>
@@ -90,93 +92,105 @@ export function Sidebar({
               Local workspace
             </div>
           </div>
-        )}
-      </div>
-
-      {/* Primary Actions: Clean Vertically-Stacked Action Buttons */}
-      <div className={cx("pt-1 space-y-1.5 shrink-0", open ? "px-3" : "px-0 flex flex-col items-center")}>
-        {/* Row 1: New Note */}
-        <div className={cx("flex items-center", open ? "gap-1.5 w-full" : "justify-center w-full")}>
-          <button
-            type="button"
-            onClick={onNew}
-            title="New note"
-            className={cx(
-              "rounded-[9px] bg-white/[0.06] text-ink-2 hover:bg-white/[0.1] hover:text-ink-1 cursor-pointer select-none transition-colors duration-150",
-              open
-                ? "flex-1 h-8.5 flex items-center px-2.5 font-medium text-[12px]"
-                : "size-8.5 grid place-items-center",
-            )}
-          >
-            <Plus size={15} strokeWidth={2} className="shrink-0" />
-            {open && (
-              <span className="truncate ml-2 whitespace-nowrap text-[12px] font-medium text-ink-2">
-                New note
-              </span>
-            )}
-          </button>
-          {open && (
-            <button
-              type="button"
-              onClick={() => setCreatingCategory(true)}
-              title="New category / shelf"
-              className="grid size-8.5 shrink-0 place-items-center rounded-[9px] bg-white/[0.06] text-ink-2 hover:bg-white/[0.1] hover:text-ink-1 cursor-pointer transition-colors"
-            >
-              <FolderPlus size={14} strokeWidth={2} />
-            </button>
-          )}
         </div>
 
-        {/* Row 2: Import Note File */}
-        <button
-          type="button"
-          onClick={onImportFile}
-          title="Import single markdown or text file"
-          className={cx(
-            "rounded-[9px] bg-white/[0.035] text-ink-3 hover:bg-white/[0.07] hover:text-ink-1 cursor-pointer select-none transition-colors duration-150",
-            open
-              ? "w-full h-8 flex items-center px-2.5 font-medium text-[12px]"
-              : "size-8.5 grid place-items-center",
-          )}
-        >
-          <FileDown size={14} strokeWidth={1.8} className="shrink-0" />
-          {open && (
-            <span className="truncate ml-2 whitespace-nowrap text-[12px] font-medium text-ink-3">
+        {/* Primary Actions */}
+        <div className="px-3.5 pt-1 space-y-1.5 shrink-0">
+          {/* Row 1: New Note */}
+          <div className="flex items-center gap-1.5 w-full">
+            <button
+              type="button"
+              onClick={onNew}
+              title="New note"
+              className={cx(
+                "h-8.5 rounded-[9px] bg-white/[0.06] text-ink-2 hover:bg-white/[0.1] hover:text-ink-1 cursor-pointer select-none transition-all duration-240 ease-[cubic-bezier(0.16,1,0.3,1)] flex items-center overflow-hidden",
+                open ? "flex-1 px-2" : "w-9 px-0 justify-center",
+              )}
+            >
+              <div className="size-9 grid place-items-center shrink-0">
+                <Plus size={15} strokeWidth={2} />
+              </div>
+              <span
+                className={cx(
+                  "truncate ml-1.5 whitespace-nowrap text-[12px] font-medium text-ink-2 transition-opacity duration-180 ease-out",
+                  open ? "opacity-100" : "opacity-0 pointer-events-none",
+                )}
+              >
+                New note
+              </span>
+            </button>
+            {open && (
+              <button
+                type="button"
+                onClick={() => setCreatingCategory(true)}
+                title="New category / shelf"
+                className="grid size-8.5 shrink-0 place-items-center rounded-[9px] bg-white/[0.06] text-ink-2 hover:bg-white/[0.1] hover:text-ink-1 cursor-pointer transition-colors"
+              >
+                <FolderPlus size={14} strokeWidth={2} />
+              </button>
+            )}
+          </div>
+
+          {/* Row 2: Import Note File */}
+          <button
+            type="button"
+            onClick={onImportFile}
+            title="Import single markdown or text file"
+            className={cx(
+              "h-8 rounded-[9px] bg-white/[0.035] text-ink-3 hover:bg-white/[0.07] hover:text-ink-1 cursor-pointer select-none transition-all duration-240 ease-[cubic-bezier(0.16,1,0.3,1)] flex items-center overflow-hidden",
+              open ? "w-full px-2" : "w-9 px-0 justify-center",
+            )}
+          >
+            <div className="size-9 grid place-items-center shrink-0">
+              <FileDown size={14} strokeWidth={1.8} />
+            </div>
+            <span
+              className={cx(
+                "truncate ml-1.5 whitespace-nowrap text-[12px] font-medium text-ink-3 transition-opacity duration-180 ease-out",
+                open ? "opacity-100" : "opacity-0 pointer-events-none",
+              )}
+            >
               Import Note
             </span>
-          )}
-        </button>
+          </button>
 
-        {/* Row 3: Scan Folder */}
-        <button
-          type="button"
-          onClick={onScanFolder}
-          title="Scan & import custom folder"
-          className={cx(
-            "rounded-[9px] bg-white/[0.035] text-ink-3 hover:bg-white/[0.07] hover:text-ink-1 cursor-pointer select-none transition-colors duration-150",
-            open
-              ? "w-full h-8 flex items-center px-2.5 font-medium text-[12px]"
-              : "size-8.5 grid place-items-center",
-          )}
-        >
-          <FolderInput size={14} strokeWidth={1.8} className="shrink-0" />
-          {open && (
-            <span className="truncate ml-2 whitespace-nowrap text-[12px] font-medium text-ink-3">
+          {/* Row 3: Scan Folder */}
+          <button
+            type="button"
+            onClick={onScanFolder}
+            title="Scan & import custom folder"
+            className={cx(
+              "h-8 rounded-[9px] bg-white/[0.035] text-ink-3 hover:bg-white/[0.07] hover:text-ink-1 cursor-pointer select-none transition-all duration-240 ease-[cubic-bezier(0.16,1,0.3,1)] flex items-center overflow-hidden",
+              open ? "w-full px-2" : "w-9 px-0 justify-center",
+            )}
+          >
+            <div className="size-9 grid place-items-center shrink-0">
+              <FolderInput size={14} strokeWidth={1.8} />
+            </div>
+            <span
+              className={cx(
+                "truncate ml-1.5 whitespace-nowrap text-[12px] font-medium text-ink-3 transition-opacity duration-180 ease-out",
+                open ? "opacity-100" : "opacity-0 pointer-events-none",
+              )}
+            >
               Scan Folder
             </span>
-          )}
-        </button>
-      </div>
+          </button>
+        </div>
 
-      <div className={cx("my-2", open ? "px-4" : "px-3")}>
-        <div className="h-px bg-white/[0.06] w-full" />
-      </div>
+        <div className="my-2 px-3.5">
+          <div className="h-px bg-white/[0.06] w-full" />
+        </div>
 
-      {/* Categories Navigation */}
-      <nav className={cx("scroll min-h-0 flex-1 overflow-y-auto overflow-x-hidden", open ? "px-3" : "px-0 flex flex-col items-center")}>
-        {/* Shelves Header (open only) */}
-        {open && (
-          <div className="h-5 mb-1 px-2 flex items-center justify-between whitespace-nowrap shrink-0">
+        {/* Categories Navigation */}
+        <nav className="scroll min-h-0 flex-1 overflow-y-auto overflow-x-hidden px-3.5">
+          {/* Shelves Header (open only) */}
+          <div
+            className={cx(
+              "h-5 mb-1 px-1 flex items-center justify-between whitespace-nowrap shrink-0 transition-opacity duration-180",
+              open ? "opacity-100" : "opacity-0 pointer-events-none h-0 overflow-hidden mb-0",
+            )}
+          >
             <span className="micro">Shelves</span>
             <button
               type="button"
@@ -187,149 +201,152 @@ export function Sidebar({
               <Plus size={12} strokeWidth={2} />
             </button>
           </div>
-        )}
 
-        {creatingCategory && open && (
-          <div className="mb-2 flex items-center gap-1 rounded-[10px] bg-white/[0.06] p-1 border border-white/10 shadow-sm animate-fade-in">
-            <input
-              autoFocus
-              value={categoryName}
-              maxLength={24}
-              onChange={(e) => setCategoryName(e.target.value)}
-              onKeyDown={(e) => {
-                if (e.key === "Enter") {
+          {creatingCategory && open && (
+            <div className="mb-2 flex items-center gap-1 rounded-[10px] bg-white/[0.06] p-1 border border-white/10 shadow-sm animate-fade-in">
+              <input
+                autoFocus
+                value={categoryName}
+                maxLength={24}
+                onChange={(e) => setCategoryName(e.target.value)}
+                onKeyDown={(e) => {
+                  if (e.key === "Enter") {
+                    if (categoryName.trim()) {
+                      onNewCategory?.(categoryName.trim());
+                      setCategoryName("");
+                      setCreatingCategory(false);
+                    }
+                  } else if (e.key === "Escape") {
+                    setCreatingCategory(false);
+                    setCategoryName("");
+                  }
+                }}
+                placeholder="Category name..."
+                className="h-6 min-w-0 flex-1 bg-transparent px-1.5 text-[12px] text-ink-1 outline-none placeholder:text-ink-4"
+              />
+              <button
+                type="button"
+                onClick={() => {
                   if (categoryName.trim()) {
                     onNewCategory?.(categoryName.trim());
                     setCategoryName("");
                     setCreatingCategory(false);
                   }
-                } else if (e.key === "Escape") {
+                }}
+                className="grid size-6 place-items-center rounded bg-white/10 text-ink-1 hover:bg-white/20"
+                title="Create category"
+              >
+                <Check size={11} strokeWidth={2.4} />
+              </button>
+              <button
+                type="button"
+                onClick={() => {
                   setCreatingCategory(false);
                   setCategoryName("");
-                }
-              }}
-              placeholder="Category name..."
-              className="h-6 min-w-0 flex-1 bg-transparent px-1.5 text-[12px] text-ink-1 outline-none placeholder:text-ink-4"
-            />
-            <button
-              type="button"
-              onClick={() => {
-                if (categoryName.trim()) {
-                  onNewCategory?.(categoryName.trim());
-                  setCategoryName("");
-                  setCreatingCategory(false);
-                }
-              }}
-              className="grid size-6 place-items-center rounded bg-white/10 text-ink-1 hover:bg-white/20"
-              title="Create category"
-            >
-              <Check size={11} strokeWidth={2.4} />
-            </button>
-            <button
-              type="button"
-              onClick={() => {
-                setCreatingCategory(false);
-                setCategoryName("");
-              }}
-              className="grid size-6 place-items-center rounded text-ink-4 hover:text-ink-2"
-              title="Cancel"
-            >
-              <X size={11} strokeWidth={2} />
-            </button>
-          </div>
-        )}
+                }}
+                className="grid size-6 place-items-center rounded text-ink-4 hover:text-ink-2"
+                title="Cancel"
+              >
+                <X size={11} strokeWidth={2} />
+              </button>
+            </div>
+          )}
 
-        {/* Shelf rows */}
-        {dockItems.map((item) => {
-          const isActive = active === item.key;
-          const iconKey = item.key ? getCategoryIconName(item.key) : null;
-          const CustomIcon = iconKey && iconKey !== "dot" ? CATEGORY_ICONS[iconKey] : null;
-          const isDot = iconKey === "dot";
+          {/* Shelf rows */}
+          {dockItems.map((item) => {
+            const isActive = active === item.key;
+            const iconKey = item.key ? getCategoryIconName(item.key) : null;
+            const CustomIcon = iconKey && iconKey !== "dot" ? CATEGORY_ICONS[iconKey] : null;
+            const isDot = iconKey === "dot";
 
-          return (
-            <button
-              key={item.key ?? "__all__"}
-              type="button"
-              onClick={() => onSelect(item.key)}
-              onContextMenu={(e) => {
-                if (!item.key || item.key.toLowerCase() === "uncategorized" || !onCategoryContextMenu) return;
-                e.preventDefault();
-                onCategoryContextMenu(e, item.key);
-              }}
-              title={`${item.label} (${item.count})`}
-              className={cx(
-                "group/row relative mb-1 rounded-[8px] transition-colors duration-150 cursor-pointer select-none",
-                open
-                  ? "w-full h-8 flex items-center px-2"
-                  : "size-8.5 grid place-items-center",
-                isActive
-                  ? "bg-white/[0.08] text-white shadow-[inset_0_0_0_1px_rgba(255,255,255,0.14)] font-medium"
-                  : "text-ink-3 hover:bg-white/[0.04] hover:text-ink-1",
-              )}
-            >
-              {item.key === null ? (
-                <span className="grid size-[14px] shrink-0 place-items-center pointer-events-none">
-                  <span className="grid grid-cols-2 gap-[2px]">
-                    <span className="size-[4px] rounded-[1px] bg-current opacity-90" />
-                    <span className="size-[4px] rounded-[1px] bg-current opacity-50" />
-                    <span className="size-[4px] rounded-[1px] bg-current opacity-50" />
-                    <span className="size-[4px] rounded-[1px] bg-current opacity-30" />
-                  </span>
-                </span>
-              ) : CustomIcon ? (
-                <span
-                  onClick={(e) => {
-                    if (open && onOpenIconPicker && item.key && item.key.toLowerCase() !== "uncategorized") {
-                      e.stopPropagation();
-                      onOpenIconPicker(item.key);
-                    }
-                  }}
-                  className={cx(
-                    "shrink-0 flex items-center justify-center pointer-events-auto",
-                    open && item.key && item.key.toLowerCase() !== "uncategorized" && "hover:scale-120 transition-transform cursor-pointer",
-                  )}
-                  title={open && item.key && item.key.toLowerCase() !== "uncategorized" ? "Click to change icon" : undefined}
-                >
-                  <CustomIcon
-                    size={14}
-                    strokeWidth={isActive ? 2.2 : 1.8}
-                    style={{ color: item.accent }}
-                    className="shrink-0 transition-transform duration-150 pointer-events-none"
-                  />
-                </span>
-              ) : isDot ? (
-                <span
-                  onClick={(e) => {
-                    if (open && onOpenIconPicker && item.key && item.key.toLowerCase() !== "uncategorized") {
-                      e.stopPropagation();
-                      onOpenIconPicker(item.key);
-                    }
-                  }}
-                  className={cx(
-                    "shrink-0 flex items-center justify-center pointer-events-auto",
-                    open && item.key && item.key.toLowerCase() !== "uncategorized" && "hover:scale-120 transition-transform cursor-pointer",
-                  )}
-                  title={open && item.key && item.key.toLowerCase() !== "uncategorized" ? "Click to choose icon" : undefined}
-                >
-                  <span
-                    className="shrink-0 size-2 rounded-full transition-all duration-200 ease-out pointer-events-none"
-                    style={{
-                      backgroundColor: item.accent,
-                      transform: isActive ? "scale(1.2)" : "scale(1)",
-                      boxShadow: isActive ? `0 0 8px ${item.accent}80` : "none",
+            return (
+              <button
+                key={item.key ?? "__all__"}
+                type="button"
+                onClick={() => onSelect(item.key)}
+                onContextMenu={(e) => {
+                  if (!item.key || item.key.toLowerCase() === "uncategorized" || !onCategoryContextMenu) return;
+                  e.preventDefault();
+                  onCategoryContextMenu(e, item.key);
+                }}
+                title={`${item.label} (${item.count})`}
+                className={cx(
+                  "group/row relative mb-1 h-8 rounded-[8px] transition-all duration-240 ease-[cubic-bezier(0.16,1,0.3,1)] cursor-pointer select-none flex items-center overflow-hidden",
+                  open ? "w-full px-1" : "w-9 px-0 justify-center",
+                  isActive
+                    ? "bg-white/[0.08] text-white shadow-[inset_0_0_0_1px_rgba(255,255,255,0.14)] font-medium"
+                    : "text-ink-3 hover:bg-white/[0.04] hover:text-ink-1",
+                )}
+              >
+                {item.key === null ? (
+                  <div className="size-9 grid place-items-center shrink-0 pointer-events-none">
+                    <span className="grid grid-cols-2 gap-[2px]">
+                      <span className="size-[4px] rounded-[1px] bg-current opacity-90" />
+                      <span className="size-[4px] rounded-[1px] bg-current opacity-50" />
+                      <span className="size-[4px] rounded-[1px] bg-current opacity-50" />
+                      <span className="size-[4px] rounded-[1px] bg-current opacity-30" />
+                    </span>
+                  </div>
+                ) : CustomIcon ? (
+                  <div
+                    onClick={(e) => {
+                      if (onOpenIconPicker && item.key && item.key.toLowerCase() !== "uncategorized") {
+                        e.stopPropagation();
+                        onOpenIconPicker(item.key);
+                      }
                     }}
-                  />
-                </span>
-              ) : (
-                <span
-                  className="shrink-0 size-2 rounded-full pointer-events-none"
-                  style={{ backgroundColor: item.accent }}
-                />
-              )}
+                    className={cx(
+                      "size-9 grid place-items-center shrink-0 pointer-events-auto",
+                      open && item.key && item.key.toLowerCase() !== "uncategorized" && "hover:scale-120 transition-transform cursor-pointer",
+                    )}
+                    title={open && item.key && item.key.toLowerCase() !== "uncategorized" ? "Click to change icon" : undefined}
+                  >
+                    <CustomIcon
+                      size={14}
+                      strokeWidth={isActive ? 2.2 : 1.8}
+                      style={{ color: item.accent }}
+                      className="shrink-0 transition-transform duration-150 pointer-events-none"
+                    />
+                  </div>
+                ) : isDot ? (
+                  <div
+                    onClick={(e) => {
+                      if (onOpenIconPicker && item.key && item.key.toLowerCase() !== "uncategorized") {
+                        e.stopPropagation();
+                        onOpenIconPicker(item.key);
+                      }
+                    }}
+                    className={cx(
+                      "size-9 grid place-items-center shrink-0 pointer-events-auto",
+                      open && item.key && item.key.toLowerCase() !== "uncategorized" && "hover:scale-120 transition-transform cursor-pointer",
+                    )}
+                    title={open && item.key && item.key.toLowerCase() !== "uncategorized" ? "Click to choose icon" : undefined}
+                  >
+                    <span
+                      className="shrink-0 size-2 rounded-full transition-all duration-200 ease-out pointer-events-none"
+                      style={{
+                        backgroundColor: item.accent,
+                        transform: isActive ? "scale(1.2)" : "scale(1)",
+                        boxShadow: isActive ? `0 0 8px ${item.accent}80` : "none",
+                      }}
+                    />
+                  </div>
+                ) : (
+                  <div className="size-9 grid place-items-center shrink-0 pointer-events-none">
+                    <span
+                      className="shrink-0 size-2 rounded-full"
+                      style={{ backgroundColor: item.accent }}
+                    />
+                  </div>
+                )}
 
-              {/* Sliding and fading label + count (only in open mode) */}
-              {open && (
-                <div className="flex flex-1 items-center justify-between min-w-0 overflow-hidden whitespace-nowrap ml-2.5 animate-fade-in">
+                {/* Sliding label + count */}
+                <div
+                  className={cx(
+                    "flex flex-1 items-center justify-between min-w-0 overflow-hidden whitespace-nowrap ml-1.5 transition-opacity duration-180 ease-out",
+                    open ? "opacity-100" : "opacity-0 pointer-events-none",
+                  )}
+                >
                   <span className="truncate text-[12.5px]">{item.label}</span>
                   <span
                     className={cx(
@@ -349,7 +366,7 @@ export function Sidebar({
                             onOpenIconPicker(item.key!);
                           }}
                           className="size-5 grid place-items-center rounded text-ink-4 hover:bg-white/10 hover:text-ink-1 cursor-pointer transition-colors"
-                          title={`Change icon for ${item.label}`}
+                          title={`Edit ${item.label} category & icon`}
                         >
                           <Palette size={11.5} strokeWidth={1.8} />
                         </span>
@@ -369,60 +386,66 @@ export function Sidebar({
                     </div>
                   )}
                 </div>
-              )}
-            </button>
-          );
-        })}
-      </nav>
+              </button>
+            );
+          })}
+        </nav>
 
-      {/* Bottom Actions */}
-      <div className={cx("shrink-0 py-3", open ? "px-3" : "px-0 flex flex-col items-center")}>
-        <div className={cx("rule mb-2.5", open ? "w-full" : "w-8.5")} />
-        <div className={cx("space-y-1 w-full", !open && "flex flex-col items-center")}>
-          <button
-            type="button"
-            onClick={onOpenSettings}
-            className={cx(
-              "rounded-[8px] text-[12px] transition-colors duration-150 cursor-pointer",
-              open
-                ? "w-full h-8 flex items-center px-2"
-                : "size-8.5 grid place-items-center",
-              isSettings
-                ? "bg-white/[0.1] text-white font-medium"
-                : "text-ink-3 hover:bg-white/[0.05] hover:text-ink-1",
-            )}
-            title="Settings"
-          >
-            <Settings size={14.5} strokeWidth={1.8} className="shrink-0" />
-            {open && (
-              <span className="text-left truncate whitespace-nowrap ml-2.5 text-[12px]">
+        {/* Bottom Actions */}
+        <div className="shrink-0 py-3 px-3.5">
+          <div className="rule mb-2.5 w-full" />
+          <div className="space-y-1 w-full">
+            <button
+              type="button"
+              onClick={onOpenSettings}
+              className={cx(
+                "h-8 rounded-[8px] text-[12px] transition-all duration-240 ease-[cubic-bezier(0.16,1,0.3,1)] cursor-pointer flex items-center overflow-hidden",
+                open ? "w-full px-1" : "w-9 px-0 justify-center",
+                isSettings
+                  ? "bg-white/[0.1] text-white font-medium"
+                  : "text-ink-3 hover:bg-white/[0.05] hover:text-ink-1",
+              )}
+              title="Settings"
+            >
+              <div className="size-9 grid place-items-center shrink-0">
+                <Settings size={14.5} strokeWidth={1.8} />
+              </div>
+              <span
+                className={cx(
+                  "text-left truncate whitespace-nowrap ml-1.5 text-[12px] transition-opacity duration-180 ease-out",
+                  open ? "opacity-100" : "opacity-0 pointer-events-none",
+                )}
+              >
                 Settings
               </span>
-            )}
-          </button>
+            </button>
 
-          <button
-            type="button"
-            onClick={onToggle}
-            className={cx(
-              "rounded-[8px] text-[12px] text-ink-4 hover:bg-white/[0.05] hover:text-ink-2 cursor-pointer transition-colors duration-150",
-              open
-                ? "w-full h-8 flex items-center px-2"
-                : "size-8.5 grid place-items-center",
-            )}
-            title={open ? "Collapse sidebar" : "Expand sidebar"}
-          >
-            {open ? (
-              <ChevronsLeft size={14.5} strokeWidth={1.6} className="shrink-0" />
-            ) : (
-              <ChevronsRight size={14.5} strokeWidth={1.6} className="shrink-0" />
-            )}
-            {open && (
-              <span className="text-left truncate whitespace-nowrap ml-2.5 text-[12px]">
+            <button
+              type="button"
+              onClick={onToggle}
+              className={cx(
+                "h-8 rounded-[8px] text-[12px] text-ink-4 hover:bg-white/[0.05] hover:text-ink-2 cursor-pointer transition-all duration-240 ease-[cubic-bezier(0.16,1,0.3,1)] flex items-center overflow-hidden",
+                open ? "w-full px-1" : "w-9 px-0 justify-center",
+              )}
+              title={open ? "Collapse sidebar" : "Expand sidebar"}
+            >
+              <div className="size-9 grid place-items-center shrink-0">
+                {open ? (
+                  <ChevronsLeft size={14.5} strokeWidth={1.6} />
+                ) : (
+                  <ChevronsRight size={14.5} strokeWidth={1.6} />
+                )}
+              </div>
+              <span
+                className={cx(
+                  "text-left truncate whitespace-nowrap ml-1.5 text-[12px] transition-opacity duration-180 ease-out",
+                  open ? "opacity-100" : "opacity-0 pointer-events-none",
+                )}
+              >
                 Collapse
               </span>
-            )}
-          </button>
+            </button>
+          </div>
         </div>
       </div>
     </aside>

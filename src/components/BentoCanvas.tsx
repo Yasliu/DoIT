@@ -261,7 +261,7 @@ export function BentoCanvas({
         "scroll relative h-full overflow-y-scroll",
         locked && "select-none pointer-events-none",
       )}
-      style={{ scrollbarGutter: "stable" }}
+      style={{ scrollbarGutter: "stable", willChange: "scroll-position", contain: "layout paint", overscrollBehaviorY: "contain" }}
     >
       <div className="mx-auto w-full max-w-[1000px] px-4 sm:px-6 pb-44 pt-5">
         <header className="flex flex-wrap items-start justify-between gap-4 sm:gap-8">

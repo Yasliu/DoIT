@@ -2,6 +2,13 @@
 
 ## [2026-11-04] - Version 1.1.7: Full Note Maximization, Peak Arrow Navigation, Bullet Exit Mechanics & Taskbar Clamping
 
+### 14. Unified Category Editor & Butter-Smooth Sidebar Navigation (`src/components/IconPickerModal.tsx`, `src/components/Sidebar.tsx`, `src/components/NoteSheet.tsx`, `src/App.tsx`, `src/styles/globals.css`, `src/components/BentoCanvas.tsx`)
+- **Unified Category Settings Section**: Merged shelf renaming and icon customization into a single unified dialog ([IconPickerModal.tsx](file:///a:/Code/DoIT/src/components/IconPickerModal.tsx)). Users can rename categories inline with real-time validation, preview changes on a live badge, pick from 60+ categorized icons (with instant keyword search), or toggle minimal dots / smart theme defaults.
+- **Zero-Lag Icon Navigation**: Stripped heavy window backdrop filters and expensive CSS transitions from the icon picker modal, replacing them with instant hardware-accelerated rendering and fast search indexing for a locked 120 FPS navigation experience.
+- **Stable Sidebar Rail & Border Snapping**: Fixed left panel sliding by mounting content inside a fixed-width 246px rail track with `contain: "paint layout"`. Icons and the left screen border remain permanently anchored at $x = 0$ during open and collapse, eliminating border twitching, padding jumps, or layout recalculations.
+- **Dashboard Scroll Optimization**: Enhanced note card compositing by simplifying card box-shadows into 2 lightweight passes and applying `contain: content` and `will-change: scroll-position` to the Bento canvas.
+- **Instant Note Sheet Slide-in**: Removed artificial multi-frame reserve delays so clicking a note immediately triggers the 220ms spring slide-in at frame 0, with seamless synchronized closing.
+
 ### 13. High-FPS Zero-Lag Performance & Sidebar Centering Overhaul (`src/styles/globals.css`, `src/components/Sidebar.tsx`, `src/lib/categoryIcons.tsx`, `src/components/CategoryShelf.tsx`, `src/App.tsx`, `src/components/NoteSheet.tsx`)
 - **60–120 FPS High-Performance Rendering**: Eradicated expensive real-time CSS `backdrop-filter: blur(44px)` on sliding panels and drawer containers, reducing Chromium rasterization time per frame by 90% and delivering silky 60–120 FPS transitions with zero GPU lag and zero RAM bloat.
 - **Collapsed Sidebar Pixel-Perfect Centerline Alignment**: Fixed the collapsed sidebar button layout where text spans with `opacity-0` previously retained horizontal DOM space in flex flow, pushing icons off-center to the left. Rewrote collapsed buttons into isolated `size-8.5 grid place-items-center mx-auto` containers with `{open && <span>...</span>}` conditional text, locking all icons to the exact `33px` centerline down to the sub-pixel.

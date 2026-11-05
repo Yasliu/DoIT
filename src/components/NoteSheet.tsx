@@ -447,12 +447,10 @@ export function NoteSheet({
   // ---- Right-side drawer slide-in: single spring-like curve, transform only ----
   useLayoutEffect(() => {
     if (instant) return;
-    const id = requestAnimationFrame(() =>
-      requestAnimationFrame(() => {
-        setPhase("in");
-        onOpening?.();
-      }),
-    );
+    const id = requestAnimationFrame(() => {
+      setPhase("in");
+      onOpening?.();
+    });
     return () => cancelAnimationFrame(id);
   }, [instant]);
   useEffect(() => {
@@ -538,7 +536,7 @@ export function NoteSheet({
     // settled -> in (re-enable transition) -> out (slide away), then unmount
     setPhase("in");
     requestAnimationFrame(() => requestAnimationFrame(() => setPhase("out")));
-    phaseTimer.current = window.setTimeout(() => onClose(), 250);
+    phaseTimer.current = window.setTimeout(() => onClose(), 230);
   };
   closeRef.current = close;
 
@@ -587,9 +585,9 @@ export function NoteSheet({
           opacity: phase === "pre" ? 0 : 1,
           transition:
             phase === "out"
-              ? "transform 240ms cubic-bezier(0.16, 1, 0.3, 1), opacity 180ms ease-out"
+              ? "transform 220ms cubic-bezier(0.16, 1, 0.3, 1), opacity 150ms ease-out"
               : phase === "in"
-                ? "transform 240ms cubic-bezier(0.16, 1, 0.3, 1), opacity 180ms ease-out"
+                ? "transform 220ms cubic-bezier(0.16, 1, 0.3, 1), opacity 150ms ease-out"
                 : "none",
           willChange: phase === "settled" ? "auto" : "transform",
         }}

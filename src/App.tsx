@@ -93,7 +93,6 @@ export default function App() {
   const [categoryMenu, setCategoryMenu] = useState<{ x: number; y: number; shelf: string } | null>(null);
   const [iconPickerShelf, setIconPickerShelf] = useState<string | null>(null);
   const [sheetClosing, setSheetClosing] = useState(false);
-  const [sheetReserve, setSheetReserve] = useState(false);
   const wasSheetOpen = useRef(false);
   const [isSettings, setIsSettings] = useState(false);
   const [mini] = useState(false);
@@ -291,7 +290,6 @@ export default function App() {
 
   useEffect(() => {
     wasSheetOpen.current = !!openNote;
-    if (!openNote) setSheetReserve(false);
   }, [openNote]);
 
   // The canvas can be swapped for a blank page while in tray mode: confirm each (re)load so it is revealed
@@ -535,14 +533,14 @@ export default function App() {
         />
 
         {(() => {
-          const isVerticalMode = isVerticalScreen || (!isNoteMaximized && window.innerWidth - (railOpen ? 246 : 66) - drawerWidth < 380);
+          const isVerticalMode = isVerticalScreen || (!isNoteMaximized && window.innerWidth - (railOpen ? 246 : 64) - drawerWidth < 380);
           return (
             <div className={cx("min-h-0 flex-1 px-3 pb-3", isVerticalMode ? "flex flex-col" : "flex")}>
               <main
                 ref={canvasRef}
                 style={{ contain: "layout paint" }}
                 className={cx(
-                  "relative min-w-0 min-h-0 overflow-hidden flex-1 w-full h-full transition-opacity duration-240 ease-out",
+                  "relative min-w-0 min-h-0 overflow-hidden flex-1 w-full h-full transition-opacity duration-220 ease-out",
                   isNoteMaximized && !sheetClosing
                     ? "hidden"
                     : "opacity-100",
@@ -607,27 +605,27 @@ export default function App() {
                     ? "100%"
                     : isVerticalMode
                       ? "100%"
-                      : openFresh && openNote && sheetReserve && !sheetClosing
+                      : openFresh && openNote && !sheetClosing
                         ? drawerWidth
                         : 0,
                   height: isNoteMaximized
                     ? "100%"
                     : isVerticalMode
-                      ? openFresh && openNote && sheetReserve && !sheetClosing
+                      ? openFresh && openNote && !sheetClosing
                         ? "54vh"
                         : 0
                       : "100%",
-                  marginLeft: !isVerticalMode && !isNoteMaximized && openFresh && openNote && sheetReserve && !sheetClosing ? 12 : 0,
-                  marginTop: isVerticalMode && !isNoteMaximized && openFresh && openNote && sheetReserve && !sheetClosing ? 12 : 0,
+                  marginLeft: !isVerticalMode && !isNoteMaximized && openFresh && openNote && !sheetClosing ? 12 : 0,
+                  marginTop: isVerticalMode && !isNoteMaximized && openFresh && openNote && !sheetClosing ? 12 : 0,
                   transition: isResizingSheet
                     ? "none"
                     : sheetClosing
                       ? isVerticalMode
-                        ? "height 240ms cubic-bezier(0.16, 1, 0.3, 1), margin-top 240ms cubic-bezier(0.16, 1, 0.3, 1)"
-                        : "width 240ms cubic-bezier(0.16, 1, 0.3, 1), margin-left 240ms cubic-bezier(0.16, 1, 0.3, 1)"
+                        ? "height 220ms cubic-bezier(0.16, 1, 0.3, 1), margin-top 220ms cubic-bezier(0.16, 1, 0.3, 1)"
+                        : "width 220ms cubic-bezier(0.16, 1, 0.3, 1), margin-left 220ms cubic-bezier(0.16, 1, 0.3, 1)"
                       : isVerticalMode
-                        ? "height 240ms cubic-bezier(0.16, 1, 0.3, 1), margin-top 240ms cubic-bezier(0.16, 1, 0.3, 1)"
-                        : "width 240ms cubic-bezier(0.16, 1, 0.3, 1), margin-left 240ms cubic-bezier(0.16, 1, 0.3, 1)",
+                        ? "height 220ms cubic-bezier(0.16, 1, 0.3, 1), margin-top 220ms cubic-bezier(0.16, 1, 0.3, 1)"
+                        : "width 220ms cubic-bezier(0.16, 1, 0.3, 1), margin-left 220ms cubic-bezier(0.16, 1, 0.3, 1)",
                 }}
               >
                 {openFresh && openNote && (
@@ -645,7 +643,6 @@ export default function App() {
                     onToggleMaximize={() => setIsNoteMaximized((v) => !v)}
                     isBottomMode={isVerticalMode}
                     onClosing={() => setSheetClosing(true)}
-                    onOpening={() => setSheetReserve(true)}
                     onCommit={commitSheet}
                     onClose={closeSheet}
                     onDelete={deleteNote}
@@ -711,6 +708,16 @@ export default function App() {
           shelf={iconPickerShelf}
           accent={accentFor(iconPickerShelf, shelves)}
           onClose={() => setIconPickerShelf(null)}
+          onRename={async (shelf, newName) => {
+            const err = await workspace.renameCategory(shelf, newName);
+            if (err) return err;
+            if (active === shelf) setActive(newName);
+            return null;
+          }}
+          onDelete={(shelf) => {
+            setIconPickerShelf(null);
+            void deleteCategory(shelf);
+          }}
         />
       )}
 
