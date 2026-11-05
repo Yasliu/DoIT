@@ -1,6 +1,6 @@
 import { ChevronDown, Palette, Plus, Trash2 } from "lucide-react";
 import type { PointerEvent as ReactPointerEvent } from "react";
-import { useEffect, useState } from "react";
+import React, { useEffect, useState } from "react";
 import type { NoteItem } from "../api/tauriBridge";
 import { accentFor, cleanText, cx } from "../lib/text";
 import { CATEGORY_ICONS, getCategoryIconName } from "../lib/categoryIcons";
@@ -28,7 +28,7 @@ interface CategoryShelfProps {
   onContextMenu?: (event: React.MouseEvent, note: NoteItem) => void;
 }
 
-export function CategoryShelf({
+function CategoryShelfComponent({
   shelf,
   notes,
   shelves,
@@ -188,7 +188,7 @@ export function CategoryShelf({
         }}
       >
         <div className="min-h-0 overflow-hidden @container">
-          <div className="grid grid-cols-12 grid-flow-row-dense gap-3.5 auto-rows-[minmax(130px,auto)] pb-1 pt-3.5">
+          <div className="grid grid-cols-1 @[540px]:grid-cols-12 grid-flow-row-dense gap-3.5 auto-rows-[minmax(130px,auto)] pb-1 pt-3.5">
             {notes.length === 0 ? (
               <button
                 type="button"
@@ -229,3 +229,5 @@ export function CategoryShelf({
     </section>
   );
 }
+
+export const CategoryShelf = React.memo(CategoryShelfComponent);

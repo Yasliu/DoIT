@@ -2,6 +2,24 @@
 
 ## [2026-11-04] - Version 1.1.7: Full Note Maximization, Peak Arrow Navigation, Bullet Exit Mechanics & Taskbar Clamping
 
+### 15. Pixel-Perfect Sidebar Alignment, Canvas Squeeze Shield & Responsive Toolbar (`src/components/Sidebar.tsx`, `src/components/NoteSheet.tsx`, `src/App.tsx`, `src/components/CategoryShelf.tsx`, `src/components/NoteTile.tsx`)
+- **Pixel-Perfect Collapsed Sidebar Centerline ($x = 32\text{px}$)**:
+  - Fixed collapsed action buttons (`+` New note, Import Note, Scan Folder, Settings, and Collapse) previously clipping on the right and hugging the left border.
+  - Buttons now smoothly transition between `36px` when collapsed and `100%` when expanded with matched `320ms cubic-bezier(0.22, 1, 0.36, 1)` easing.
+  - In collapsed mode, all buttons form pristine, fully rounded `36px` square containers with icons mathematically centered at $x = 32\text{px}$, perfectly aligning with the DoIT logo and shelf dots from top to bottom.
+- **Canvas Squeeze Safeguard (Guaranteed 440px Minimum Breathing Room)**:
+  - Eliminated the bug where expanding the note sheet or resizing the right panel crushed the notes dashboard into 50–120px vertical noodles with single-character text wrapping.
+  - Hardened drawer width bounds to `Math.max(minW, window.innerWidth - 64 - 480)`, ensuring the dashboard is always guaranteed at least 440px of canvas space.
+  - Automatically switches to vertical bottom drawer when available space drops below 860px or in portrait mode.
+  - Dragging the resize handle past 70% window width smoothly snaps directly into full note maximization.
+- **Responsive Single-Column Shelf Grid (`CategoryShelf.tsx`)**:
+  - Configured `@container` responsive rules (`grid-cols-1 @[540px]:grid-cols-12`) so any constrained shelf container gracefully flows into full-width cards rather than forcing dual squished columns.
+- **Responsive NoteSheet Toolbar & Font Name Protection**:
+  - Prevented formatting toolbar truncation and icon overflow on compact drawers: when drawer width is under 580px, the font family selector displays a clean, compact `<Type />` icon button instead of clipping text ("T In...").
+  - Formatting buttons remain smoothly accessible without overlapping window control buttons or the category selector.
+- **High-FPS Scroll Optimization**:
+  - Memoized `NoteTile` and `CategoryShelf` with `React.memo` and removed heavy layout measurement recalculations and CSS mask textures for fluid 60–120 FPS scrolling across dense workspaces.
+
 ### 14. Unified Category Editor & Butter-Smooth Sidebar Navigation (`src/components/IconPickerModal.tsx`, `src/components/Sidebar.tsx`, `src/components/NoteSheet.tsx`, `src/App.tsx`, `src/styles/globals.css`, `src/components/BentoCanvas.tsx`)
 - **Unified Category Settings Section**: Merged shelf renaming and icon customization into a single unified dialog ([IconPickerModal.tsx](file:///a:/Code/DoIT/src/components/IconPickerModal.tsx)). Users can rename categories inline with real-time validation, preview changes on a live badge, pick from 60+ categorized icons (with instant keyword search), or toggle minimal dots / smart theme defaults.
 - **Zero-Lag Icon Navigation**: Stripped heavy window backdrop filters and expensive CSS transitions from the icon picker modal, replacing them with instant hardware-accelerated rendering and fast search indexing for a locked 120 FPS navigation experience.

@@ -61,7 +61,7 @@ export function getAdaptiveMinDrawerWidth(): number {
 
 function getStoredDrawerWidth(): number {
   const minW = getAdaptiveMinDrawerWidth();
-  const maxW = Math.max(minW, window.innerWidth - 100);
+  const maxW = Math.max(minW, window.innerWidth - 64 - 480);
   try {
     const raw = localStorage.getItem("doit.drawer_width");
     if (raw) {
@@ -533,18 +533,19 @@ export default function App() {
         />
 
         {(() => {
-          const isVerticalMode = isVerticalScreen || (!isNoteMaximized && window.innerWidth - (railOpen ? 246 : 64) - drawerWidth < 380);
+          const isVerticalMode = isVerticalScreen || (!isNoteMaximized && (window.innerWidth < 860 || window.innerWidth - (railOpen ? 246 : 64) - drawerWidth < 440));
           return (
             <div className={cx("min-h-0 flex-1 px-3 pb-3", isVerticalMode ? "flex flex-col" : "flex")}>
               <main
                 ref={canvasRef}
-                style={{ contain: "layout paint" }}
-                className={cx(
-                  "relative min-w-0 min-h-0 overflow-hidden flex-1 w-full h-full transition-opacity duration-220 ease-out",
-                  isNoteMaximized && !sheetClosing
-                    ? "hidden"
-                    : "opacity-100",
-                )}
+                style={{
+                  contain: "layout paint",
+                  flex: isNoteMaximized ? "0 0 0px" : "1 1 0%",
+                  opacity: isNoteMaximized ? 0 : 1,
+                  pointerEvents: isNoteMaximized ? "none" : "auto",
+                  transition: "flex 360ms cubic-bezier(0.22, 1, 0.36, 1), opacity 240ms ease-out",
+                }}
+                className="relative min-w-0 min-h-0 overflow-hidden w-full h-full"
               >
                 <div aria-hidden="true" className="lightscape" />
                 <div className="relative z-10 h-full">
@@ -621,11 +622,11 @@ export default function App() {
                     ? "none"
                     : sheetClosing
                       ? isVerticalMode
-                        ? "height 220ms cubic-bezier(0.16, 1, 0.3, 1), margin-top 220ms cubic-bezier(0.16, 1, 0.3, 1)"
-                        : "width 220ms cubic-bezier(0.16, 1, 0.3, 1), margin-left 220ms cubic-bezier(0.16, 1, 0.3, 1)"
+                        ? "height 280ms cubic-bezier(0.25, 1, 0.5, 1), margin-top 280ms cubic-bezier(0.25, 1, 0.5, 1)"
+                        : "width 280ms cubic-bezier(0.25, 1, 0.5, 1), margin-left 280ms cubic-bezier(0.25, 1, 0.5, 1)"
                       : isVerticalMode
-                        ? "height 220ms cubic-bezier(0.16, 1, 0.3, 1), margin-top 220ms cubic-bezier(0.16, 1, 0.3, 1)"
-                        : "width 220ms cubic-bezier(0.16, 1, 0.3, 1), margin-left 220ms cubic-bezier(0.16, 1, 0.3, 1)",
+                        ? "height 360ms cubic-bezier(0.22, 1, 0.36, 1), margin-top 360ms cubic-bezier(0.22, 1, 0.36, 1)"
+                        : "width 360ms cubic-bezier(0.22, 1, 0.36, 1), margin-left 360ms cubic-bezier(0.22, 1, 0.36, 1)",
                 }}
               >
                 {openFresh && openNote && (

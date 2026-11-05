@@ -124,13 +124,16 @@ export function NoteSheet({
   const closeRef = useRef<() => void>(() => {});
   const closeCancel = useRef<() => void>(() => {});
 
-  // Load system fonts on mount
+  // Load system fonts deferred to not block initial slide-in
   useEffect(() => {
-    void tauriApi.getSystemFonts().then((fonts) => {
-      if (fonts && fonts.length > 0) {
-        setSystemFonts(fonts);
-      }
-    });
+    const timer = window.setTimeout(() => {
+      void tauriApi.getSystemFonts().then((fonts) => {
+        if (fonts && fonts.length > 0) {
+          setSystemFonts(fonts);
+        }
+      });
+    }, 200);
+    return () => window.clearTimeout(timer);
   }, []);
 
   // Viewport detection hooks to ensure dropdowns never get clipped by window/panel boundaries
@@ -188,7 +191,7 @@ export function NoteSheet({
       const rawW = startWidth.current + deltaX;
 
       // Dragged past threshold snaps straight into maximize mode
-      if (rawW >= window.innerWidth * 0.72 || rawW >= window.innerWidth - 180) {
+      if (rawW >= window.innerWidth * 0.70 || rawW >= window.innerWidth - 300) {
         isResizing.current = false;
         onResizeStateChange?.(false);
         document.body.style.userSelect = "";
@@ -199,8 +202,8 @@ export function NoteSheet({
         return;
       }
 
-      // Preserve canvas breathing room so notes never crush into thin slivers
-      const maxW = Math.max(minW, window.innerWidth - 440);
+      // Preserve canvas breathing room so dashboard cards never get crushed
+      const maxW = Math.max(minW, window.innerWidth - 64 - 480);
       const nextW = Math.round(Math.min(Math.max(rawW, minW), maxW));
       onResizeWidth?.(nextW);
     };
@@ -216,7 +219,7 @@ export function NoteSheet({
 
       const deltaX = startX.current - upEvent.clientX;
       const minW = getAdaptiveMinW();
-      const maxW = Math.max(minW, window.innerWidth - 440);
+      const maxW = Math.max(minW, window.innerWidth - 64 - 480);
       const finalW = Math.round(Math.min(Math.max(startWidth.current + deltaX, minW), maxW));
       onResizeWidth?.(finalW);
       try {
@@ -536,7 +539,7 @@ export function NoteSheet({
     // settled -> in (re-enable transition) -> out (slide away), then unmount
     setPhase("in");
     requestAnimationFrame(() => requestAnimationFrame(() => setPhase("out")));
-    phaseTimer.current = window.setTimeout(() => onClose(), 230);
+    phaseTimer.current = window.setTimeout(() => onClose(), 290);
   };
   closeRef.current = close;
 
@@ -585,9 +588,9 @@ export function NoteSheet({
           opacity: phase === "pre" ? 0 : 1,
           transition:
             phase === "out"
-              ? "transform 220ms cubic-bezier(0.16, 1, 0.3, 1), opacity 150ms ease-out"
+              ? "transform 280ms cubic-bezier(0.25, 1, 0.5, 1), opacity 180ms ease-out"
               : phase === "in"
-                ? "transform 220ms cubic-bezier(0.16, 1, 0.3, 1), opacity 150ms ease-out"
+                ? "transform 360ms cubic-bezier(0.22, 1, 0.36, 1), opacity 220ms ease-out"
                 : "none",
           willChange: phase === "settled" ? "auto" : "transform",
         }}
@@ -789,8 +792,8 @@ export function NoteSheet({
                   className={cx(
                     "truncate transition-all duration-200 ease-out overflow-hidden inline-block",
                     isMaximized
-                      ? "max-w-[140px] opacity-100"
-                      : (width && width >= 520 ? "max-w-[72px] opacity-100 hidden sm:inline-block" : "max-w-0 opacity-0 hidden sm:inline-block"),
+                      ? "max-w-[140px] opacity-100 ml-1.5"
+                      : (width && width >= 580 ? "max-w-[85px] opacity-100 hidden sm:inline-block ml-1.5" : "hidden"),
                   )}
                 >
                   {cleanText(draft.font_family) || "Instrument Sans"}

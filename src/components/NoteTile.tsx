@@ -1,5 +1,5 @@
 import type { PointerEvent as ReactPointerEvent } from "react";
-import { useLayoutEffect, useMemo, useRef, useState } from "react";
+import React, { useMemo, useRef, useState } from "react";
 import { motion } from "motion/react";
 import { Maximize2 } from "lucide-react";
 import type { NoteItem } from "../api/tauriBridge";
@@ -20,7 +20,7 @@ interface NoteTileProps {
   onContextMenu?: (event: React.MouseEvent, note: NoteItem) => void;
 }
 
-export function NoteTile({
+function NoteTileComponent({
   note,
   shelves,
   pressed,
@@ -47,18 +47,7 @@ export function NoteTile({
   const empty = note.content.every((item) => item.text.trim().length === 0);
   const preview = useMemo(() => (rawMode ? null : previewMarkup(note.content)), [note.content, rawMode]);
   const previewRef = useRef<HTMLElement | null>(null);
-  const [overflowing, setOverflowing] = useState(false);
   const previewMax = Math.max(40, density.lines * 34);
-  useLayoutEffect(() => {
-    const el = previewRef.current;
-    if (el) setOverflowing(el.scrollHeight > el.clientHeight + 2);
-  }, [note.content, rawMode, previewMax]);
-  const fadeStyle: React.CSSProperties = overflowing
-    ? {
-        WebkitMaskImage: "linear-gradient(to bottom, #000 calc(100% - 28px), transparent)",
-        maskImage: "linear-gradient(to bottom, #000 calc(100% - 28px), transparent)",
-      }
-    : {};
   const total = note.content.filter((item) => item.is_todo).length;
   const done = note.content.filter((item) => item.is_todo && item.completed).length;
 
@@ -248,8 +237,8 @@ export function NoteTile({
           /* Text Mode note: the file exactly as the user sees it when the tile is opened */
           <pre
             ref={previewRef as React.RefObject<HTMLPreElement>}
-            className="md-preview-raw mt-2.5"
-            style={{ maxHeight: previewMax, ...fadeStyle }}
+            className="md-preview-raw mt-2.5 overflow-hidden"
+            style={{ maxHeight: previewMax }}
           >
             {contentToMarkdown(note.content)}
           </pre>
@@ -257,8 +246,8 @@ export function NoteTile({
           /* MD Mode note: the rendered document (headings, tables, tasks, images) */
           <div
             ref={previewRef as React.RefObject<HTMLDivElement>}
-            className="md-preview mt-2.5"
-            style={{ maxHeight: previewMax, fontFamily: fontStack(note.font_family), ...fadeStyle }}
+            className="md-preview mt-2.5 overflow-hidden"
+            style={{ maxHeight: previewMax, fontFamily: fontStack(note.font_family) }}
             onPointerDown={(event) => {
               if ((event.target as HTMLElement).closest(".md-cb")) event.stopPropagation();
             }}
@@ -287,3 +276,5 @@ export function NoteTile({
     </motion.article>
   );
 }
+
+export const NoteTile = React.memo(NoteTileComponent);

@@ -67,7 +67,7 @@ export function Sidebar({
     <aside
       className={cx(
         "relative flex shrink-0 flex-col overflow-hidden h-full border-r border-white/[0.07] bg-[#0e0f13] z-20 select-none",
-        "transition-[width] duration-240 ease-[cubic-bezier(0.16,1,0.3,1)]",
+        "transition-[width] duration-320 ease-[cubic-bezier(0.22,1,0.36,1)]",
       )}
       style={{
         width: open ? 246 : 64,
@@ -81,7 +81,7 @@ export function Sidebar({
           <Mark size={32} className="shrink-0" />
           <div
             className={cx(
-              "flex flex-col min-w-0 overflow-hidden whitespace-nowrap ml-3 transition-opacity duration-180 ease-out",
+              "flex flex-col min-w-0 overflow-hidden whitespace-nowrap ml-3 transition-opacity duration-200 ease-out",
               open ? "opacity-100" : "opacity-0 pointer-events-none",
             )}
           >
@@ -94,7 +94,7 @@ export function Sidebar({
           </div>
         </div>
 
-        {/* Primary Actions */}
+        {/* Primary Actions: Clean Left-Anchored Non-Snapping Buttons */}
         <div className="px-3.5 pt-1 space-y-1.5 shrink-0">
           {/* Row 1: New Note */}
           <div className="flex items-center gap-1.5 w-full">
@@ -102,9 +102,13 @@ export function Sidebar({
               type="button"
               onClick={onNew}
               title="New note"
+              style={{
+                width: open ? "100%" : 36,
+                transition: "width 320ms cubic-bezier(0.22, 1, 0.36, 1), background-color 150ms",
+              }}
               className={cx(
-                "h-8.5 rounded-[9px] bg-white/[0.06] text-ink-2 hover:bg-white/[0.1] hover:text-ink-1 cursor-pointer select-none transition-all duration-240 ease-[cubic-bezier(0.16,1,0.3,1)] flex items-center overflow-hidden",
-                open ? "flex-1 px-2" : "w-9 px-0 justify-center",
+                "h-8.5 rounded-[9px] bg-white/[0.06] text-ink-2 hover:bg-white/[0.1] hover:text-ink-1 cursor-pointer select-none flex items-center overflow-hidden shrink-0",
+                open ? "flex-1" : "w-9",
               )}
             >
               <div className="size-9 grid place-items-center shrink-0">
@@ -112,23 +116,25 @@ export function Sidebar({
               </div>
               <span
                 className={cx(
-                  "truncate ml-1.5 whitespace-nowrap text-[12px] font-medium text-ink-2 transition-opacity duration-180 ease-out",
+                  "truncate ml-1 whitespace-nowrap text-[12px] font-medium text-ink-2 transition-opacity duration-150 ease-out",
                   open ? "opacity-100" : "opacity-0 pointer-events-none",
                 )}
               >
                 New note
               </span>
             </button>
-            {open && (
-              <button
-                type="button"
-                onClick={() => setCreatingCategory(true)}
-                title="New category / shelf"
-                className="grid size-8.5 shrink-0 place-items-center rounded-[9px] bg-white/[0.06] text-ink-2 hover:bg-white/[0.1] hover:text-ink-1 cursor-pointer transition-colors"
-              >
-                <FolderPlus size={14} strokeWidth={2} />
-              </button>
-            )}
+
+            <button
+              type="button"
+              onClick={() => setCreatingCategory(true)}
+              title="New category / shelf"
+              className={cx(
+                "grid size-8.5 shrink-0 place-items-center rounded-[9px] bg-white/[0.06] text-ink-2 hover:bg-white/[0.1] hover:text-ink-1 cursor-pointer transition-all duration-200 ease-out",
+                open ? "opacity-100 pointer-events-auto" : "opacity-0 pointer-events-none w-0 -mr-1.5 overflow-hidden",
+              )}
+            >
+              <FolderPlus size={14} strokeWidth={2} />
+            </button>
           </div>
 
           {/* Row 2: Import Note File */}
@@ -136,17 +142,18 @@ export function Sidebar({
             type="button"
             onClick={onImportFile}
             title="Import single markdown or text file"
-            className={cx(
-              "h-8 rounded-[9px] bg-white/[0.035] text-ink-3 hover:bg-white/[0.07] hover:text-ink-1 cursor-pointer select-none transition-all duration-240 ease-[cubic-bezier(0.16,1,0.3,1)] flex items-center overflow-hidden",
-              open ? "w-full px-2" : "w-9 px-0 justify-center",
-            )}
+            style={{
+              width: open ? "100%" : 36,
+              transition: "width 320ms cubic-bezier(0.22, 1, 0.36, 1), background-color 150ms",
+            }}
+            className="h-8 rounded-[9px] bg-white/[0.035] text-ink-3 hover:bg-white/[0.07] hover:text-ink-1 cursor-pointer select-none flex items-center overflow-hidden shrink-0"
           >
             <div className="size-9 grid place-items-center shrink-0">
               <FileDown size={14} strokeWidth={1.8} />
             </div>
             <span
               className={cx(
-                "truncate ml-1.5 whitespace-nowrap text-[12px] font-medium text-ink-3 transition-opacity duration-180 ease-out",
+                "truncate ml-1 whitespace-nowrap text-[12px] font-medium text-ink-3 transition-opacity duration-150 ease-out",
                 open ? "opacity-100" : "opacity-0 pointer-events-none",
               )}
             >
@@ -159,17 +166,18 @@ export function Sidebar({
             type="button"
             onClick={onScanFolder}
             title="Scan & import custom folder"
-            className={cx(
-              "h-8 rounded-[9px] bg-white/[0.035] text-ink-3 hover:bg-white/[0.07] hover:text-ink-1 cursor-pointer select-none transition-all duration-240 ease-[cubic-bezier(0.16,1,0.3,1)] flex items-center overflow-hidden",
-              open ? "w-full px-2" : "w-9 px-0 justify-center",
-            )}
+            style={{
+              width: open ? "100%" : 36,
+              transition: "width 320ms cubic-bezier(0.22, 1, 0.36, 1), background-color 150ms",
+            }}
+            className="h-8 rounded-[9px] bg-white/[0.035] text-ink-3 hover:bg-white/[0.07] hover:text-ink-1 cursor-pointer select-none flex items-center overflow-hidden shrink-0"
           >
             <div className="size-9 grid place-items-center shrink-0">
               <FolderInput size={14} strokeWidth={1.8} />
             </div>
             <span
               className={cx(
-                "truncate ml-1.5 whitespace-nowrap text-[12px] font-medium text-ink-3 transition-opacity duration-180 ease-out",
+                "truncate ml-1 whitespace-nowrap text-[12px] font-medium text-ink-3 transition-opacity duration-150 ease-out",
                 open ? "opacity-100" : "opacity-0 pointer-events-none",
               )}
             >
@@ -179,7 +187,13 @@ export function Sidebar({
         </div>
 
         <div className="my-2 px-3.5">
-          <div className="h-px bg-white/[0.06] w-full" />
+          <div
+            style={{
+              width: open ? "100%" : 36,
+              transition: "width 320ms cubic-bezier(0.22, 1, 0.36, 1)",
+            }}
+            className="h-px bg-white/[0.06]"
+          />
         </div>
 
         {/* Categories Navigation */}
@@ -187,7 +201,7 @@ export function Sidebar({
           {/* Shelves Header (open only) */}
           <div
             className={cx(
-              "h-5 mb-1 px-1 flex items-center justify-between whitespace-nowrap shrink-0 transition-opacity duration-180",
+              "h-5 mb-1 px-1 flex items-center justify-between whitespace-nowrap shrink-0 transition-opacity duration-200",
               open ? "opacity-100" : "opacity-0 pointer-events-none h-0 overflow-hidden mb-0",
             )}
           >
@@ -270,9 +284,12 @@ export function Sidebar({
                   onCategoryContextMenu(e, item.key);
                 }}
                 title={`${item.label} (${item.count})`}
+                style={{
+                  width: open ? "100%" : 36,
+                  transition: "width 320ms cubic-bezier(0.22, 1, 0.36, 1), background-color 150ms",
+                }}
                 className={cx(
-                  "group/row relative mb-1 h-8 rounded-[8px] transition-all duration-240 ease-[cubic-bezier(0.16,1,0.3,1)] cursor-pointer select-none flex items-center overflow-hidden",
-                  open ? "w-full px-1" : "w-9 px-0 justify-center",
+                  "group/row relative mb-1 h-8 rounded-[8px] transition-colors duration-150 cursor-pointer select-none flex items-center overflow-hidden shrink-0",
                   isActive
                     ? "bg-white/[0.08] text-white shadow-[inset_0_0_0_1px_rgba(255,255,255,0.14)] font-medium"
                     : "text-ink-3 hover:bg-white/[0.04] hover:text-ink-1",
@@ -343,7 +360,7 @@ export function Sidebar({
                 {/* Sliding label + count */}
                 <div
                   className={cx(
-                    "flex flex-1 items-center justify-between min-w-0 overflow-hidden whitespace-nowrap ml-1.5 transition-opacity duration-180 ease-out",
+                    "flex flex-1 items-center justify-between min-w-0 overflow-hidden whitespace-nowrap ml-1 transition-opacity duration-150 ease-out",
                     open ? "opacity-100" : "opacity-0 pointer-events-none",
                   )}
                 >
@@ -393,14 +410,23 @@ export function Sidebar({
 
         {/* Bottom Actions */}
         <div className="shrink-0 py-3 px-3.5">
-          <div className="rule mb-2.5 w-full" />
+          <div
+            style={{
+              width: open ? "100%" : 36,
+              transition: "width 320ms cubic-bezier(0.22, 1, 0.36, 1)",
+            }}
+            className="h-px bg-white/[0.06] mb-2.5"
+          />
           <div className="space-y-1 w-full">
             <button
               type="button"
               onClick={onOpenSettings}
+              style={{
+                width: open ? "100%" : 36,
+                transition: "width 320ms cubic-bezier(0.22, 1, 0.36, 1), background-color 150ms",
+              }}
               className={cx(
-                "h-8 rounded-[8px] text-[12px] transition-all duration-240 ease-[cubic-bezier(0.16,1,0.3,1)] cursor-pointer flex items-center overflow-hidden",
-                open ? "w-full px-1" : "w-9 px-0 justify-center",
+                "h-8 rounded-[8px] text-[12px] transition-colors duration-150 cursor-pointer flex items-center overflow-hidden shrink-0",
                 isSettings
                   ? "bg-white/[0.1] text-white font-medium"
                   : "text-ink-3 hover:bg-white/[0.05] hover:text-ink-1",
@@ -412,7 +438,7 @@ export function Sidebar({
               </div>
               <span
                 className={cx(
-                  "text-left truncate whitespace-nowrap ml-1.5 text-[12px] transition-opacity duration-180 ease-out",
+                  "text-left truncate whitespace-nowrap ml-1 text-[12px] transition-opacity duration-150 ease-out",
                   open ? "opacity-100" : "opacity-0 pointer-events-none",
                 )}
               >
@@ -423,10 +449,11 @@ export function Sidebar({
             <button
               type="button"
               onClick={onToggle}
-              className={cx(
-                "h-8 rounded-[8px] text-[12px] text-ink-4 hover:bg-white/[0.05] hover:text-ink-2 cursor-pointer transition-all duration-240 ease-[cubic-bezier(0.16,1,0.3,1)] flex items-center overflow-hidden",
-                open ? "w-full px-1" : "w-9 px-0 justify-center",
-              )}
+              style={{
+                width: open ? "100%" : 36,
+                transition: "width 320ms cubic-bezier(0.22, 1, 0.36, 1), background-color 150ms",
+              }}
+              className="h-8 rounded-[8px] text-[12px] text-ink-4 hover:bg-white/[0.05] hover:text-ink-2 cursor-pointer transition-colors duration-150 flex items-center overflow-hidden shrink-0"
               title={open ? "Collapse sidebar" : "Expand sidebar"}
             >
               <div className="size-9 grid place-items-center shrink-0">
@@ -438,7 +465,7 @@ export function Sidebar({
               </div>
               <span
                 className={cx(
-                  "text-left truncate whitespace-nowrap ml-1.5 text-[12px] transition-opacity duration-180 ease-out",
+                  "text-left truncate whitespace-nowrap ml-1 text-[12px] transition-opacity duration-150 ease-out",
                   open ? "opacity-100" : "opacity-0 pointer-events-none",
                 )}
               >
