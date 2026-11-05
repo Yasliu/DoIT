@@ -5,8 +5,10 @@ import { tauriApi } from "./api/tauriBridge";
 import { BentoCanvas } from "./components/BentoCanvas";
 import { ContextMenu } from "./components/ContextMenu";
 import { CategoryMenu } from "./components/CategoryMenu";
+import { IconPickerModal } from "./components/IconPickerModal";
 import { setMarkdownBaseDir } from "./lib/format";
 import { applyShortcutSettings } from "./lib/shortcuts";
+import { initCategoryIcons } from "./lib/categoryIcons";
 import { NoteSheet } from "./components/NoteSheet";
 import { SettingsPanel } from "./components/SettingsPanel";
 import { Sidebar } from "./components/Sidebar";
@@ -14,6 +16,7 @@ import { TitleBar } from "./components/TitleBar";
 import { UpdateInfo, UpdateModal } from "./components/UpdateModal";
 import { ReleaseLogModal } from "./components/ReleaseLogModal";
 import { useWorkspace } from "./hooks/useWorkspace";
+import { accentFor, cx } from "./lib/text";
 
 interface OpenNote {
   note: NoteItem;
@@ -27,7 +30,7 @@ interface Toast {
 }
 
 const COLLAPSE_KEY = "doit.collapsed";
-const CURRENT_VERSION = "1.1.6";
+const CURRENT_VERSION = "1.1.7";
 const VERSION_TRACKER_KEY = "doit.release_notes_version";
 
 function isVersionLower(current: string | null, target: string): boolean {
@@ -59,7 +62,7 @@ export function getAdaptiveMinDrawerWidth(): number {
 
 function getStoredDrawerWidth(): number {
   const minW = getAdaptiveMinDrawerWidth();
-  const maxW = Math.max(minW, window.innerWidth - 100);
+  const maxW = Math.max(minW, window.innerWidth - 64 - 480);
   try {
     const raw = localStorage.getItem("doit.drawer_width");
     if (raw) {
@@ -83,11 +86,14 @@ export default function App() {
   const [query, setQuery] = useState("");
   const [active, setActive] = useState<string | null>(null);
   const [openNote, setOpenNote] = useState<OpenNote | null>(null);
+  const [isNoteMaximized, setIsNoteMaximized] = useState(false);
+  const [isVerticalScreen, setIsVerticalScreen] = useState(() => window.innerHeight > window.innerWidth);
+  const [isResizingSheet, setIsResizingSheet] = useState(false);
   const [drawerWidth, setDrawerWidth] = useState<number>(getStoredDrawerWidth);
   const [contextMenu, setContextMenu] = useState<{ x: number; y: number; note: NoteItem } | null>(null);
   const [categoryMenu, setCategoryMenu] = useState<{ x: number; y: number; shelf: string } | null>(null);
+  const [iconPickerShelf, setIconPickerShelf] = useState<string | null>(null);
   const [sheetClosing, setSheetClosing] = useState(false);
-  const [sheetReserve, setSheetReserve] = useState(false);
   const wasSheetOpen = useRef(false);
   const [isSettings, setIsSettings] = useState(false);
   const [mini] = useState(false);
@@ -232,6 +238,9 @@ export default function App() {
         setThemeMode(s.theme_mode as "glass" | "monochrome");
         document.documentElement.dataset.theme = s.theme_mode;
       }
+      if (s.category_icons) {
+        initCategoryIcons(s.category_icons);
+      }
     });
   }, []);
 
@@ -285,7 +294,6 @@ export default function App() {
 
   useEffect(() => {
     wasSheetOpen.current = !!openNote;
-    if (!openNote) setSheetReserve(false);
   }, [openNote]);
 
   // The canvas can be swapped for a blank page while in tray mode: confirm each (re)load so it is revealed
@@ -338,7 +346,16 @@ export default function App() {
     };
   }, [openExternal]);
 
-  const openTile = useCallback((note: NoteItem, rect: DOMRect) => {
+  useEffect(() => {
+    const handleResize = () => {
+      setIsVerticalScreen(window.innerHeight > window.innerWidth);
+    };
+    window.addEventListener("resize", handleResize);
+    return () => window.removeEventListener("resize", handleResize);
+  }, []);
+
+  const openTile = useCallback((note: NoteItem, rect: DOMRect, maximize = false) => {
+    setIsNoteMaximized(maximize);
     setSheetClosing(false);
     setOpenNote({ note, origin: rect });
   }, []);
@@ -347,6 +364,7 @@ export default function App() {
     (shelf?: string) => {
       const target = shelf ?? active ?? shelves[0] ?? "Uncategorized";
       const created = create(target);
+      setIsNoteMaximized(false);
       setSheetClosing(false);
       setOpenNote({ note: created, origin: originFromCanvas() });
       if (shelf) setActive(shelf);
@@ -355,6 +373,7 @@ export default function App() {
   );
 
   const closeSheet = useCallback(() => {
+    setIsNoteMaximized(false);
     const id = openNote?.note.id;
     setSheetClosing(false);
     setOpenNote(null);
@@ -408,8 +427,8 @@ export default function App() {
   }, []);
 
   const toggleMini = useCallback(() => {
-    void tauriApi.openTrayMode();
-  }, []);
+    void tauriApi.openTrayMode(Boolean(openNote), openNote?.note.id);
+  }, [openNote]);
 
   const handleImportNote = useCallback(async () => {
     try {
@@ -501,6 +520,7 @@ export default function App() {
           isSettings={isSettings}
           onDeleteCategory={(cat) => void deleteCategory(cat)}
           onCategoryContextMenu={(event, shelf) => setCategoryMenu({ x: event.clientX, y: event.clientY, shelf })}
+          onOpenIconPicker={(shelf) => setIconPickerShelf(shelf)}
           onImportFile={handleImportNote}
           onScanFolder={handleScanFolder}
         />
@@ -516,85 +536,138 @@ export default function App() {
           isSettings={isSettings}
         />
 
-        <div className="flex min-h-0 flex-1 px-3 pb-3">
-          <main ref={canvasRef} className="relative min-w-0 flex-1 overflow-hidden">
-            <div aria-hidden="true" className="lightscape" />
-            <div className="relative z-10 h-full">
-            {isSettings ? (
-              <div className="scroll relative h-full overflow-y-scroll" style={{ scrollbarGutter: "stable" }}>
-                <SettingsPanel
-                  onBack={() => setIsSettings(false)}
-                  onStoragePathChanged={() => void workspace.reload()}
-                  onThemeChanged={(mode) => setThemeMode(mode)}
-                />
-              </div>
-            ) : state === "error" ? (
-              <div className="flex h-full flex-col items-start justify-center px-10">
-                <p className="text-[20px] tracking-[-0.02em] text-ink-2">The workspace did not open.</p>
-                <p className="mt-2 max-w-[46ch] text-[12.5px] leading-relaxed text-ink-4">
-                  The local store could not be read. Nothing has been written over it.
-                </p>
-                <button type="button" onClick={() => void workspace.reload()} className="btn mt-5">
-                  Try again
-                </button>
-              </div>
-            ) : (
-              <BentoCanvas
-                notes={notes}
-                shelves={shelves}
-                active={active}
-                query={query}
-                loading={state === "loading"}
-                locked={false}
-                collapsed={collapsed}
-                onToggleCollapse={toggleCollapse}
-                onOpen={openTile}
-                onNewNote={newNote}
-                onNewCategory={(name) => {
-                  void createCategory(name);
-                  setActive(name);
-                }}
-                onToggleItem={toggleItem}
-                onMoveCategory={(id, shelf) => void moveCategory(id, shelf)}
-                onDeleteCategory={(cat) => void deleteCategory(cat)}
-                onCategoryContextMenu={(event, shelf) => setCategoryMenu({ x: event.clientX, y: event.clientY, shelf })}
-                onReorderNotes={(shelf, activeId, overId) => reorderNote(shelf, activeId, overId)}
-                onContextMenu={(event, note) => setContextMenu({ x: event.clientX, y: event.clientY, note })}
-              />
-            )}
-            </div>
-          </main>
+        {(() => {
+          const isVerticalMode = isVerticalScreen || window.innerWidth < 640;
+          const isMaxClosing = sheetClosing && isNoteMaximized;
 
-          {/* Right-side sliding editor drawer: reserves space so the dashboard stays visible + interactive */}
-          <aside
-            className="relative shrink-0 overflow-visible"
-            style={{
-              width: openFresh && openNote && sheetReserve && !sheetClosing ? drawerWidth : 0,
-              marginLeft: openFresh && openNote && sheetReserve && !sheetClosing ? 12 : 0,
-              transition: sheetClosing
-                ? "width 300ms ease-out, margin-left 300ms ease-out"
-                : "width 460ms cubic-bezier(0.32, 0.72, 0, 1), margin-left 460ms cubic-bezier(0.32, 0.72, 0, 1)",
-            }}
-          >
-            {openFresh && openNote && (
-              <NoteSheet
-                key={openFresh.id}
-                note={openFresh}
-                origin={openNote.origin}
-                canvas={canvasRef.current}
-                shelves={shelves}
-                instant={wasSheetOpen.current}
-                width={drawerWidth}
-                onResizeWidth={setDrawerWidth}
-                onClosing={() => setSheetClosing(true)}
-                onOpening={() => setSheetReserve(true)}
-                onCommit={commitSheet}
-                onClose={closeSheet}
-                onDelete={deleteNote}
-              />
-            )}
-          </aside>
-        </div>
+          return (
+            <div className={cx("relative min-h-0 flex-1 px-3 pb-3", isVerticalMode ? "flex flex-col" : "flex")}>
+              <main
+                ref={canvasRef}
+                style={{
+                  contain: "layout paint",
+                  flex: isNoteMaximized && !isMaxClosing ? "0 0 0px" : "1 1 0%",
+                  width: isNoteMaximized && !isMaxClosing ? 0 : "100%",
+                  minWidth: 0,
+                  opacity: isNoteMaximized && !isMaxClosing ? 0 : 1,
+                  pointerEvents: isNoteMaximized && !isMaxClosing ? "none" : "auto",
+                  transition: "opacity 240ms ease-out",
+                }}
+                className="relative min-w-0 min-h-0 overflow-hidden w-full h-full"
+              >
+                <div aria-hidden="true" className="lightscape" />
+                <div className="relative z-10 h-full">
+                {isSettings ? (
+                  <div className="scroll relative h-full overflow-y-scroll" style={{ scrollbarGutter: "stable" }}>
+                    <SettingsPanel
+                      onBack={() => setIsSettings(false)}
+                      onStoragePathChanged={() => void workspace.reload()}
+                      onThemeChanged={(mode) => setThemeMode(mode)}
+                    />
+                  </div>
+                ) : state === "error" ? (
+                  <div className="flex h-full flex-col items-start justify-center px-10">
+                    <p className="text-[20px] tracking-[-0.02em] text-ink-2">The workspace did not open.</p>
+                    <p className="mt-2 max-w-[46ch] text-[12.5px] leading-relaxed text-ink-4">
+                      The local store could not be read. Nothing has been written over it.
+                    </p>
+                    <button type="button" onClick={() => void workspace.reload()} className="btn mt-5">
+                      Try again
+                    </button>
+                  </div>
+                ) : (
+                  <BentoCanvas
+                    notes={notes}
+                    shelves={shelves}
+                    active={active}
+                    query={query}
+                    loading={state === "loading"}
+                    locked={false}
+                    collapsed={collapsed}
+                    onToggleCollapse={toggleCollapse}
+                    onOpen={openTile}
+                    onNewNote={newNote}
+                    onNewCategory={(name) => {
+                      void createCategory(name);
+                      setActive(name);
+                    }}
+                    onToggleItem={toggleItem}
+                    onMoveCategory={(id, shelf) => void moveCategory(id, shelf)}
+                    onDeleteCategory={(cat) => void deleteCategory(cat)}
+                    onCategoryContextMenu={(event, shelf) => setCategoryMenu({ x: event.clientX, y: event.clientY, shelf })}
+                    onOpenIconPicker={(shelf) => setIconPickerShelf(shelf)}
+                    onReorderNotes={(shelf, activeId, overId) => reorderNote(shelf, activeId, overId)}
+                    onContextMenu={(event, note) => setContextMenu({ x: event.clientX, y: event.clientY, note })}
+                  />
+                )}
+                </div>
+              </main>
+
+              {/* Sliding editor drawer: reserves space so the dashboard stays visible + interactive */}
+              <aside
+                className={cx(
+                  isMaxClosing
+                    ? "absolute top-0 bottom-3 left-3 right-3 z-30 min-h-0 min-w-0 overflow-hidden pointer-events-none"
+                    : isNoteMaximized
+                      ? "relative min-h-0 min-w-0 overflow-hidden shrink-0 flex-1 w-full h-full"
+                      : "relative min-h-0 min-w-0 overflow-hidden shrink-0",
+                )}
+                style={{
+                  width: isMaxClosing
+                    ? undefined
+                    : isNoteMaximized
+                      ? "100%"
+                      : isVerticalMode
+                        ? "100%"
+                        : openFresh && openNote && !sheetClosing
+                          ? drawerWidth
+                          : 0,
+                  height: isMaxClosing
+                    ? undefined
+                    : isNoteMaximized
+                      ? "100%"
+                      : isVerticalMode
+                        ? openFresh && openNote && !sheetClosing
+                          ? "54vh"
+                          : 0
+                        : "100%",
+                  marginLeft: !isVerticalMode && !isNoteMaximized && !isMaxClosing && openFresh && openNote && !sheetClosing ? 12 : 0,
+                  marginTop: isVerticalMode && !isNoteMaximized && !isMaxClosing && openFresh && openNote && !sheetClosing ? 12 : 0,
+                  transition: isResizingSheet || isMaxClosing
+                    ? "none"
+                    : sheetClosing
+                      ? isVerticalMode
+                        ? "height 280ms cubic-bezier(0.22, 1, 0.36, 1), margin-top 280ms cubic-bezier(0.22, 1, 0.36, 1)"
+                        : "width 280ms cubic-bezier(0.22, 1, 0.36, 1), margin-left 280ms cubic-bezier(0.22, 1, 0.36, 1)"
+                      : isVerticalMode
+                        ? "height 340ms cubic-bezier(0.22, 1, 0.36, 1), margin-top 340ms cubic-bezier(0.22, 1, 0.36, 1)"
+                        : "width 340ms cubic-bezier(0.22, 1, 0.36, 1), margin-left 340ms cubic-bezier(0.22, 1, 0.36, 1)",
+                }}
+              >
+                {openFresh && openNote && (
+                  <NoteSheet
+                    key={openFresh.id}
+                    note={openFresh}
+                    origin={openNote.origin}
+                    canvas={canvasRef.current}
+                    shelves={shelves}
+                    instant={wasSheetOpen.current}
+                    width={isNoteMaximized || isVerticalMode ? undefined : drawerWidth}
+                    onResizeWidth={setDrawerWidth}
+                    onResizeStateChange={setIsResizingSheet}
+                    isMaximized={isNoteMaximized}
+                    onToggleMaximize={() => setIsNoteMaximized((v) => !v)}
+                    isBottomMode={isVerticalMode}
+                    onClosing={() => setSheetClosing(true)}
+                    onCommit={commitSheet}
+                    onClose={closeSheet}
+                    onDelete={deleteNote}
+                  />
+                )}
+              </aside>
+            </div>
+          );
+        })()}
       </div>
 
       {contextMenu && (
@@ -626,6 +699,7 @@ export default function App() {
           y={categoryMenu.y}
           shelf={categoryMenu.shelf}
           onClose={() => setCategoryMenu(null)}
+          onOpenIconPicker={(shelf) => setIconPickerShelf(shelf)}
           onDelete={(shelf) => {
             setCategoryMenu(null);
             void deleteCategory(shelf);
@@ -641,6 +715,24 @@ export default function App() {
               });
             }
             return err;
+          }}
+        />
+      )}
+
+      {iconPickerShelf && (
+        <IconPickerModal
+          shelf={iconPickerShelf}
+          accent={accentFor(iconPickerShelf, shelves)}
+          onClose={() => setIconPickerShelf(null)}
+          onRename={async (shelf, newName) => {
+            const err = await workspace.renameCategory(shelf, newName);
+            if (err) return err;
+            if (active === shelf) setActive(newName);
+            return null;
+          }}
+          onDelete={(shelf) => {
+            setIconPickerShelf(null);
+            void deleteCategory(shelf);
           }}
         />
       )}

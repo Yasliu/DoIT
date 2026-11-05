@@ -108,7 +108,7 @@ pub fn run() {
                         // X button on main: if dock_on_close is true, switch to floating docking mode; else exit
                         let storage = app.state::<StorageManager>();
                         if storage.get_dock_on_close() {
-                            let _ = open_tray_mode(app.clone());
+                            let _ = open_tray_mode(app.clone(), None, None);
                         } else {
                             app.exit(0);
                         }
@@ -164,7 +164,7 @@ pub fn run() {
                 .on_menu_event(|app, event| {
                     let _ = match event.id.as_ref() {
                         "show" => open_canvas_mode(app.clone()),
-                        "tray" => open_tray_mode(app.clone()),
+                        "tray" => open_tray_mode(app.clone(), None, None),
                         "quit" => {
                             app.exit(0);
                             Ok(())
@@ -187,7 +187,7 @@ pub fn run() {
                             .unwrap_or(false);
 
                         if main_visible {
-                            let _ = open_tray_mode(app);
+                            let _ = open_tray_mode(app, None, None);
                         } else {
                             let _ = open_canvas_mode(app);
                         }

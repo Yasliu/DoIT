@@ -109,11 +109,11 @@ export function accentFor(name: string, shelves: string[]): string {
 }
 
 const SPANS = {
-  feature: "col-span-12 md:col-span-8 lg:col-span-7 xl:col-span-8 row-span-2",
-  denseChecklist: "col-span-12 md:col-span-6 lg:col-span-6 row-span-2",
-  half: "col-span-12 md:col-span-6 lg:col-span-5 row-span-1",
-  third: "col-span-12 md:col-span-6 lg:col-span-4 row-span-1",
-  square: "col-span-12 sm:col-span-6 md:col-span-4 lg:col-span-3 row-span-1",
+  feature: "col-span-12 @[680px]:col-span-8 @[960px]:col-span-7 @[1280px]:col-span-8 row-span-2",
+  denseChecklist: "col-span-12 @[640px]:col-span-6 @[960px]:col-span-6 row-span-2",
+  half: "col-span-12 @[640px]:col-span-6 @[960px]:col-span-5 row-span-1",
+  third: "col-span-12 @[640px]:col-span-6 @[960px]:col-span-4 row-span-1",
+  square: "col-span-12 @[600px]:col-span-6 @[840px]:col-span-4 @[1080px]:col-span-3 row-span-1",
 } as const;
 
 export type TileWeight = keyof typeof SPANS;

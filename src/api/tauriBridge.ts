@@ -74,6 +74,7 @@ export interface AppSettings {
   theme_mode?: "glass" | "monochrome";
   dock_on_close?: boolean;
   last_seen_version?: string;
+  category_icons?: Record<string, string>;
 }
 
 export const DEFAULT_SETTINGS: AppSettings = {
@@ -313,10 +314,10 @@ export const tauriApi = {
     }
   },
 
-  async openTrayMode(): Promise<void> {
+  async openTrayMode(hasActiveNote?: boolean, noteId?: string): Promise<void> {
     if (!isTauri()) return;
     try {
-      await invoke("open_tray_mode");
+      await invoke("open_tray_mode", { hasActiveNote: hasActiveNote ?? false, noteId: noteId ?? null });
     } catch (err) {
     }
   },

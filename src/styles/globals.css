@@ -23,23 +23,23 @@
     --ease-out: cubic-bezier(0.22, 1, 0.36, 1);
     color-scheme: dark;
 
-    /* Theme Texture Variables (Glass Mode Default) */
-    --theme-chassis-bg: rgba(9, 10, 14, 0.85);
-    --theme-chassis-blur: blur(36px) saturate(110%);
-    --theme-glass-bg: rgba(23, 24, 30, 0.6);
-    --theme-glass-blur: blur(30px) saturate(112%);
+    /* Theme Texture Variables (Glass Mode Default - High-Performance Zero-Lag Compositing) */
+    --theme-chassis-bg: #090a0e;
+    --theme-chassis-blur: none;
+    --theme-glass-bg: #15161d;
+    --theme-glass-blur: none;
     --theme-sheet-bg: #121318;
-    --theme-sheet-blur: blur(44px) saturate(118%);
-    --theme-card-bg: rgba(255, 255, 255, 0.052);
-    --theme-card-blur: blur(18px) saturate(108%);
-    --theme-card-hover-bg: rgba(255, 255, 255, 0.063);
+    --theme-sheet-blur: none;
+    --theme-card-bg: #14151a;
+    --theme-card-blur: none;
+    --theme-card-hover-bg: #191a21;
     --theme-border: rgba(255, 255, 255, 0.09);
     --theme-card-inner: rgba(255, 255, 255, 0.035);
 
-    --theme-tray-bg: rgba(11, 12, 16, 0.88);
-    --theme-tray-blur: blur(40px) saturate(120%);
-    --theme-pill-bg: rgba(14, 15, 19, 0.90);
-    --theme-pill-blur: blur(32px) saturate(120%);
+    --theme-tray-bg: #0b0c10;
+    --theme-tray-blur: none;
+    --theme-pill-bg: #0e0f13;
+    --theme-pill-blur: none;
   }
 
   /* Universal scrollbar eradication */
@@ -248,19 +248,17 @@
     position: relative;
     border-radius: 20px;
     background-color: var(--theme-card-bg);
-    backdrop-filter: var(--theme-card-blur);
-    -webkit-backdrop-filter: var(--theme-card-blur);
     box-shadow:
       inset 0 0 0 1px var(--theme-border),
-      inset 0 1px 0 rgba(255, 255, 255, 0.11),
-      inset 0 -18px 30px -26px rgba(0, 0, 0, 0.55),
-      0 18px 36px -30px rgba(0, 0, 0, 0.85);
+      inset 0 1px 0 rgba(255, 255, 255, 0.08),
+      0 10px 28px -14px rgba(0, 0, 0, 0.75);
     transition:
-      background-color 260ms var(--ease-out),
-      box-shadow 260ms var(--ease-out);
+      background-color 150ms var(--ease-out),
+      box-shadow 150ms var(--ease-out);
     backface-visibility: hidden;
     transform: translateZ(0);
     content-visibility: auto;
+    contain: content;
     contain-intrinsic-size: auto 160px;
   }
 
@@ -725,6 +723,15 @@ html[data-theme="monochrome"] .lightscape {
   border: 1px solid rgba(255, 255, 255, 0.08);
   border-radius: 10px;
   outline: none;
+}
+.md-code {
+  font-family: "JetBrains Mono", ui-monospace, SFMono-Regular, Consolas, monospace;
+  font-size: 0.88em;
+  padding: 0.15em 0.38em;
+  border-radius: 5px;
+  background: rgba(255, 255, 255, 0.08);
+  border: 1px solid rgba(255, 255, 255, 0.12);
+  color: #f0f0f4;
 }
 /* Isolated horizontal scroll chassis: wide tables never push the sheet / tray layout sideways */
 .md-tablewrap {

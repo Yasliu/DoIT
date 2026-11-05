@@ -1,6 +1,7 @@
 import type { PointerEvent as ReactPointerEvent } from "react";
-import { useLayoutEffect, useMemo, useRef, useState } from "react";
+import React, { useMemo, useRef, useState } from "react";
 import { motion } from "motion/react";
+import { Maximize2 } from "lucide-react";
 import type { NoteItem } from "../api/tauriBridge";
 import { fontStack } from "../api/tauriBridge";
 import { accentFor, cleanText, cx, densityOf, edgeOpacity, relativeShort, stripDate } from "../lib/text";
@@ -13,13 +14,13 @@ interface NoteTileProps {
   dragging: boolean;
   landed: boolean;
   reorderTarget?: boolean;
-  onOpen: (note: NoteItem, rect: DOMRect) => void;
+  onOpen: (note: NoteItem, rect: DOMRect, maximize?: boolean) => void;
   onArm: (event: ReactPointerEvent, note: NoteItem) => void;
   onToggleItem: (note: NoteItem, itemId: string) => void;
   onContextMenu?: (event: React.MouseEvent, note: NoteItem) => void;
 }
 
-export function NoteTile({
+function NoteTileComponent({
   note,
   shelves,
   pressed,
@@ -46,25 +47,12 @@ export function NoteTile({
   const empty = note.content.every((item) => item.text.trim().length === 0);
   const preview = useMemo(() => (rawMode ? null : previewMarkup(note.content)), [note.content, rawMode]);
   const previewRef = useRef<HTMLElement | null>(null);
-  const [overflowing, setOverflowing] = useState(false);
   const previewMax = Math.max(40, density.lines * 34);
-  useLayoutEffect(() => {
-    const el = previewRef.current;
-    if (el) setOverflowing(el.scrollHeight > el.clientHeight + 2);
-  }, [note.content, rawMode, previewMax]);
-  const fadeStyle: React.CSSProperties = overflowing
-    ? {
-        WebkitMaskImage: "linear-gradient(to bottom, #000 calc(100% - 28px), transparent)",
-        maskImage: "linear-gradient(to bottom, #000 calc(100% - 28px), transparent)",
-      }
-    : {};
   const total = note.content.filter((item) => item.is_todo).length;
   const done = note.content.filter((item) => item.is_todo && item.completed).length;
 
   return (
     <motion.article
-      layout
-      transition={{ type: "spring", stiffness: 180, damping: 25, mass: 0.8 }}
       role="button"
       tabIndex={0}
       aria-label={`Open note: ${cleanText(note.title) || "Untitled"}`}
@@ -89,7 +77,7 @@ export function NoteTile({
         transform,
       }}
       className={cx(
-        "card group relative flex flex-col h-full p-[17px] text-left outline-none",
+        "card group relative flex flex-col h-full min-w-[190px] p-[17px] text-left outline-none",
         density.span,
         landed && "landed",
         reorderTarget && "ring-1 ring-white/50 !bg-white/[0.09] scale-[1.01] !shadow-[0_0_20px_rgba(255,255,255,0.12)]",
@@ -202,30 +190,44 @@ export function NoteTile({
         );
       })()}
 
-      <div className="flex min-w-0 items-start gap-2">
-        {note.is_pinned && (
-          <span
-            className="mt-[8px] size-[4px] shrink-0 rounded-full bg-white/85"
-            aria-label="Pinned"
-          />
-        )}
-        <h3
-          className={cx(
-            "min-w-0 flex-1 tracking-[-0.014em] text-ink-1",
-            density.weight === "square" ? "text-[14px]" : "text-[15px]",
+      <div className="flex min-w-0 items-start justify-between gap-2">
+        <div className="flex min-w-0 flex-1 items-start gap-2">
+          {note.is_pinned && (
+            <span
+              className="mt-[8px] size-[4px] shrink-0 rounded-full bg-white/85"
+              aria-label="Pinned"
+            />
           )}
-          style={{
-            fontWeight: 560,
-            display: "-webkit-box",
-            WebkitLineClamp: 2,
-            WebkitBoxOrient: "vertical",
-            overflow: "hidden",
-            lineHeight: "22px",
-            maxHeight: 44,
+          <h3
+            className={cx(
+              "min-w-0 flex-1 tracking-[-0.014em] text-ink-1",
+              density.weight === "square" ? "text-[14px]" : "text-[15px]",
+            )}
+            style={{
+              fontWeight: 560,
+              display: "-webkit-box",
+              WebkitLineClamp: 2,
+              WebkitBoxOrient: "vertical",
+              overflow: "hidden",
+              lineHeight: "22px",
+              maxHeight: 44,
+            }}
+          >
+            {cleanText(note.title) || "Untitled"}
+          </h3>
+        </div>
+        <button
+          type="button"
+          onClick={(e) => {
+            e.stopPropagation();
+            onOpen(note, e.currentTarget.getBoundingClientRect(), true);
           }}
+          className="opacity-0 group-hover:opacity-100 transition-opacity p-1 rounded-md text-ink-4 hover:text-white hover:bg-white/10 shrink-0 cursor-pointer"
+          title="Open note maximized"
+          aria-label="Open note maximized"
         >
-          {cleanText(note.title) || "Untitled"}
-        </h3>
+          <Maximize2 size={13} strokeWidth={1.8} />
+        </button>
       </div>
 
       <div className="flex min-w-0 flex-1 flex-col">
@@ -235,8 +237,8 @@ export function NoteTile({
           /* Text Mode note: the file exactly as the user sees it when the tile is opened */
           <pre
             ref={previewRef as React.RefObject<HTMLPreElement>}
-            className="md-preview-raw mt-2.5"
-            style={{ maxHeight: previewMax, ...fadeStyle }}
+            className="md-preview-raw mt-2.5 overflow-hidden"
+            style={{ maxHeight: previewMax }}
           >
             {contentToMarkdown(note.content)}
           </pre>
@@ -244,8 +246,8 @@ export function NoteTile({
           /* MD Mode note: the rendered document (headings, tables, tasks, images) */
           <div
             ref={previewRef as React.RefObject<HTMLDivElement>}
-            className="md-preview mt-2.5"
-            style={{ maxHeight: previewMax, fontFamily: fontStack(note.font_family), ...fadeStyle }}
+            className="md-preview mt-2.5 overflow-hidden"
+            style={{ maxHeight: previewMax, fontFamily: fontStack(note.font_family) }}
             onPointerDown={(event) => {
               if ((event.target as HTMLElement).closest(".md-cb")) event.stopPropagation();
             }}
@@ -274,3 +276,5 @@ export function NoteTile({
     </motion.article>
   );
 }
+
+export const NoteTile = React.memo(NoteTileComponent);

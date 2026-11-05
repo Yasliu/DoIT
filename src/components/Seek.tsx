@@ -137,10 +137,6 @@ export function Seek({ value, onChange, compact = false }: SeekProps) {
       )}
 
       {!open && (
-        <span className="kbd pointer-events-none absolute right-2.5">⌘K</span>
-      )}
-
-      {!open && (
         <button
           type="button"
           onClick={openNow}

@@ -14,13 +14,14 @@ interface BentoCanvasProps {
   locked: boolean;
   collapsed: Record<string, boolean>;
   onToggleCollapse: (shelf: string) => void;
-  onOpen: (note: NoteItem, rect: DOMRect) => void;
+  onOpen: (note: NoteItem, rect: DOMRect, maximize?: boolean) => void;
   onNewNote: (shelf?: string) => void;
   onNewCategory?: (name: string) => void;
   onToggleItem: (note: NoteItem, itemId: string) => void;
   onMoveCategory: (id: string, category: string) => void;
   onDeleteCategory?: (shelf: string) => void;
   onCategoryContextMenu?: (event: React.MouseEvent, shelf: string) => void;
+  onOpenIconPicker?: (shelf: string) => void;
   onReorderNotes?: (shelf: string, activeId: string, overId: string) => void;
   onContextMenu?: (event: React.MouseEvent, note: NoteItem) => void;
 }
@@ -63,6 +64,7 @@ export function BentoCanvas({
   onMoveCategory,
   onDeleteCategory,
   onCategoryContextMenu,
+  onOpenIconPicker,
   onReorderNotes,
   onContextMenu,
 }: BentoCanvasProps) {
@@ -259,10 +261,10 @@ export function BentoCanvas({
         "scroll relative h-full overflow-y-scroll",
         locked && "select-none pointer-events-none",
       )}
-      style={{ scrollbarGutter: "stable" }}
+      style={{ scrollbarGutter: "stable", willChange: "scroll-position", contain: "layout paint", overscrollBehaviorY: "contain" }}
     >
-      <div className="mx-auto w-full max-w-[1000px] px-6 pb-44 pt-5">
-        <header className="flex items-start justify-between gap-8">
+      <div className="mx-auto w-full max-w-[1000px] px-4 sm:px-6 pb-44 pt-5">
+        <header className="flex flex-wrap items-start justify-between gap-4 sm:gap-8">
           <div className="min-w-0">
             <div className="micro">{today}</div>
             <h1 className="mt-2.5 text-[32px] font-medium leading-[1.04] tracking-[-0.04em] text-ink-1">
@@ -344,7 +346,6 @@ export function BentoCanvas({
             <button type="button" onClick={() => onNewNote()} className="btn">
               <Plus size={14} strokeWidth={1.9} />
               <span>New note</span>
-              <span className="kbd ml-1">⌘N</span>
             </button>
           </div>
         </header>
@@ -411,6 +412,7 @@ export function BentoCanvas({
                 onNewNote={onNewNote}
                 onDeleteCategory={onDeleteCategory}
                 onCategoryContextMenu={onCategoryContextMenu}
+                onOpenIconPicker={onOpenIconPicker}
                 onOpen={onOpen}
                 onArm={arm}
                 onToggleItem={onToggleItem}

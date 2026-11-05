@@ -241,7 +241,6 @@ export function DeskWidget({
               >
                 <Plus size={14} strokeWidth={1.9} />
                 <span>New note</span>
-                <span className="kbd ml-auto">⌘N</span>
               </button>
 
               <button

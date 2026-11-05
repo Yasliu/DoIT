@@ -126,6 +126,10 @@ npm run tauri dev
 
 Found a bug or want a feature? [Open an issue](https://github.com/Yasliu/DoIT/issues), mail [yasin@yasliu.com](mailto:yasin@yasliu.com), or DM [@YisoIA](https://x.com/YisoIA).
 
+## Privacy policy
+
+Read our plain-language [Privacy Policy](PRIVACY_POLICY.md) (100% local-first, zero tracking, zero data collection).
+
 ## License
 
 [MIT](LICENSE)

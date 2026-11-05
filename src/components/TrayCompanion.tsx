@@ -3,6 +3,7 @@ import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { motion } from "motion/react";
 import { getCurrentWindow } from "@tauri-apps/api/window";
 import { Mark } from "./Mark";
+import { initCategoryIcons } from "../lib/categoryIcons";
 import { HeadingSelect } from "./HeadingSelect";
 import { ImageLightbox } from "./ImageLightbox";
 import { ModeToggle } from "./ModeToggle";
@@ -51,6 +52,9 @@ import {
   applyHeading,
   insertTableAtCaret,
   setMarkdownBaseDir,
+  isCaretAtEditorStart,
+  placeCaretAtEditorStart,
+  fixCheckboxCaret,
 } from "../lib/format";
 import { accentFor, cleanText, cx, relativeShort, uid } from "../lib/text";
 
@@ -113,16 +117,17 @@ export function TrayCompanion() {
   const [fontOpen, setFontOpen] = useState(false);
   const fontTriggerRef = useRef<HTMLButtonElement | null>(null);
   const [fontMenuStyle, setFontMenuStyle] = useState<React.CSSProperties>({});
+  const titleRef = useRef<HTMLInputElement | null>(null);
 
   useEffect(() => {
     if (fontOpen && fontTriggerRef.current) {
       const rect = fontTriggerRef.current.getBoundingClientRect();
       // portaled to <body>: viewport coordinates, clamped inside the window on every side
-      const w = 210;
+      const w = 240;
       const left = Math.max(8, Math.min(rect.right - w, window.innerWidth - w - 8));
       const top = rect.bottom + 6;
-      const maxHeight = Math.max(120, Math.min(320, window.innerHeight - top - 12));
-      setFontMenuStyle({ position: "fixed", left, top, maxHeight });
+      const maxHeight = Math.max(220, Math.min(460, window.innerHeight - top - 12));
+      setFontMenuStyle({ position: "fixed", left, top, maxHeight, width: `${w}px` });
     }
   }, [fontOpen]);
 
@@ -244,6 +249,7 @@ export function TrayCompanion() {
   // Tray menu asked for the panel while the frame already exists
   useEffect(() => {
     let unlistenFn: (() => void) | null = null;
+    let unlistenNote: (() => void) | null = null;
     let disposed = false;
 
     getCurrentWindow()
@@ -257,9 +263,21 @@ export function TrayCompanion() {
         else unlistenFn = unlisten;
       });
 
+    getCurrentWindow()
+      .listen<string>("open-note", (event) => {
+        if (event.payload) {
+          setActiveNoteId(event.payload);
+        }
+      })
+      .then((unlisten) => {
+        if (disposed) unlisten();
+        else unlistenNote = unlisten;
+      });
+
     return () => {
       disposed = true;
       if (unlistenFn) unlistenFn();
+      if (unlistenNote) unlistenNote();
     };
   }, [expandFromPill, openTray]);
   // Load theme mode for tray window
@@ -267,6 +285,9 @@ export function TrayCompanion() {
     void tauriApi.getSettings().then((s) => {
       if (s.theme_mode) {
         document.documentElement.dataset.theme = s.theme_mode;
+      }
+      if (s.category_icons) {
+        initCategoryIcons(s.category_icons);
       }
       setMarkdownBaseDir(s.storage_path);
       applyShortcutSettings(s);
@@ -776,54 +797,60 @@ export function TrayCompanion() {
                       onPointerDown={(e) => e.stopPropagation()}
                       onMouseDown={(e) => e.stopPropagation()}
                       style={fontMenuStyle}
-                      className="z-[120] w-[210px] max-h-[260px] md:max-h-[320px] overflow-y-auto no-scrollbar rounded-xl bg-[#14151a] border border-white/20 p-2 shadow-[0_25px_60px_rgba(0,0,0,0.95)] pointer-events-auto overscroll-contain"
+                      className="z-[120] w-[210px] max-h-[380px] overflow-y-auto scrollbar-thin rounded-xl bg-[#14151a] border border-white/20 p-2 shadow-[0_25px_60px_rgba(0,0,0,0.95)] pointer-events-auto overscroll-contain flex flex-col"
                     >
-                      <div className="text-[9.5px] font-mono uppercase tracking-[0.12em] text-ink-4 px-1.5 py-0.5 select-none">
-                        Font Presets
+                      <div className="shrink-0">
+                        <div className="text-[9.5px] font-mono uppercase tracking-[0.12em] text-ink-4 px-1.5 py-0.5 select-none">
+                          Font Presets
+                        </div>
+                        {NOTE_FONTS.map((font) => (
+                          <button
+                            key={font.name}
+                            type="button"
+                            onMouseDown={(e) => {
+                              e.preventDefault();
+                              e.stopPropagation();
+                            }}
+                            onClick={(e) => {
+                              e.stopPropagation();
+                              editActive({ font_family: font.name });
+                              if (editorRef.current) {
+                                editorRef.current.style.fontFamily = font.stack;
+                                editorRef.current.focus();
+                              }
+                              setFontOpen(false);
+                            }}
+                            className="flex h-6 w-full items-center justify-between rounded px-2 text-[11px] text-ink-2 hover:bg-white/10 hover:text-white cursor-pointer pointer-events-auto"
+                            style={{ fontFamily: font.stack }}
+                          >
+                            <span className="truncate">{font.label}</span>
+                            {font.name === activeNote.font_family && <Check size={10} />}
+                          </button>
+                        ))}
+                        <div className="my-1.5 h-px bg-white/10" />
                       </div>
-                      {NOTE_FONTS.map((font) => (
-                        <button
-                          key={font.name}
-                          type="button"
-                          onMouseDown={(e) => {
-                            e.preventDefault();
-                            e.stopPropagation();
-                          }}
-                          onClick={(e) => {
-                            e.stopPropagation();
-                            editActive({ font_family: font.name });
-                            if (editorRef.current) {
-                              editorRef.current.style.fontFamily = font.stack;
-                              editorRef.current.focus();
-                            }
-                            setFontOpen(false);
-                          }}
-                          className="flex h-6 w-full items-center justify-between rounded px-2 text-[11px] text-ink-2 hover:bg-white/10 hover:text-white cursor-pointer pointer-events-auto"
-                          style={{ fontFamily: font.stack }}
-                        >
-                          <span className="truncate">{font.label}</span>
-                          {font.name === activeNote.font_family && <Check size={10} />}
-                        </button>
-                      ))}
-                      <div className="my-1.5 h-px bg-white/10" />
-                      <div>
-                        <div className="flex items-center justify-between px-1 py-0.5 select-none">
+
+                      <div className="flex flex-col flex-1">
+                        <div className="px-1 pt-1 pb-0.5 select-none">
                           <span className="text-[9.5px] font-mono uppercase tracking-[0.12em] text-ink-4">
                             System Fonts ({filteredSystemFonts.length})
                           </span>
                         </div>
-                        <div className="px-0.5 pb-1">
-                          <input
-                            type="text"
-                            value={fontSearch}
-                            onChange={(e) => setFontSearch(e.target.value)}
-                            onMouseDown={(e) => e.stopPropagation()}
-                            onClick={(e) => e.stopPropagation()}
-                            placeholder="Search installed fonts..."
-                            className="w-full h-6 rounded bg-white/[0.05] border border-white/15 px-1.5 text-[10.5px] text-ink-1 placeholder:text-ink-4 outline-none focus:border-white/30 pointer-events-auto"
-                          />
+                        <div className="sticky -top-2 bg-[#14151a]/95 backdrop-blur-md z-10 pb-1 px-1 border-b border-white/10 select-none shadow-sm -mx-1">
+                          <div className="px-0.5 pt-0.5 pb-0.5">
+                            <input
+                              type="text"
+                              value={fontSearch}
+                              onChange={(e) => setFontSearch(e.target.value)}
+                              onMouseDown={(e) => e.stopPropagation()}
+                              onClick={(e) => e.stopPropagation()}
+                              placeholder="Search installed fonts..."
+                              className="w-full h-6 rounded bg-white/[0.05] border border-white/15 px-1.5 text-[10.5px] text-ink-1 placeholder:text-ink-4 outline-none focus:border-white/30 pointer-events-auto"
+                            />
+                          </div>
                         </div>
-                        <div className="max-h-[140px] overflow-y-auto scrollbar-thin px-0.5 space-y-0.5">
+
+                        <div className="pt-1.5 px-0.5 space-y-0.5">
                           {filteredSystemFonts.length === 0 ? (
                             <div className="px-2 py-2 text-center text-[10px] text-ink-4">
                               {systemFonts.length === 0 ? "Loading fonts..." : "No matching fonts"}
@@ -980,11 +1007,27 @@ export function TrayCompanion() {
             </div>
             {/* Title Input */}
             <input
+              ref={titleRef}
               type="text"
               value={activeNote.title ?? ""}
               onChange={(e) => editActive({ title: e.target.value })}
               onKeyDown={(e) => {
                 e.stopPropagation();
+                if (e.key === "ArrowDown") {
+                  if (rawMode) {
+                    const textarea = document.querySelector(".tray-note-scroll textarea") as HTMLTextAreaElement | null;
+                    if (textarea) {
+                      e.preventDefault();
+                      textarea.focus();
+                      textarea.setSelectionRange(0, 0);
+                      return;
+                    }
+                  } else if (editorRef.current) {
+                    e.preventDefault();
+                    placeCaretAtEditorStart(editorRef.current);
+                    return;
+                  }
+                }
                 handleUndoKeys(e);
               }}
               data-undo="title"
@@ -1050,6 +1093,13 @@ export function TrayCompanion() {
                   minHeight={180}
                   className="text-[11.5px]"
                   onChange={(content) => editActive({ content })}
+                  onArrowUpAtStart={() => {
+                    if (titleRef.current) {
+                      titleRef.current.focus();
+                      const len = titleRef.current.value.length;
+                      titleRef.current.setSelectionRange(len, len);
+                    }
+                  }}
                 />
               ) : (
               <div
@@ -1073,8 +1123,18 @@ export function TrayCompanion() {
                 }}
                 onClick={(e) => {
                   if (handleCheckboxClick(e, editorRef.current)) handleEditorInput();
+                  if (editorRef.current) fixCheckboxCaret(editorRef.current);
                 }}
                 onKeyDown={(e) => {
+                  if (e.key === "ArrowUp" && editorRef.current && isCaretAtEditorStart(editorRef.current)) {
+                    e.preventDefault();
+                    if (titleRef.current) {
+                      titleRef.current.focus();
+                      const len = titleRef.current.value.length;
+                      titleRef.current.setSelectionRange(len, len);
+                    }
+                    return;
+                  }
                   const sc = getMarkdownShortcuts();
                   if (matchesCombo(e, sc.bold)) {
                     e.preventDefault();
@@ -1090,8 +1150,14 @@ export function TrayCompanion() {
                     return;
                   }
                 }}
-                onKeyUp={updateActiveFormatting}
-                onMouseUp={updateActiveFormatting}
+                onKeyUp={() => {
+                  updateActiveFormatting();
+                  if (editorRef.current) fixCheckboxCaret(editorRef.current);
+                }}
+                onMouseUp={() => {
+                  updateActiveFormatting();
+                  if (editorRef.current) fixCheckboxCaret(editorRef.current);
+                }}
                 className="w-full min-h-[180px] whitespace-pre-wrap break-words bg-transparent text-[12.5px] leading-relaxed text-ink-2 outline-none select-text"
                 style={{
                   fontFamily: fontStack(activeNote.font_family),
@@ -1117,9 +1183,6 @@ export function TrayCompanion() {
               <Plus size={15} strokeWidth={2} className="text-white/80 shrink-0" />
             </span>
             <span className="whitespace-nowrap overflow-hidden text-ellipsis truncate">New note</span>
-            <span className="ml-auto shrink-0 whitespace-nowrap rounded-md bg-white/[0.06] px-1.5 py-0.5 font-mono text-[10px] text-white/40 border border-white/[0.08]">
-              âŒ˜N
-            </span>
           </button>
 
           {/* Pull up an old note input matching Screenshot 3 */}
@@ -1314,22 +1377,23 @@ export function TrayCompanion() {
           <div
             onPointerDown={(e) => e.stopPropagation()}
             onClick={(e) => e.stopPropagation()}
-            className="w-[calc(100%-32px)] max-w-[320px] min-w-[200px] rounded-2xl border border-white/15 bg-[#14151a] p-4 sm:p-5 shadow-[0_25px_60px_rgba(0,0,0,0.95)] text-center whitespace-normal break-words animate-in zoom-in-95 duration-150"
+            className="w-[90%] max-w-[320px] rounded-2xl border border-white/15 bg-[#14151a] p-4 sm:p-5 shadow-[0_25px_60px_rgba(0,0,0,0.95)] text-center whitespace-normal select-text animate-in zoom-in-95 duration-150"
           >
             <div className="mx-auto mb-2.5 grid size-9 place-items-center rounded-xl bg-red-500/10 text-red-400">
               <Trash size={16} strokeWidth={2} />
             </div>
-            <h3 className="text-[13px] sm:text-[13.5px] font-semibold text-white tracking-tight whitespace-normal">
+            <h3 className="text-[13.5px] font-semibold text-white tracking-tight whitespace-normal">
               Delete this note?
             </h3>
-            <p className="mt-1.5 text-[11px] sm:text-[11.5px] text-ink-3 leading-relaxed whitespace-normal break-words px-1">
-              Are you sure you want to delete this note? This action cannot be undone.
+            <p className="mt-2 text-[12px] text-ink-3 leading-relaxed whitespace-normal break-words text-center px-1">
+              Are you sure you want to delete this note?
+              <span className="block mt-0.5 text-ink-4">This action cannot be undone.</span>
             </p>
             <div className="mt-4 grid grid-cols-2 gap-2">
               <button
                 type="button"
                 onClick={() => setShowDeleteConfirm(false)}
-                className="h-7.5 rounded-xl bg-white/[0.08] hover:bg-white/[0.14] text-[11.5px] font-medium text-ink-1 transition-colors cursor-pointer whitespace-nowrap"
+                className="h-8 rounded-xl bg-white/[0.08] hover:bg-white/[0.14] text-[12px] font-medium text-ink-1 transition-colors cursor-pointer"
               >
                 Cancel
               </button>
@@ -1340,7 +1404,7 @@ export function TrayCompanion() {
                   remove(activeNote.id);
                   handleBack();
                 }}
-                className="h-7.5 rounded-xl bg-red-500/20 hover:bg-red-500/30 border border-red-500/30 text-[11.5px] font-medium text-red-200 transition-colors cursor-pointer whitespace-nowrap"
+                className="h-8 rounded-xl bg-red-500/20 hover:bg-red-500/30 border border-red-500/30 text-[12px] font-medium text-red-200 transition-colors cursor-pointer"
               >
                 Confirm Delete
               </button>

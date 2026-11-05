@@ -1,3 +1,4 @@
+use std::collections::HashMap;
 use serde::{Deserialize, Serialize};
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -112,6 +113,8 @@ pub struct AppSettings {
     pub dock_on_close: bool,
     #[serde(default)]
     pub last_seen_version: Option<String>,
+    #[serde(default)]
+    pub category_icons: Option<HashMap<String, String>>,
 }
 
 fn default_dock_on_close() -> bool {
@@ -200,6 +203,7 @@ impl Default for AppSettings {
             is_maximized: false,
             dock_on_close: true,
             last_seen_version: None,
+            category_icons: Some(HashMap::new()),
         }
     }
 }

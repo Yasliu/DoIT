@@ -556,15 +556,70 @@ export function SettingsPanel({ onBack, onStoragePathChanged, onThemeChanged }: 
             ))}
           </div>
 
-          <div className="mt-3 rounded-xl border border-white/[0.06] bg-white/[0.02] p-3 text-[11px] leading-relaxed text-ink-4">
-            <div className="mb-1.5 font-mono uppercase tracking-[0.1em] text-ink-3">Table keys (fixed)</div>
-            <ul className="space-y-1">
-              <li>Tab / Shift+Tab: move between cells</li>
-              <li>Tab in the last header cell: add a column</li>
-              <li>Tab in the last cell: add a row</li>
-              <li>Enter: move down a row</li>
-              <li>Right-click a table: Add Column / Add Row / Delete Column / Delete Row</li>
-            </ul>          </div>
+          <div className="mt-6 border-t border-white/[0.06] pt-5">
+            <div className="mb-3">
+              <h3 className="text-[13.5px] font-semibold text-white tracking-tight">
+                Table Keyboard Navigation & Actions
+              </h3>
+              <p className="text-[11.5px] text-ink-4">
+                Fixed productivity controls for structured markdown tables
+              </p>
+            </div>
+
+            <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-3">
+              <div className="flex flex-col justify-between rounded-xl bg-white/[0.03] p-3.5 border border-white/[0.08] hover:border-white/20 transition-colors">
+                <div className="flex items-center justify-between gap-2">
+                  <span className="text-[12.5px] font-medium text-ink-1">Next / Prev Cell</span>
+                  <div className="flex items-center gap-1 shrink-0">
+                    <kbd className="px-1.5 py-0.5 rounded bg-white/[0.08] border border-white/15 text-[11px] font-mono font-medium text-white shadow-sm">Tab</kbd>
+                    <span className="text-[10px] text-ink-4">/</span>
+                    <kbd className="px-1.5 py-0.5 rounded bg-white/[0.08] border border-white/15 text-[10px] font-mono font-medium text-white shadow-sm">Shift+Tab</kbd>
+                  </div>
+                </div>
+                <p className="mt-2 text-[11px] leading-relaxed text-ink-4">Cycles caret focus horizontally across cells</p>
+              </div>
+
+              <div className="flex flex-col justify-between rounded-xl bg-white/[0.03] p-3.5 border border-white/[0.08] hover:border-white/20 transition-colors">
+                <div className="flex items-center justify-between gap-2">
+                  <span className="text-[12.5px] font-medium text-ink-1">Append Column</span>
+                  <kbd className="px-2 py-0.5 rounded bg-white/[0.08] border border-white/15 text-[11px] font-mono font-medium text-white shadow-sm shrink-0">Tab in Header End</kbd>
+                </div>
+                <p className="mt-2 text-[11px] leading-relaxed text-ink-4">Appends a brand new column across all table rows</p>
+              </div>
+
+              <div className="flex flex-col justify-between rounded-xl bg-white/[0.03] p-3.5 border border-white/[0.08] hover:border-white/20 transition-colors">
+                <div className="flex items-center justify-between gap-2">
+                  <span className="text-[12.5px] font-medium text-ink-1">Append Row</span>
+                  <kbd className="px-2 py-0.5 rounded bg-white/[0.08] border border-white/15 text-[11px] font-mono font-medium text-white shadow-sm shrink-0">Tab in Last Cell</kbd>
+                </div>
+                <p className="mt-2 text-[11px] leading-relaxed text-ink-4">Adds a new row at the bottom and focuses its first cell</p>
+              </div>
+
+              <div className="flex flex-col justify-between rounded-xl bg-white/[0.03] p-3.5 border border-white/[0.08] hover:border-white/20 transition-colors">
+                <div className="flex items-center justify-between gap-2">
+                  <span className="text-[12.5px] font-medium text-ink-1">Step Down</span>
+                  <kbd className="px-2 py-0.5 rounded bg-white/[0.08] border border-white/15 text-[11px] font-mono font-medium text-white shadow-sm shrink-0">Enter</kbd>
+                </div>
+                <p className="mt-2 text-[11px] leading-relaxed text-ink-4">Moves directly to the cell in the next row below</p>
+              </div>
+
+              <div className="flex flex-col justify-between rounded-xl bg-white/[0.03] p-3.5 border border-white/[0.08] hover:border-white/20 transition-colors">
+                <div className="flex items-center justify-between gap-2">
+                  <span className="text-[12.5px] font-medium text-ink-1">Table Actions</span>
+                  <kbd className="px-2 py-0.5 rounded bg-white/[0.08] border border-white/15 text-[11px] font-mono font-medium text-white shadow-sm shrink-0">Right-Click</kbd>
+                </div>
+                <p className="mt-2 text-[11px] leading-relaxed text-ink-4">Opens menu to add or delete rows and columns</p>
+              </div>
+
+              <div className="flex flex-col justify-between rounded-xl bg-white/[0.03] p-3.5 border border-white/[0.08] hover:border-white/20 transition-colors">
+                <div className="flex items-center justify-between gap-2">
+                  <span className="text-[12.5px] font-medium text-ink-1">Exit Table</span>
+                  <kbd className="px-2 py-0.5 rounded bg-white/[0.08] border border-white/15 text-[11px] font-mono font-medium text-white shadow-sm shrink-0">Enter on Blank Row</kbd>
+                </div>
+                <p className="mt-2 text-[11px] leading-relaxed text-ink-4">Exits table into a normal text line underneath</p>
+              </div>
+            </div>
+          </div>
         </section>
 
         <AppUpdatesSection />

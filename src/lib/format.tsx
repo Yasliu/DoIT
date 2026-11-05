@@ -79,6 +79,8 @@ export function inlineMarkdownToHtml(line: string): string {
   formatted = formatted.replace(/\*\*([^*]+?)\*\*/g, "<strong>$1</strong>");
   // Replace italic *text* -> <em>text</em>
   formatted = formatted.replace(/(?<!\*)\*([^*]+?)\*(?!\*)/g, "<em>$1</em>");
+  // Replace inline code `text` -> <code class="md-code">text</code>
+  formatted = formatted.replace(/(?<!`)(`)([^`\n]+?)\1(?!`)/g, '<code class="md-code">$2</code>');
 
   return formatted.replace(/\u0001(\d+)\u0002/g, (_m: string, i: string) => images[Number(i)] ?? "");
 }
@@ -176,7 +178,25 @@ function tableHtml(header: string[], aligns: string[], rows: string[][]): string
 }
 
 function preHtml(code: string, lang: string, fence: string): string {
-  return `<pre class="md-pre" data-lang="${escapeAttr(lang)}" data-fence="${fence}" contenteditable="plaintext-only" spellcheck="false">${escapeHtml(code)}</pre>`;
+  const body = code ? escapeHtml(code) : "<br>";
+  return `<pre class="md-pre" data-lang="${escapeAttr(lang)}" data-fence="${fence}" contenteditable="plaintext-only" spellcheck="false">${body}</pre>`;
+}
+
+export function insertCodeBlockAtCaret(editor: HTMLElement, lang = ""): void {
+  const pre = firstElement(preHtml("", lang, "```"));
+  if (!pre) return;
+  const block = currentBlock(editor);
+  if (block) {
+    if (!block.textContent?.trim() && block.tagName === "DIV" && !isSpecialBlock(block)) {
+      block.replaceWith(pre);
+    } else {
+      block.after(pre);
+    }
+  } else {
+    editor.appendChild(pre);
+  }
+  ensureTrailingLine(pre);
+  placeCaretStart(pre);
 }
 
 export function markdownToHtml(md: string): string {
@@ -378,6 +398,46 @@ export function normalizeEditor(editor: HTMLElement): void {
   wrapStrayNodes(editor);
   const caretBlock = currentBlock(editor);
 
+  // Fenced code block detection: merge consecutive divs bounded by ``` ... ``` or ~~~ ... ~~~
+  const childrenList = Array.from(editor.children);
+  for (let idx = 0; idx < childrenList.length; idx++) {
+    const el = childrenList[idx];
+    if (!(el instanceof HTMLElement) || el.tagName !== "DIV" || isSpecialBlock(el) || el.hasAttribute("data-p")) continue;
+    const raw = (el.textContent || "").trim();
+    const openFence = raw.match(/^(`{3,}|~{3,})\s*([^\s`]*)\s*$/);
+    if (openFence) {
+      const marker = openFence[1];
+      const lang = openFence[2] || "";
+      let closeIdx = -1;
+      for (let k = idx + 1; k < childrenList.length; k++) {
+        const nextEl = childrenList[k];
+        if (!(nextEl instanceof HTMLElement) || isSpecialBlock(nextEl)) break;
+        const nextRaw = (nextEl.textContent || "").trim();
+        if (nextRaw.length >= marker.length && nextRaw.split("").every((ch) => ch === marker[0])) {
+          closeIdx = k;
+          break;
+        }
+      }
+
+      if (closeIdx > idx) {
+        const codeLines: string[] = [];
+        for (let k = idx + 1; k < closeIdx; k++) {
+          codeLines.push((childrenList[k].textContent || "").replace(/\u00a0/g, " "));
+        }
+        const preNode = firstElement(preHtml(codeLines.join("\n"), lang, marker));
+        if (preNode) {
+          el.replaceWith(preNode);
+          for (let k = idx + 1; k <= closeIdx; k++) {
+            childrenList[k].remove();
+          }
+          ensureTrailingLine(preNode);
+          childrenList.splice(idx, closeIdx - idx + 1, preNode);
+          continue;
+        }
+      }
+    }
+  }
+
   for (const child of Array.from(editor.children)) {
     if (!(child instanceof HTMLElement) || child.tagName !== "DIV" || isSpecialBlock(child)) continue;
 
@@ -394,6 +454,24 @@ export function normalizeEditor(editor: HTMLElement): void {
       }
       if (child.classList.contains("md-task")) ensureCheckbox(child, child === caretBlock);
       continue;
+    }
+
+    // Horizontal rule / line divider: typed "---", "----", "***", "___" on a line
+    const rawText = child.textContent || "";
+    if (HR_RE.test(rawText)) {
+      const hrNode = firstElement(`<div class="md-hr" data-raw="${escapeAttr(rawText.trim())}" contenteditable="false"><hr></div>`);
+      if (hrNode) {
+        child.replaceWith(hrNode);
+        if (child === caretBlock) {
+          const nextLine = document.createElement("div");
+          nextLine.appendChild(document.createElement("br"));
+          hrNode.after(nextLine);
+          placeCaretStart(nextLine);
+        } else {
+          ensureTrailingLine(hrNode);
+        }
+        continue;
+      }
     }
 
     const info = blockPrefix(child.textContent || "", true);
@@ -701,11 +779,30 @@ export function handleRichEditorKeyDown(
     return false;
   }
 
-  // ---- inside a code block: plain-text island, leave it alone ----
-  if (startEl?.closest("pre.md-pre")) {
+  // ---- inside a code block: plain-text island with clean exit mechanics ----
+  const preBlock = startEl?.closest("pre.md-pre") as HTMLElement | null;
+  if (preBlock && editor.contains(preBlock)) {
     if (isShortcut) {
       e.preventDefault();
       return true;
+    }
+    // Shift+Enter or typing ``` on a line exits the code block
+    if (e.key === "Enter") {
+      const text = (preBlock.textContent || "").replace(/\u00a0/g, " ");
+      const isShift = e.shiftKey;
+      const endsWithFence = /(?:^|\n)(`{3,}|~{3,})\s*$/.test(text);
+      if (isShift || endsWithFence) {
+        e.preventDefault();
+        if (endsWithFence) {
+          preBlock.textContent = text.replace(/(?:^|\n)(`{3,}|~{3,})\s*$/, "").replace(/\n$/, "");
+        }
+        const nextLine = document.createElement("div");
+        nextLine.appendChild(document.createElement("br"));
+        preBlock.after(nextLine);
+        placeCaretStart(nextLine);
+        onInput();
+        return true;
+      }
     }
     return false;
   }
@@ -720,19 +817,70 @@ export function handleRichEditorKeyDown(
   }
 
   const block = currentBlock(editor);
-  if (!block || block.tagName !== "DIV" || !block.hasAttribute("data-p") || !sel.isCollapsed) return false;
+  if (!block || block.tagName !== "DIV" || !sel.isCollapsed) return false;
 
-  if (e.key === "Enter") {
-    const isEmpty = (block.textContent || "") === "";
-    const isList = block.classList.contains("md-li") || block.classList.contains("md-quote");
-    const isTask = block.classList.contains("md-task");
-    if (isEmpty && (isList || isTask)) {
-      // empty bullet / quote / task line: leave the list
-      e.preventDefault();
-      clearPrefix(block);
+  const isList = block.classList.contains("md-li") || block.classList.contains("md-quote");
+  const isTask = block.classList.contains("md-task");
+  const isHeading = /\bmd-h\d\b/.test(block.className);
+  const hasPrefix = block.hasAttribute("data-p");
+
+  // Clean empty check: ignore zero-width spaces, non-breaking spaces, trailing newlines and spaces
+  const cleanContent = (block.textContent || "").replace(/[\u200B\u00A0\r\n\s]/g, "");
+  const isEmpty = cleanContent === "" || cleanContent === "-" || cleanContent === "*" || cleanContent === "•";
+  const isHr = HR_RE.test(cleanContent) || HR_RE.test(block.textContent || "");
+
+  if (e.key === "Enter" && isHr) {
+    e.preventDefault();
+    const hrNode = firstElement(`<div class="md-hr" data-raw="${escapeAttr(cleanContent)}" contenteditable="false"><hr></div>`);
+    if (hrNode) {
+      block.replaceWith(hrNode);
+      const next = document.createElement("div");
+      next.appendChild(document.createElement("br"));
+      hrNode.after(next);
+      placeCaretStart(next);
       onInput();
       return true;
     }
+  }
+
+  const fenceMatch = (block.textContent || "").trim().match(/^(`{3,}|~{3,})\s*([^\s`]*)\s*$/);
+  if (e.key === "Enter" && fenceMatch) {
+    e.preventDefault();
+    const marker = fenceMatch[1];
+    const lang = fenceMatch[2] || "";
+    const preNode = firstElement(preHtml("", lang, marker));
+    if (preNode) {
+      block.replaceWith(preNode);
+      ensureTrailingLine(preNode);
+      placeCaretStart(preNode);
+      onInput();
+      return true;
+    }
+  }
+
+  if (!hasPrefix && !isList && !isTask && !isHeading) {
+    if (e.key === "Backspace" && caretOffsetIn(block, range) === 0) {
+      const prev = block.previousElementSibling;
+      if (prev && prev instanceof HTMLElement && (prev.classList.contains("md-hr") || prev.hasAttribute("data-raw"))) {
+        e.preventDefault();
+        prev.remove();
+        onInput();
+        return true;
+      }
+    }
+    return false;
+  }
+
+  if (e.key === "Enter") {
+    if (isEmpty && (isList || isTask || isHeading)) {
+      // Empty bullet / task / quote / heading line: exit to normal text paragraph!
+      e.preventDefault();
+      clearPrefix(block);
+      placeCaretStart(block);
+      onInput();
+      return true;
+    }
+
     if (isTask && caretAtEnd(block, range)) {
       e.preventDefault();
       const next = document.createElement("div");
@@ -749,7 +897,20 @@ export function handleRichEditorKeyDown(
       onInput();
       return true;
     }
-    if (/\bmd-h\d\b/.test(block.className) && caretAtEnd(block, range)) {
+
+    if (isList && caretAtEnd(block, range)) {
+      e.preventDefault();
+      const next = document.createElement("div");
+      next.setAttribute("data-p", block.getAttribute("data-p") || "- ");
+      next.className = block.className || "md-li";
+      next.appendChild(document.createElement("br"));
+      block.after(next);
+      placeCaretStart(next);
+      onInput();
+      return true;
+    }
+
+    if (isHeading && caretAtEnd(block, range)) {
       e.preventDefault();
       const next = document.createElement("div");
       next.appendChild(document.createElement("br"));
@@ -760,14 +921,125 @@ export function handleRichEditorKeyDown(
     }
   }
 
-  if (e.key === "Backspace" && caretOffsetIn(block, range) === 0) {
-    e.preventDefault();
-    clearPrefix(block);
-    onInput();
-    return true;
+  // Checkbox navigation guard: never allow cursor to step behind/left of the checkbox
+  if (isTask && (e.key === "ArrowLeft" || e.key === "Home")) {
+    const cb = block.querySelector(".md-cb");
+    if (cb) {
+      if (e.key === "Home") {
+        e.preventDefault();
+        placeCaretAfterCheckbox(block, cb);
+        return true;
+      }
+      if (isCaretRightAfterCheckbox(block, cb, range)) {
+        e.preventDefault();
+        const prev = block.previousElementSibling as HTMLElement | null;
+        if (prev) {
+          const r = document.createRange();
+          r.selectNodeContents(prev);
+          r.collapse(false);
+          sel.removeAllRanges();
+          sel.addRange(r);
+        }
+        return true;
+      }
+    }
+  }
+
+  if (e.key === "Backspace" && (caretOffsetIn(block, range) === 0 || isEmpty)) {
+    const prev = block.previousElementSibling;
+    if (prev && prev instanceof HTMLElement && (prev.classList.contains("md-hr") || prev.hasAttribute("data-raw"))) {
+      e.preventDefault();
+      prev.remove();
+      onInput();
+      return true;
+    }
+    if (isList || isTask || isHeading || hasPrefix) {
+      e.preventDefault();
+      clearPrefix(block);
+      placeCaretStart(block);
+      onInput();
+      return true;
+    }
   }
 
   return false;
+}
+
+export function placeCaretAfterCheckbox(block: HTMLElement, cb: Element): void {
+  const sel = window.getSelection();
+  if (!sel) return;
+  const r = document.createRange();
+  const next = cb.nextSibling;
+  if (next && next.nodeType === Node.TEXT_NODE) {
+    r.setStart(next, 0);
+  } else if (next) {
+    r.setStartBefore(next);
+  } else {
+    const br = document.createElement("br");
+    block.appendChild(br);
+    r.setStartBefore(br);
+  }
+  r.collapse(true);
+  sel.removeAllRanges();
+  sel.addRange(r);
+}
+
+function isCaretRightAfterCheckbox(block: HTMLElement, cb: Element, range: Range): boolean {
+  if (range.startContainer === block && range.startOffset === 1) return true;
+  const next = cb.nextSibling;
+  if (next && range.startContainer === next && range.startOffset === 0) return true;
+  return false;
+}
+
+export function fixCheckboxCaret(editor: HTMLElement): void {
+  const sel = window.getSelection();
+  if (!sel || sel.rangeCount === 0 || !sel.isCollapsed) return;
+  const range = sel.getRangeAt(0);
+  if (!editor.contains(range.startContainer)) return;
+
+  const node = range.startContainer;
+  const taskBlock = (node instanceof HTMLElement ? node : node.parentElement)?.closest(".md-task") as HTMLElement | null;
+  if (!taskBlock) return;
+
+  const cb = taskBlock.querySelector(".md-cb");
+  if (!cb) return;
+
+  let isBefore = false;
+  if (range.startContainer === taskBlock && range.startOffset === 0) {
+    isBefore = true;
+  } else if (cb.contains(range.startContainer) || range.startContainer === cb) {
+    isBefore = true;
+  }
+
+  if (isBefore) {
+    placeCaretAfterCheckbox(taskBlock, cb);
+  }
+}
+
+export function isCaretAtEditorStart(editor: HTMLElement): boolean {
+  const sel = window.getSelection();
+  if (!sel || sel.rangeCount === 0 || !sel.isCollapsed) return false;
+  const range = sel.getRangeAt(0);
+  const firstBlock = editor.firstElementChild as HTMLElement | null;
+  if (!firstBlock) return true;
+  if (!firstBlock.contains(range.startContainer) && range.startContainer !== editor && range.startContainer !== firstBlock) {
+    return false;
+  }
+  const pre = document.createRange();
+  pre.selectNodeContents(firstBlock);
+  try {
+    pre.setEnd(range.startContainer, range.startOffset);
+    return pre.toString().replace(/[\u200B\u00A0\r\n\s]/g, "").length === 0;
+  } catch {
+    return false;
+  }
+}
+
+export function placeCaretAtEditorStart(editor: HTMLElement): void {
+  editor.focus();
+  const firstBlock = editor.firstElementChild as HTMLElement | null;
+  if (!firstBlock) return;
+  placeCaretStart(firstBlock);
 }
 // ---------------------------------------------------------------------------
 // Markdown editing helpers (headings, tables, toolbar commands)
