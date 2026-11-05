@@ -7,6 +7,7 @@ import {
   Sparkles,
   Flame,
   CheckSquare,
+  ListTodo,
   GraduationCap,
   Briefcase,
   Heart,
@@ -24,6 +25,17 @@ import {
   Tag,
   Smile,
   Zap,
+  Target,
+  Box,
+  Archive,
+  Compass,
+  Calendar,
+  Clock,
+  Pin,
+  TrendingUp,
+  User,
+  Library,
+  Hash,
 } from "lucide-react";
 
 export const CATEGORY_ICONS: Record<
@@ -37,6 +49,7 @@ export const CATEGORY_ICONS: Record<
   Sparkles,
   Flame,
   CheckSquare,
+  ListTodo,
   GraduationCap,
   Briefcase,
   Heart,
@@ -54,6 +67,17 @@ export const CATEGORY_ICONS: Record<
   Tag,
   Smile,
   Zap,
+  Target,
+  Box,
+  Archive,
+  Compass,
+  Calendar,
+  Clock,
+  Pin,
+  TrendingUp,
+  User,
+  Library,
+  Hash,
 };
 
 export const CATEGORY_ICON_NAMES = Object.keys(CATEGORY_ICONS);

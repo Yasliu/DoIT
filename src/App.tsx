@@ -5,6 +5,7 @@ import { tauriApi } from "./api/tauriBridge";
 import { BentoCanvas } from "./components/BentoCanvas";
 import { ContextMenu } from "./components/ContextMenu";
 import { CategoryMenu } from "./components/CategoryMenu";
+import { IconPickerModal } from "./components/IconPickerModal";
 import { setMarkdownBaseDir } from "./lib/format";
 import { applyShortcutSettings } from "./lib/shortcuts";
 import { NoteSheet } from "./components/NoteSheet";
@@ -14,7 +15,7 @@ import { TitleBar } from "./components/TitleBar";
 import { UpdateInfo, UpdateModal } from "./components/UpdateModal";
 import { ReleaseLogModal } from "./components/ReleaseLogModal";
 import { useWorkspace } from "./hooks/useWorkspace";
-import { cx } from "./lib/text";
+import { accentFor, cx } from "./lib/text";
 
 interface OpenNote {
   note: NoteItem;
@@ -90,6 +91,7 @@ export default function App() {
   const [drawerWidth, setDrawerWidth] = useState<number>(getStoredDrawerWidth);
   const [contextMenu, setContextMenu] = useState<{ x: number; y: number; note: NoteItem } | null>(null);
   const [categoryMenu, setCategoryMenu] = useState<{ x: number; y: number; shelf: string } | null>(null);
+  const [iconPickerShelf, setIconPickerShelf] = useState<string | null>(null);
   const [sheetClosing, setSheetClosing] = useState(false);
   const [sheetReserve, setSheetReserve] = useState(false);
   const wasSheetOpen = useRef(false);
@@ -516,6 +518,7 @@ export default function App() {
           isSettings={isSettings}
           onDeleteCategory={(cat) => void deleteCategory(cat)}
           onCategoryContextMenu={(event, shelf) => setCategoryMenu({ x: event.clientX, y: event.clientY, shelf })}
+          onOpenIconPicker={(shelf) => setIconPickerShelf(shelf)}
           onImportFile={handleImportNote}
           onScanFolder={handleScanFolder}
         />
@@ -581,6 +584,7 @@ export default function App() {
                 onMoveCategory={(id, shelf) => void moveCategory(id, shelf)}
                 onDeleteCategory={(cat) => void deleteCategory(cat)}
                 onCategoryContextMenu={(event, shelf) => setCategoryMenu({ x: event.clientX, y: event.clientY, shelf })}
+                onOpenIconPicker={(shelf) => setIconPickerShelf(shelf)}
                 onReorderNotes={(shelf, activeId, overId) => reorderNote(shelf, activeId, overId)}
                 onContextMenu={(event, note) => setContextMenu({ x: event.clientX, y: event.clientY, note })}
               />
@@ -673,6 +677,7 @@ export default function App() {
           y={categoryMenu.y}
           shelf={categoryMenu.shelf}
           onClose={() => setCategoryMenu(null)}
+          onOpenIconPicker={(shelf) => setIconPickerShelf(shelf)}
           onDelete={(shelf) => {
             setCategoryMenu(null);
             void deleteCategory(shelf);
@@ -689,6 +694,14 @@ export default function App() {
             }
             return err;
           }}
+        />
+      )}
+
+      {iconPickerShelf && (
+        <IconPickerModal
+          shelf={iconPickerShelf}
+          accent={accentFor(iconPickerShelf, shelves)}
+          onClose={() => setIconPickerShelf(null)}
         />
       )}
 

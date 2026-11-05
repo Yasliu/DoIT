@@ -17,9 +17,10 @@ interface CategoryMenuProps {
   onClose: () => void;
   onRename: (shelf: string, newName: string) => Promise<string | null>;
   onDelete: (shelf: string) => void;
+  onOpenIconPicker?: (shelf: string) => void;
 }
 
-export function CategoryMenu({ x, y, shelf, onClose, onRename, onDelete }: CategoryMenuProps) {
+export function CategoryMenu({ x, y, shelf, onClose, onRename, onDelete, onOpenIconPicker }: CategoryMenuProps) {
   const [mode, setMode] = useState<"menu" | "rename" | "icon">("menu");
   const [name, setName] = useState(cleanText(shelf));
   const [error, setError] = useState<string | null>(null);
@@ -107,7 +108,14 @@ export function CategoryMenu({ x, y, shelf, onClose, onRename, onDelete }: Categ
           </button>
           <button
             type="button"
-            onClick={() => setMode("icon")}
+            onClick={() => {
+              if (onOpenIconPicker) {
+                onClose();
+                onOpenIconPicker(shelf);
+              } else {
+                setMode("icon");
+              }
+            }}
             className="flex h-8 w-full items-center gap-2 rounded-[8px] px-2 text-[12px] text-ink-2 transition-colors hover:bg-white/[0.08] hover:text-white cursor-pointer"
           >
             <Palette size={12.5} strokeWidth={1.8} className="shrink-0 text-white/70" />

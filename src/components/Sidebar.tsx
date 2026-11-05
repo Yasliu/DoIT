@@ -1,5 +1,5 @@
 import { useEffect, useState } from "react";
-import { Check, ChevronsLeft, ChevronsRight, FileDown, FolderInput, FolderPlus, Plus, Settings, Trash2, X } from "lucide-react";
+import { Check, ChevronsLeft, ChevronsRight, FileDown, FolderInput, FolderPlus, Palette, Plus, Settings, Trash2, X } from "lucide-react";
 import { Mark } from "./Mark";
 import { accentFor, cleanText, cx, initials } from "../lib/text";
 import { CATEGORY_ICONS, getStoredCategoryIcons } from "../lib/categoryIcons";
@@ -18,6 +18,7 @@ interface SidebarProps {
   isSettings?: boolean;
   onDeleteCategory?: (shelf: string) => void;
   onCategoryContextMenu?: (event: React.MouseEvent, shelf: string) => void;
+  onOpenIconPicker?: (shelf: string) => void;
   onImportFile?: () => void;
   onScanFolder?: () => void;
 }
@@ -36,6 +37,7 @@ export function Sidebar({
   isSettings,
   onDeleteCategory,
   onCategoryContextMenu,
+  onOpenIconPicker,
   onImportFile,
   onScanFolder,
 }: SidebarProps) {
@@ -91,120 +93,95 @@ export function Sidebar({
         </div>
       </div>
 
-      {/* New Note & New Category Action */}
-      <div className="px-3 pt-1 relative h-8 overflow-hidden shrink-0">
-        {/* Expanded Action Bar */}
-        <div
-          className={cx(
-            "flex items-center gap-1.5 w-full transition-[opacity,transform] ease-out",
-            open
-              ? "opacity-100 translate-x-0 duration-200 delay-75 pointer-events-auto"
-              : "opacity-0 -translate-x-2 duration-150 pointer-events-none",
-          )}
-        >
+      {/* Primary Actions: Clean Vertically-Stacked Action Buttons */}
+      <div className="px-3 pt-1 space-y-1.5 shrink-0">
+        {/* Row 1: New Note */}
+        <div className="flex items-center gap-1.5 w-full">
           <button
             type="button"
             onClick={onNew}
             title="New note"
-            className="flex h-8 flex-1 items-center justify-between rounded-[10px] bg-white/[0.055] px-3 text-[12.5px] font-medium text-ink-2 transition-colors duration-150 hover:bg-white/[0.1] hover:text-ink-1 overflow-hidden"
+            className={cx(
+              "flex h-8.5 items-center rounded-[9px] bg-white/[0.06] font-medium text-[12px] text-ink-2 transition-all duration-200 hover:bg-white/[0.1] hover:text-ink-1 cursor-pointer select-none",
+              open ? "flex-1 px-2.5" : "size-8.5 mx-auto justify-center px-0",
+            )}
           >
-            <div className="flex items-center gap-2 min-w-0">
-              <Plus size={14} strokeWidth={2} className="shrink-0" />
-              <span className="truncate">New note</span>
-            </div>
+            <Plus size={14} strokeWidth={2} className="shrink-0" />
+            <span
+              className={cx(
+                "truncate ml-2 whitespace-nowrap transition-[opacity,transform] ease-out",
+                open ? "opacity-100 translate-x-0 duration-200 delay-75" : "opacity-0 -translate-x-2 duration-150 pointer-events-none",
+              )}
+            >
+              New note
+            </span>
           </button>
-          <button
-            type="button"
-            onClick={() => setCreatingCategory(true)}
-            title="New category / shelf"
-            className="grid size-8 shrink-0 place-items-center rounded-[10px] bg-white/[0.055] text-ink-2 transition-colors duration-150 hover:bg-white/[0.1] hover:text-ink-1 cursor-pointer"
-          >
-            <FolderPlus size={14} strokeWidth={2} />
-          </button>
+          {open && (
+            <button
+              type="button"
+              onClick={() => setCreatingCategory(true)}
+              title="New category / shelf"
+              className="grid size-8.5 shrink-0 place-items-center rounded-[9px] bg-white/[0.06] text-ink-2 hover:bg-white/[0.1] hover:text-ink-1 cursor-pointer transition-colors"
+            >
+              <FolderPlus size={14} strokeWidth={2} />
+            </button>
+          )}
         </div>
 
-        {/* Collapsed Compact Action Bar */}
-        <div
+        {/* Row 2: Import Note File */}
+        <button
+          type="button"
+          onClick={onImportFile}
+          title="Import single markdown or text file"
           className={cx(
-            "absolute inset-0 flex items-center justify-center transition-all duration-300 ease-out",
-            open ? "opacity-0 pointer-events-none scale-90" : "opacity-100 pointer-events-auto scale-100",
+            "flex h-8 items-center rounded-[8px] bg-white/[0.035] font-medium text-[12px] text-ink-3 transition-all duration-200 hover:bg-white/[0.07] hover:text-ink-1 cursor-pointer select-none",
+            open ? "w-full px-2.5" : "size-8 mx-auto justify-center px-0",
           )}
         >
-          <button
-            type="button"
-            onClick={onNew}
-            title="New note"
-            className="grid size-8 place-items-center rounded-[10px] bg-white/[0.055] text-ink-2 transition-colors duration-150 hover:bg-white/[0.1] hover:text-ink-1 cursor-pointer"
+          <FileDown size={14} strokeWidth={1.8} className="shrink-0" />
+          <span
+            className={cx(
+              "truncate ml-2 whitespace-nowrap transition-[opacity,transform] ease-out",
+              open ? "opacity-100 translate-x-0 duration-200 delay-75" : "opacity-0 -translate-x-2 duration-150 pointer-events-none",
+            )}
           >
-            <Plus size={14} strokeWidth={2} />
-          </button>
-        </div>
+            Import Note
+          </span>
+        </button>
+
+        {/* Row 3: Scan Folder */}
+        <button
+          type="button"
+          onClick={onScanFolder}
+          title="Scan & import custom folder"
+          className={cx(
+            "flex h-8 items-center rounded-[8px] bg-white/[0.035] font-medium text-[12px] text-ink-3 transition-all duration-200 hover:bg-white/[0.07] hover:text-ink-1 cursor-pointer select-none",
+            open ? "w-full px-2.5" : "size-8 mx-auto justify-center px-0",
+          )}
+        >
+          <FolderInput size={14} strokeWidth={1.8} className="shrink-0" />
+          <span
+            className={cx(
+              "truncate ml-2 whitespace-nowrap transition-[opacity,transform] ease-out",
+              open ? "opacity-100 translate-x-0 duration-200 delay-75" : "opacity-0 -translate-x-2 duration-150 pointer-events-none",
+            )}
+          >
+            Scan Folder
+          </span>
+        </button>
       </div>
 
-      {/* Main Dashboard Ingestion Portal */}
-      <div className="px-3 h-8 relative shrink-0 flex items-center mt-2">
-        {/* Expanded Ingestion Bar */}
-        <div
-          className={cx(
-            "flex items-center gap-1.5 w-full transition-[opacity,transform] ease-out",
-            open
-              ? "opacity-100 translate-x-0 duration-200 delay-75 pointer-events-auto"
-              : "opacity-0 -translate-x-2 duration-150 pointer-events-none hidden",
-          )}
-        >
-          <button
-            type="button"
-            onClick={onImportFile}
-            title="Import single markdown or text file"
-            className="flex h-7.5 flex-1 items-center justify-center gap-1.5 rounded-[8px] bg-white/[0.04] px-2 text-[11px] font-medium text-ink-3 transition-colors duration-150 hover:bg-white/[0.08] hover:text-ink-1 cursor-pointer"
-          >
-            <FileDown size={13} strokeWidth={1.8} className="shrink-0" />
-            <span className="whitespace-nowrap">File Import</span>
-          </button>
-          <button
-            type="button"
-            onClick={onScanFolder}
-            title="Scan & import custom folder"
-            className="flex h-7.5 flex-1 items-center justify-center gap-1.5 rounded-[8px] bg-white/[0.04] px-2 text-[11px] font-medium text-ink-3 transition-colors duration-150 hover:bg-white/[0.08] hover:text-ink-1 cursor-pointer"
-          >
-            <FolderInput size={13} strokeWidth={1.8} className="shrink-0" />
-            <span className="whitespace-nowrap">Scan Folder</span>
-          </button>
-        </div>
-
-        {/* Collapsed Compact Ingestion Bar */}
-        <div
-          className={cx(
-            "absolute inset-0 flex items-center justify-center gap-1 transition-all duration-300 ease-out",
-            open ? "opacity-0 pointer-events-none scale-90" : "opacity-100 pointer-events-auto scale-100",
-          )}
-        >
-          <button
-            type="button"
-            onClick={onImportFile}
-            title="File Import"
-            className="grid size-7.5 place-items-center rounded-[8px] bg-white/[0.04] text-ink-3 transition-colors duration-150 hover:bg-white/[0.08] hover:text-ink-1 cursor-pointer"
-          >
-            <FileDown size={13} strokeWidth={1.8} />
-          </button>
-          <button
-            type="button"
-            onClick={onScanFolder}
-            title="Scan & Import Custom Folder"
-            className="grid size-7.5 place-items-center rounded-[8px] bg-white/[0.04] text-ink-3 transition-colors duration-150 hover:bg-white/[0.08] hover:text-ink-1 cursor-pointer"
-          >
-            <FolderInput size={13} strokeWidth={1.8} />
-          </button>
-        </div>
+      <div className="px-4 my-2">
+        <div className="h-px bg-white/[0.06] w-full" />
       </div>
 
       {/* Categories Navigation */}
-      <nav className="scroll mt-2 min-h-0 flex-1 overflow-y-auto px-3 overflow-x-hidden">
+      <nav className="scroll min-h-0 flex-1 overflow-y-auto px-3 overflow-x-hidden">
         {/* Shelves Header */}
         <div
           className={cx(
             "h-5 mb-1 px-2 flex items-center justify-between whitespace-nowrap shrink-0 transition-opacity duration-300 ease-out",
-            open ? "opacity-100" : "opacity-0 pointer-events-none",
+            open ? "opacity-100" : "opacity-0 pointer-events-none hidden",
           )}
         >
           <span className="micro">Shelves</span>
@@ -223,7 +200,7 @@ export function Sidebar({
             <input
               autoFocus
               value={categoryName}
-                maxLength={24}
+              maxLength={24}
               onChange={(e) => setCategoryName(e.target.value)}
               onKeyDown={(e) => {
                 if (e.key === "Enter") {
@@ -286,7 +263,7 @@ export function Sidebar({
               }}
               title={`${item.label} (${item.count})`}
               className={cx(
-                "group/row relative mb-1 flex h-8 items-center rounded-[8px] transition-all duration-300 ease-out cursor-pointer select-none",
+                "group/row relative mb-1 flex h-8 items-center rounded-[8px] transition-all duration-200 ease-out cursor-pointer select-none",
                 open ? "w-full px-2" : "w-8 mx-auto justify-center px-0",
                 isActive
                   ? "bg-white/[0.08] text-white shadow-[inset_0_0_0_1px_rgba(255,255,255,0.14)] font-medium"
@@ -303,21 +280,49 @@ export function Sidebar({
                   </span>
                 </span>
               ) : CustomIcon ? (
-                <CustomIcon
-                  size={14}
-                  strokeWidth={isActive ? 2.2 : 1.8}
-                  style={{ color: item.accent }}
-                  className="shrink-0 transition-transform duration-200 pointer-events-none"
-                />
+                <span
+                  onClick={(e) => {
+                    if (open && onOpenIconPicker && item.key && item.key.toLowerCase() !== "uncategorized") {
+                      e.stopPropagation();
+                      onOpenIconPicker(item.key);
+                    }
+                  }}
+                  className={cx(
+                    "shrink-0 flex items-center justify-center pointer-events-auto",
+                    open && item.key && item.key.toLowerCase() !== "uncategorized" && "hover:scale-125 transition-transform cursor-pointer",
+                  )}
+                  title={open && item.key && item.key.toLowerCase() !== "uncategorized" ? "Click to change icon" : undefined}
+                >
+                  <CustomIcon
+                    size={14}
+                    strokeWidth={isActive ? 2.2 : 1.8}
+                    style={{ color: item.accent }}
+                    className="shrink-0 transition-transform duration-200 pointer-events-none"
+                  />
+                </span>
               ) : (
                 <span
-                  className="shrink-0 size-2 rounded-full transition-all duration-300 ease-out pointer-events-none"
-                  style={{
-                    backgroundColor: item.accent,
-                    transform: isActive ? "scale(1.3)" : "scale(1)",
-                    boxShadow: isActive ? `0 0 8px ${item.accent}80` : "none",
+                  onClick={(e) => {
+                    if (open && onOpenIconPicker && item.key && item.key.toLowerCase() !== "uncategorized") {
+                      e.stopPropagation();
+                      onOpenIconPicker(item.key);
+                    }
                   }}
-                />
+                  className={cx(
+                    "shrink-0 flex items-center justify-center pointer-events-auto",
+                    open && item.key && item.key.toLowerCase() !== "uncategorized" && "hover:scale-125 transition-transform cursor-pointer",
+                  )}
+                  title={open && item.key && item.key.toLowerCase() !== "uncategorized" ? "Click to choose icon" : undefined}
+                >
+                  <span
+                    className="shrink-0 size-2 rounded-full transition-all duration-300 ease-out pointer-events-none"
+                    style={{
+                      backgroundColor: item.accent,
+                      transform: isActive ? "scale(1.3)" : "scale(1)",
+                      boxShadow: isActive ? `0 0 8px ${item.accent}80` : "none",
+                    }}
+                  />
+                </span>
               )}
 
               {/* Sliding and fading label + count */}
@@ -333,22 +338,39 @@ export function Sidebar({
                 <span
                   className={cx(
                     "font-mono text-[10px] tabular-nums text-ink-4 shrink-0 ml-1.5",
-                    item.key && item.key.toLowerCase() !== "uncategorized" && onDeleteCategory && "group-hover/row:hidden",
+                    item.key && item.key.toLowerCase() !== "uncategorized" && (onDeleteCategory || onOpenIconPicker) && "group-hover/row:hidden",
                   )}
                 >
                   {item.count}
                 </span>
-                {item.key && item.key.toLowerCase() !== "uncategorized" && onDeleteCategory && (
-                  <span
-                    onClick={(e) => {
-                      e.stopPropagation();
-                      onDeleteCategory(item.key!);
-                    }}
-                    className="hidden size-5 place-items-center rounded text-ink-4 hover:text-red-400 group-hover/row:grid shrink-0 ml-1 cursor-pointer"
-                    title={`Delete ${item.label} category`}
-                  >
-                    <Trash2 size={11} />
-                  </span>
+
+                {item.key && item.key.toLowerCase() !== "uncategorized" && (
+                  <div className="hidden items-center gap-0.5 group-hover/row:flex shrink-0 ml-1">
+                    {onOpenIconPicker && (
+                      <span
+                        onClick={(e) => {
+                          e.stopPropagation();
+                          onOpenIconPicker(item.key!);
+                        }}
+                        className="size-5 grid place-items-center rounded text-ink-4 hover:bg-white/10 hover:text-ink-1 cursor-pointer transition-colors"
+                        title={`Change icon for ${item.label}`}
+                      >
+                        <Palette size={11.5} strokeWidth={1.8} />
+                      </span>
+                    )}
+                    {onDeleteCategory && (
+                      <span
+                        onClick={(e) => {
+                          e.stopPropagation();
+                          onDeleteCategory(item.key!);
+                        }}
+                        className="size-5 grid place-items-center rounded text-ink-4 hover:bg-red-500/10 hover:text-red-400 cursor-pointer transition-colors"
+                        title={`Delete ${item.label} category`}
+                      >
+                        <Trash2 size={11} strokeWidth={1.8} />
+                      </span>
+                    )}
+                  </div>
                 )}
               </div>
             </button>

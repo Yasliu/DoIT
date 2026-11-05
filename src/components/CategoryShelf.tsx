@@ -1,7 +1,9 @@
-import { ChevronDown, Plus, Trash2 } from "lucide-react";
+import { ChevronDown, Palette, Plus, Trash2 } from "lucide-react";
 import type { PointerEvent as ReactPointerEvent } from "react";
+import { useEffect, useState } from "react";
 import type { NoteItem } from "../api/tauriBridge";
-import { cleanText, cx } from "../lib/text";
+import { accentFor, cleanText, cx } from "../lib/text";
+import { CATEGORY_ICONS, getStoredCategoryIcons } from "../lib/categoryIcons";
 import { NoteTile } from "./NoteTile";
 
 interface CategoryShelfProps {
@@ -19,6 +21,7 @@ interface CategoryShelfProps {
   onNewNote: (shelf: string) => void;
   onDeleteCategory?: (shelf: string) => void;
   onCategoryContextMenu?: (event: React.MouseEvent, shelf: string) => void;
+  onOpenIconPicker?: (shelf: string) => void;
   onOpen: (note: NoteItem, rect: DOMRect, maximize?: boolean) => void;
   onArm: (event: ReactPointerEvent, note: NoteItem) => void;
   onToggleItem: (note: NoteItem, itemId: string) => void;
@@ -40,11 +43,24 @@ export function CategoryShelf({
   onNewNote,
   onDeleteCategory,
   onCategoryContextMenu,
+  onOpenIconPicker,
   onOpen,
   onArm,
   onToggleItem,
   onContextMenu,
 }: CategoryShelfProps) {
+  const [icons, setIcons] = useState<Record<string, string>>(getStoredCategoryIcons);
+
+  useEffect(() => {
+    const handleUpdate = () => setIcons(getStoredCategoryIcons());
+    window.addEventListener("category-icons-changed", handleUpdate);
+    return () => window.removeEventListener("category-icons-changed", handleUpdate);
+  }, []);
+
+  const iconName = icons[shelf.toLowerCase()];
+  const CustomIcon = iconName ? CATEGORY_ICONS[iconName] : null;
+  const accent = accentFor(shelf, shelves);
+
   return (
     <section
       data-shelf={shelf}
@@ -57,7 +73,7 @@ export function CategoryShelf({
         animationDelay: `${Math.min(index, 8) * 55}ms`,
       }}
     >
-      <div className="flex items-baseline gap-3">
+      <div className="flex items-center gap-3">
         <button
           type="button"
           onClick={onToggleCollapse}
@@ -66,9 +82,36 @@ export function CategoryShelf({
             e.preventDefault();
             onCategoryContextMenu(e, shelf);
           }}
-          className="group/head flex min-w-0 items-baseline gap-3"
+          className="group/head flex min-w-0 items-center gap-2.5"
           aria-expanded={!collapsed}
         >
+          {CustomIcon ? (
+            <span
+              onClick={(e) => {
+                if (onOpenIconPicker && shelf.toLowerCase() !== "uncategorized") {
+                  e.stopPropagation();
+                  onOpenIconPicker(shelf);
+                }
+              }}
+              className="size-5 rounded-[6px] bg-white/[0.06] flex items-center justify-center shrink-0 hover:scale-115 transition-transform"
+              title={shelf.toLowerCase() !== "uncategorized" ? "Click to change icon" : undefined}
+            >
+              <CustomIcon size={13} strokeWidth={2} style={{ color: accent }} />
+            </span>
+          ) : (
+            <span
+              onClick={(e) => {
+                if (onOpenIconPicker && shelf.toLowerCase() !== "uncategorized") {
+                  e.stopPropagation();
+                  onOpenIconPicker(shelf);
+                }
+              }}
+              className="size-2 rounded-full shrink-0 hover:scale-150 transition-transform"
+              style={{ backgroundColor: accent }}
+              title={shelf.toLowerCase() !== "uncategorized" ? "Click to choose icon" : undefined}
+            />
+          )}
+
           <h2 className="truncate text-[14px] font-medium tracking-[-0.008em] text-ink-1 transition-colors group-hover/head:text-white">
             {cleanText(shelf)}
           </h2>
@@ -89,6 +132,21 @@ export function CategoryShelf({
           <Plus size={13} strokeWidth={1.8} />
           <span className="text-[11px]">Note</span>
         </button>
+
+        {shelf.toLowerCase() !== "uncategorized" && onOpenIconPicker && (
+          <button
+            type="button"
+            onClick={(e) => {
+              e.stopPropagation();
+              onOpenIconPicker(shelf);
+            }}
+            className="ghost !size-7 !p-0 opacity-0 transition-opacity duration-200 group-hover/section:opacity-100 hover:text-white focus-visible:opacity-100"
+            title={`Change icon for ${shelf}`}
+            aria-label={`Change icon for ${shelf}`}
+          >
+            <Palette size={12.5} strokeWidth={1.8} />
+          </button>
+        )}
 
         {shelf.toLowerCase() !== "uncategorized" && onDeleteCategory && (
           <button

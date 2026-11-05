@@ -70,12 +70,23 @@
 - **Fluid Morphing for Compact Toolbar Controls**: Replaced abrupt size snaps with `200ms ease-out` animated transitions across `ModeToggle` (sliding "Mode" text label), `HeadingSelect`, and font selector buttons when resizing the drawer.
 
 ### 15. Custom Category Icons, GPU-Composited Sidebar, Live Markdown Rules & Maximized UI Scaling (`src/lib/categoryIcons.tsx`, `src/components/CategoryMenu.tsx`, `src/components/Sidebar.tsx`, `src/lib/format.tsx`, `src/components/NoteSheet.tsx`, `src/lib/text.ts`)
-- **Custom Category Icons**: Introduced a curated library of 24 Lucide icons in `categoryIcons.tsx` (`Folder`, `BookOpen`, `Code`, `Terminal`, `Sparkles`, `Flame`, `CheckSquare`, `GraduationCap`, `Briefcase`, etc.). Users can assign any icon to their shelves via right-click -> "Choose icon", visible in both expanded and collapsed sidebar modes with shelf accent tinting and `localStorage` persistence.
-- **Glitch-Free Sidebar Transitions**: Replaced width-animating text containers that triggered mid-animation ellipsis jitter with GPU-accelerated opacity and subtle horizontal translation (`opacity-100 translate-x-0 duration-200 delay-75` on expand, `opacity-0 -translate-x-2 duration-150` on collapse).
+- **Custom Category Icons**: Introduced a curated library of Lucide icons in `categoryIcons.tsx` with shelf accent tinting and `localStorage` persistence.
+- **Glitch-Free Sidebar Transitions**: Replaced width-animating text containers that triggered mid-animation ellipsis jitter with GPU-accelerated opacity and subtle horizontal translation.
 - **Live Markdown Horizontal Rule (`----`)**: Added auto-detection in `normalizeEditor` for `---` and `----` lines, instantly converting them into native `<div class="md-hr"><hr></div>` dividers with automated trailing line creation and clean `Backspace` deletion.
 - **Maximized Note UI Scaling**: Scaled all note sheet buttons, toolbars, font pickers, and titles to spacious ergonomic dimensions when maximized (34px buttons, 15px icons, full font titles, 36px note titles, and 960px reading container) while maintaining compact sizing for docked modes.
 - **Responsive Note Card Container Thresholds**: Elevated container query thresholds in `text.ts` to prevent cards from squeezing into 2 ultra-narrow columns below 640px, ensuring note titles and todo items always remain spacious and readable.
 - **Full-Width Toolbar Alignment**: Explicitly assigned `w-full` across both toolbar rows in `NoteSheet.tsx`, ensuring window actions always align to the outer top right.
+
+### 16. Pure Vertical Collapsed Sidebar, Dedicated Icon Picker Modal & Coordinate-Locked Transitions (`src/components/Sidebar.tsx`, `src/components/IconPickerModal.tsx`, `src/components/CategoryShelf.tsx`, `src/lib/categoryIcons.tsx`, `src/App.tsx`)
+- **Clean Vertical Stacking in Collapsed Sidebar**: Completely eliminated the side-by-side jamming of `Import Note` and `Scan Folder` in the collapsed sidebar. Every single action (`New note`, `Import Note`, `Scan Folder`, `All notes`, and individual shelves) occupies its own dedicated vertical row, centered cleanly in collapsed mode.
+- **Zero-Shift Icon Coordinates**: Locked every icon to its exact horizontal and vertical coordinates across both collapsed and open states. Expanding the sidebar glides open horizontally while labels fade in smoothly (`translate-x-0 opacity-100`), with zero horizontal jumping, zero vertical jumping, and zero glitching.
+- **Dedicated DoIT-Themed Icon Picker (`IconPickerModal.tsx`)**:
+  - Curated 36 pre-made minimalist geometric icons tailored to DoIT's dark neo-grotesque design language (`Folder`, `BookOpen`, `Code`, `Terminal`, `Flame`, `Sparkles`, `CheckSquare`, `ListTodo`, `Briefcase`, `Target`, `Archive`, `Compass`, `Coffee`, etc.).
+  - Added a visible hover action button (`Palette`) on every shelf row in the sidebar, allowing users to open the picker with a single click.
+  - Clicking the shelf's icon or accent dot directly in the sidebar or canvas shelf header opens the picker immediately.
+  - Built-in live preview pill showing how the icon looks with the shelf's accent color, plus a one-click "Reset to default dot" button.
+- **Universal Canvas Shelf Header Icons**: Displayed custom category icons directly on the Bento canvas shelf headers (`CategoryShelf.tsx`), complete with hover actions to change icons right from the canvas.
+- **Smoothness & GPU Optimization**: Removed abrupt `display: none` / `hidden` toggles during sidebar animations in favor of pure GPU-composited opacity and transform transitions for 60+ FPS performance.
 
 ### 12. Zero-Lag Resizing with Auto-Maximize Snapping (`src/components/NoteSheet.tsx`, `src/App.tsx`)
 - **Transition Suppression**: Disabled CSS transitions on `<aside>` during active dragging via `isResizingSheet`, delivering instantaneous 60 FPS cursor tracking.
