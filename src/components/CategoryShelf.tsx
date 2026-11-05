@@ -188,7 +188,7 @@ function CategoryShelfComponent({
         }}
       >
         <div className="min-h-0 overflow-hidden @container">
-          <div className="grid grid-cols-1 @[540px]:grid-cols-12 grid-flow-row-dense gap-3.5 auto-rows-[minmax(130px,auto)] pb-1 pt-3.5">
+          <div className="grid grid-cols-12 grid-flow-row-dense gap-3.5 auto-rows-[minmax(130px,auto)] pb-1 pt-3.5">
             {notes.length === 0 ? (
               <button
                 type="button"

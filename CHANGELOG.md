@@ -2,6 +2,12 @@
 
 ## [2026-11-04] - Version 1.1.7: Full Note Maximization, Peak Arrow Navigation, Bullet Exit Mechanics & Taskbar Clamping
 
+### 17. Note Maximization 100% Flex Fix, Bento Grid Smoothness & Horizontal Mode Stability (`src/App.tsx`, `src/components/CategoryShelf.tsx`)
+- **100% Full Note Maximization**: Resolved the flexbox basis competition where `<main>` retaining `flex: 1 1 0%` forced the maximized note into a 50/50 split on the right. When maximized, `<main>` collapses its flex footprint cleanly so `<aside>` takes 100% of the screen width with zero black voids.
+- **Continuous Flush Maximized Exit Animation**: When closing a note from maximized mode, `<aside>` is anchored as an absolute overlay across the workspace while `<NoteSheet>` translates off-screen. Its right edge remains permanently flush with the window border without detaching, while `<main>`'s preview notes underneath are revealed in real-time.
+- **Smooth Sidebar Collapse (No Grid Rearrangement)**: Reverted `CategoryShelf.tsx` to `grid-cols-12` without container-query column snapping (`grid-cols-1 @[540px]:grid-cols-12`), eliminating card rearrangement and visual popping when opening or closing the left panel.
+- **Accurate Orientation Detection**: Hardened `isVerticalMode` to only trigger on true portrait viewports (`innerHeight > innerWidth`), preventing standard desktop and laptop displays from falsely switching to vertical bottom-drawer architecture.
+
 ### 16. Dual NSIS + MSI Store Packaging & Persistent Category Icons (`src-tauri/tauri.conf.json`, `src-tauri/src/models.rs`, `src/lib/categoryIcons.tsx`, `src/App.tsx`, `src/components/NoteSheet.tsx`)
 - **Dual Bundle Targets (`["nsis", "msi"]`) & Offline WebView**: Configured `tauri.conf.json` with both NSIS setup target (for GitHub releases) and MSI target (for Microsoft Store MSIX conversion), backed by offline installer WebView distribution.
 - **Persistent Category Icons**: Linked category icons directly into `AppSettings` in the native Rust backend (`settings.json`). Icons now reliably survive app restarts, system reboots, and storage flushes.

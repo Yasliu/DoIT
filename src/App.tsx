@@ -87,7 +87,7 @@ export default function App() {
   const [active, setActive] = useState<string | null>(null);
   const [openNote, setOpenNote] = useState<OpenNote | null>(null);
   const [isNoteMaximized, setIsNoteMaximized] = useState(false);
-  const [isVerticalScreen, setIsVerticalScreen] = useState(() => window.innerHeight > window.innerWidth || window.innerWidth < 840);
+  const [isVerticalScreen, setIsVerticalScreen] = useState(() => window.innerHeight > window.innerWidth);
   const [isResizingSheet, setIsResizingSheet] = useState(false);
   const [drawerWidth, setDrawerWidth] = useState<number>(getStoredDrawerWidth);
   const [contextMenu, setContextMenu] = useState<{ x: number; y: number; note: NoteItem } | null>(null);
@@ -348,7 +348,7 @@ export default function App() {
 
   useEffect(() => {
     const handleResize = () => {
-      setIsVerticalScreen(window.innerHeight > window.innerWidth || window.innerWidth < 840);
+      setIsVerticalScreen(window.innerHeight > window.innerWidth);
     };
     window.addEventListener("resize", handleResize);
     return () => window.removeEventListener("resize", handleResize);
@@ -537,17 +537,21 @@ export default function App() {
         />
 
         {(() => {
-          const isVerticalMode = isVerticalScreen || (!isNoteMaximized && (window.innerWidth < 860 || window.innerWidth - (railOpen ? 246 : 64) - drawerWidth < 440));
+          const isVerticalMode = isVerticalScreen || window.innerWidth < 640;
+          const isMaxClosing = sheetClosing && isNoteMaximized;
+
           return (
-            <div className={cx("min-h-0 flex-1 px-3 pb-3", isVerticalMode ? "flex flex-col" : "flex")}>
+            <div className={cx("relative min-h-0 flex-1 px-3 pb-3", isVerticalMode ? "flex flex-col" : "flex")}>
               <main
                 ref={canvasRef}
                 style={{
                   contain: "layout paint",
-                  flex: "1 1 0%",
-                  opacity: isNoteMaximized && !sheetClosing ? 0 : 1,
-                  pointerEvents: isNoteMaximized && !sheetClosing ? "none" : "auto",
-                  transition: "opacity 280ms ease-out",
+                  flex: isNoteMaximized && !isMaxClosing ? "0 0 0px" : "1 1 0%",
+                  width: isNoteMaximized && !isMaxClosing ? 0 : "100%",
+                  minWidth: 0,
+                  opacity: isNoteMaximized && !isMaxClosing ? 0 : 1,
+                  pointerEvents: isNoteMaximized && !isMaxClosing ? "none" : "auto",
+                  transition: "opacity 240ms ease-out",
                 }}
                 className="relative min-w-0 min-h-0 overflow-hidden w-full h-full"
               >
@@ -602,27 +606,34 @@ export default function App() {
               {/* Sliding editor drawer: reserves space so the dashboard stays visible + interactive */}
               <aside
                 className={cx(
-                  "relative min-h-0 min-w-0 overflow-hidden shrink-0",
-                  isNoteMaximized && !sheetClosing && "flex-1 w-full h-full",
+                  isMaxClosing
+                    ? "absolute top-0 bottom-3 left-3 right-3 z-30 min-h-0 min-w-0 overflow-hidden pointer-events-none"
+                    : isNoteMaximized
+                      ? "relative min-h-0 min-w-0 overflow-hidden shrink-0 flex-1 w-full h-full"
+                      : "relative min-h-0 min-w-0 overflow-hidden shrink-0",
                 )}
                 style={{
-                  width: isNoteMaximized && !sheetClosing
-                    ? "100%"
-                    : isVerticalMode
+                  width: isMaxClosing
+                    ? undefined
+                    : isNoteMaximized
                       ? "100%"
-                      : openFresh && openNote && !sheetClosing
-                        ? drawerWidth
-                        : 0,
-                  height: isNoteMaximized && !sheetClosing
-                    ? "100%"
-                    : isVerticalMode
-                      ? openFresh && openNote && !sheetClosing
-                        ? "54vh"
-                        : 0
-                      : "100%",
-                  marginLeft: !isVerticalMode && !isNoteMaximized && openFresh && openNote && !sheetClosing ? 12 : 0,
-                  marginTop: isVerticalMode && !isNoteMaximized && openFresh && openNote && !sheetClosing ? 12 : 0,
-                  transition: isResizingSheet
+                      : isVerticalMode
+                        ? "100%"
+                        : openFresh && openNote && !sheetClosing
+                          ? drawerWidth
+                          : 0,
+                  height: isMaxClosing
+                    ? undefined
+                    : isNoteMaximized
+                      ? "100%"
+                      : isVerticalMode
+                        ? openFresh && openNote && !sheetClosing
+                          ? "54vh"
+                          : 0
+                        : "100%",
+                  marginLeft: !isVerticalMode && !isNoteMaximized && !isMaxClosing && openFresh && openNote && !sheetClosing ? 12 : 0,
+                  marginTop: isVerticalMode && !isNoteMaximized && !isMaxClosing && openFresh && openNote && !sheetClosing ? 12 : 0,
+                  transition: isResizingSheet || isMaxClosing
                     ? "none"
                     : sheetClosing
                       ? isVerticalMode
