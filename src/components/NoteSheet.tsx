@@ -4,6 +4,7 @@ import {
   Bold,
   Check,
   ChevronDown,
+  Code,
   ListChecks,
   Table as TableIcon,
   CornerDownLeft,
@@ -40,6 +41,7 @@ import {
   normalizeEditor,
   applyHeading,
   insertTableAtCaret,
+  insertCodeBlockAtCaret,
   isCaretAtEditorStart,
   placeCaretAtEditorStart,
   fixCheckboxCaret,
@@ -988,6 +990,19 @@ export function NoteSheet({
               )}
             >
               <ListChecks size={isMaximized ? 15.5 : 13.5} strokeWidth={1.8} />
+            </button>
+            <button
+              type="button"
+              onMouseDown={(e) => e.preventDefault()}
+              onClick={() => runEditorCommand((ed) => insertCodeBlockAtCaret(ed))}
+              aria-label="Insert code block"
+              title="Code block (```)"
+              className={cx(
+                "icon-btn cursor-pointer shrink-0 transition-all duration-200 ease-out",
+                isMaximized ? "!size-8.5" : "!size-7",
+              )}
+            >
+              <Code size={isMaximized ? 15 : 13} strokeWidth={1.8} />
             </button>
             <span className="mx-0.5 h-4 w-px bg-white/[0.08]" />
             <input

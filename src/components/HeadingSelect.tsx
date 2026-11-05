@@ -1,4 +1,5 @@
 import { useEffect, useLayoutEffect, useRef, useState } from "react";
+import { createPortal } from "react-dom";
 import { Check, ChevronDown } from "lucide-react";
 import { getHeadingLevel } from "../lib/format";
 import { cx } from "../lib/text";
@@ -22,17 +23,23 @@ export function HeadingSelect({ editorRef, onSelect, compact = false, large = fa
   const [open, setOpen] = useState(false);
   const [level, setLevel] = useState(0);
   const savedRangeRef = useRef<Range | null>(null);
+  const buttonRef = useRef<HTMLButtonElement>(null);
   const menuRef = useRef<HTMLDivElement>(null);
-  const [alignRight, setAlignRight] = useState(false);
+  const [menuStyle, setMenuStyle] = useState<React.CSSProperties>({});
 
   useLayoutEffect(() => {
-    if (open && menuRef.current) {
-      const rect = menuRef.current.getBoundingClientRect();
-      if (rect.right > window.innerWidth - 8) {
-        setAlignRight(true);
-      } else {
-        setAlignRight(false);
-      }
+    if (open && buttonRef.current) {
+      const rect = buttonRef.current.getBoundingClientRect();
+      const w = 158;
+      const left = Math.max(8, Math.min(rect.left, window.innerWidth - w - 8));
+      const top = rect.bottom + 4;
+      setMenuStyle({
+        position: "fixed",
+        left,
+        top,
+        width: `${w}px`,
+        zIndex: 9999,
+      });
     }
   }, [open]);
 
@@ -91,6 +98,7 @@ export function HeadingSelect({ editorRef, onSelect, compact = false, large = fa
   return (
     <div className="relative pointer-events-auto">
       <button
+        ref={buttonRef}
         type="button"
         disabled={disabled}
         onMouseDown={(e) => {
@@ -113,10 +121,10 @@ export function HeadingSelect({ editorRef, onSelect, compact = false, large = fa
         <ChevronDown size={large ? 11 : (compact ? 9 : 10)} strokeWidth={2} className={cx("transition-transform duration-200 shrink-0", open && "rotate-180")} />
       </button>
 
-      {open && (
+      {open && createPortal(
         <>
           <div
-            className="fixed inset-0 z-40"
+            className="fixed inset-0 z-[9998]"
             onPointerDown={(e) => {
               e.stopPropagation();
               setOpen(false);
@@ -129,13 +137,11 @@ export function HeadingSelect({ editorRef, onSelect, compact = false, large = fa
           <div
             ref={menuRef}
             role="listbox"
+            style={menuStyle}
             onPointerDown={(e) => e.stopPropagation()}
             onMouseDown={(e) => e.stopPropagation()}
             onClick={(e) => e.stopPropagation()}
-            className={cx(
-              "absolute top-full z-50 mt-1 w-[158px] rounded-xl border border-white/20 bg-[#14151a] p-1.5 shadow-[0_25px_60px_rgba(0,0,0,0.95)] pointer-events-auto",
-              alignRight ? "right-0" : "left-0",
-            )}
+            className="rounded-xl border border-white/20 bg-[#14151a] p-1.5 shadow-[0_25px_60px_rgba(0,0,0,0.95)] pointer-events-auto"
           >
             {OPTIONS.map((opt) => (
               <button
@@ -162,7 +168,8 @@ export function HeadingSelect({ editorRef, onSelect, compact = false, large = fa
               </button>
             ))}
           </div>
-        </>
+        </>,
+        document.body
       )}
     </div>
   );

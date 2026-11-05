@@ -79,6 +79,8 @@ export function inlineMarkdownToHtml(line: string): string {
   formatted = formatted.replace(/\*\*([^*]+?)\*\*/g, "<strong>$1</strong>");
   // Replace italic *text* -> <em>text</em>
   formatted = formatted.replace(/(?<!\*)\*([^*]+?)\*(?!\*)/g, "<em>$1</em>");
+  // Replace inline code `text` -> <code class="md-code">text</code>
+  formatted = formatted.replace(/(?<!`)(`)([^`\n]+?)\1(?!`)/g, '<code class="md-code">$2</code>');
 
   return formatted.replace(/\u0001(\d+)\u0002/g, (_m: string, i: string) => images[Number(i)] ?? "");
 }
@@ -176,7 +178,25 @@ function tableHtml(header: string[], aligns: string[], rows: string[][]): string
 }
 
 function preHtml(code: string, lang: string, fence: string): string {
-  return `<pre class="md-pre" data-lang="${escapeAttr(lang)}" data-fence="${fence}" contenteditable="plaintext-only" spellcheck="false">${escapeHtml(code)}</pre>`;
+  const body = code ? escapeHtml(code) : "<br>";
+  return `<pre class="md-pre" data-lang="${escapeAttr(lang)}" data-fence="${fence}" contenteditable="plaintext-only" spellcheck="false">${body}</pre>`;
+}
+
+export function insertCodeBlockAtCaret(editor: HTMLElement, lang = ""): void {
+  const pre = firstElement(preHtml("", lang, "```"));
+  if (!pre) return;
+  const block = currentBlock(editor);
+  if (block) {
+    if (!block.textContent?.trim() && block.tagName === "DIV" && !isSpecialBlock(block)) {
+      block.replaceWith(pre);
+    } else {
+      block.after(pre);
+    }
+  } else {
+    editor.appendChild(pre);
+  }
+  ensureTrailingLine(pre);
+  placeCaretStart(pre);
 }
 
 export function markdownToHtml(md: string): string {
@@ -377,6 +397,46 @@ function ensureCheckbox(block: HTMLElement, placeCaret: boolean): void {
 export function normalizeEditor(editor: HTMLElement): void {
   wrapStrayNodes(editor);
   const caretBlock = currentBlock(editor);
+
+  // Fenced code block detection: merge consecutive divs bounded by ``` ... ``` or ~~~ ... ~~~
+  const childrenList = Array.from(editor.children);
+  for (let idx = 0; idx < childrenList.length; idx++) {
+    const el = childrenList[idx];
+    if (!(el instanceof HTMLElement) || el.tagName !== "DIV" || isSpecialBlock(el) || el.hasAttribute("data-p")) continue;
+    const raw = (el.textContent || "").trim();
+    const openFence = raw.match(/^(`{3,}|~{3,})\s*([^\s`]*)\s*$/);
+    if (openFence) {
+      const marker = openFence[1];
+      const lang = openFence[2] || "";
+      let closeIdx = -1;
+      for (let k = idx + 1; k < childrenList.length; k++) {
+        const nextEl = childrenList[k];
+        if (!(nextEl instanceof HTMLElement) || isSpecialBlock(nextEl)) break;
+        const nextRaw = (nextEl.textContent || "").trim();
+        if (nextRaw.length >= marker.length && nextRaw.split("").every((ch) => ch === marker[0])) {
+          closeIdx = k;
+          break;
+        }
+      }
+
+      if (closeIdx > idx) {
+        const codeLines: string[] = [];
+        for (let k = idx + 1; k < closeIdx; k++) {
+          codeLines.push((childrenList[k].textContent || "").replace(/\u00a0/g, " "));
+        }
+        const preNode = firstElement(preHtml(codeLines.join("\n"), lang, marker));
+        if (preNode) {
+          el.replaceWith(preNode);
+          for (let k = idx + 1; k <= closeIdx; k++) {
+            childrenList[k].remove();
+          }
+          ensureTrailingLine(preNode);
+          childrenList.splice(idx, closeIdx - idx + 1, preNode);
+          continue;
+        }
+      }
+    }
+  }
 
   for (const child of Array.from(editor.children)) {
     if (!(child instanceof HTMLElement) || child.tagName !== "DIV" || isSpecialBlock(child)) continue;
@@ -719,11 +779,30 @@ export function handleRichEditorKeyDown(
     return false;
   }
 
-  // ---- inside a code block: plain-text island, leave it alone ----
-  if (startEl?.closest("pre.md-pre")) {
+  // ---- inside a code block: plain-text island with clean exit mechanics ----
+  const preBlock = startEl?.closest("pre.md-pre") as HTMLElement | null;
+  if (preBlock && editor.contains(preBlock)) {
     if (isShortcut) {
       e.preventDefault();
       return true;
+    }
+    // Shift+Enter or typing ``` on a line exits the code block
+    if (e.key === "Enter") {
+      const text = (preBlock.textContent || "").replace(/\u00a0/g, " ");
+      const isShift = e.shiftKey;
+      const endsWithFence = /(?:^|\n)(`{3,}|~{3,})\s*$/.test(text);
+      if (isShift || endsWithFence) {
+        e.preventDefault();
+        if (endsWithFence) {
+          preBlock.textContent = text.replace(/(?:^|\n)(`{3,}|~{3,})\s*$/, "").replace(/\n$/, "");
+        }
+        const nextLine = document.createElement("div");
+        nextLine.appendChild(document.createElement("br"));
+        preBlock.after(nextLine);
+        placeCaretStart(nextLine);
+        onInput();
+        return true;
+      }
     }
     return false;
   }
@@ -759,6 +838,21 @@ export function handleRichEditorKeyDown(
       next.appendChild(document.createElement("br"));
       hrNode.after(next);
       placeCaretStart(next);
+      onInput();
+      return true;
+    }
+  }
+
+  const fenceMatch = (block.textContent || "").trim().match(/^(`{3,}|~{3,})\s*([^\s`]*)\s*$/);
+  if (e.key === "Enter" && fenceMatch) {
+    e.preventDefault();
+    const marker = fenceMatch[1];
+    const lang = fenceMatch[2] || "";
+    const preNode = firstElement(preHtml("", lang, marker));
+    if (preNode) {
+      block.replaceWith(preNode);
+      ensureTrailingLine(preNode);
+      placeCaretStart(preNode);
       onInput();
       return true;
     }

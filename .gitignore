@@ -41,6 +41,7 @@ $RECYCLE.BIN/
 *.tmp
 *.temp
 *.bak
+*.old
 *.swp
 *.swo
 *~

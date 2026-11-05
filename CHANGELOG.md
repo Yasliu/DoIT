@@ -2,6 +2,16 @@
 
 ## [2026-11-04] - Version 1.1.7: Full Note Maximization, Peak Arrow Navigation, Bullet Exit Mechanics & Taskbar Clamping
 
+### 18. Floating Text Style Portal, Monospaced Code Block Engine & Category Margin Breathing Room (`src/components/HeadingSelect.tsx`, `src/lib/format.tsx`, `src/components/NoteSheet.tsx`, `src/components/Sidebar.tsx`, `src/styles/globals.css`)
+- **Portal-Rendered Text Style Dropdown**: Portaled the heading/text style menu directly to `document.body` via `createPortal` with fixed viewport positioning and high z-index (`z-[9999]`), ensuring it never gets clipped by toolbar bounds or hidden behind the note title section.
+- **Fenced Code Block Engine & Exit Mechanics**:
+  - Implemented automatic code block conversion on Enter when typing code fences (e.g. ```` or ````lang).
+  - Added fence-pairing detection in `normalizeEditor` so triple-backtick blocks (` ``` ` ... ` ``` `) immediately format into styled `<pre class="md-pre">` blocks with monospace typography and border accents.
+  - Added inline code support (`` `code` ``) with `.md-code` styling.
+  - Added a dedicated Code button (`<Code />`) to the editor toolbar and keyboard exit shortcuts (`Shift+Enter` or typing closing ````).
+- **Sidebar Count Margin Breathing Room**: Added `pr-2.5` padding to the category item label and count container in `Sidebar.tsx`, preventing note count numerals (`12`, `4`, `3`, `5`) and hover action icons from touching the curved edge of the row highlight.
+- **MSIX / MSI Store Release Readiness**: Verified offline WebView2 packaging and WiX MSI installer build pipeline (`target/release/bundle/msi/DoIT_1.1.7_x64_en-US.msi`), fully prepared for MSIX Packaging Tool conversion and Microsoft Store release.
+
 ### 17. Note Maximization 100% Flex Fix, Bento Grid Smoothness & Horizontal Mode Stability (`src/App.tsx`, `src/components/CategoryShelf.tsx`)
 - **100% Full Note Maximization**: Resolved the flexbox basis competition where `<main>` retaining `flex: 1 1 0%` forced the maximized note into a 50/50 split on the right. When maximized, `<main>` collapses its flex footprint cleanly so `<aside>` takes 100% of the screen width with zero black voids.
 - **Continuous Flush Maximized Exit Animation**: When closing a note from maximized mode, `<aside>` is anchored as an absolute overlay across the workspace while `<NoteSheet>` translates off-screen. Its right edge remains permanently flush with the window border without detaching, while `<main>`'s preview notes underneath are revealed in real-time.

@@ -360,7 +360,7 @@ export function Sidebar({
                 {/* Sliding label + count */}
                 <div
                   className={cx(
-                    "flex flex-1 items-center justify-between min-w-0 overflow-hidden whitespace-nowrap ml-1 transition-opacity duration-150 ease-out",
+                    "flex flex-1 items-center justify-between min-w-0 overflow-hidden whitespace-nowrap ml-1 pr-2.5 transition-opacity duration-150 ease-out",
                     open ? "opacity-100" : "opacity-0 pointer-events-none",
                   )}
                 >
