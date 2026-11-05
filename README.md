@@ -70,16 +70,39 @@ Drop any `.md` or `.txt` files into your note repository folder, hit **Sync Repo
   <img src="docs/shot-save.jpg" width="700" alt="The Save button for externally opened files">
 </p>
 
-## What's new in v1.1.6
+## What's new in v1.1.7
 
-- Deleting a note now asks for confirmation first, so one stray click can't wipe your work
-- The delete dialog no longer spills text past its edges: it wraps and sizes itself cleanly at any window size
-- Dock mode now scrolls properly: the mouse wheel and a slim, draggable scrollbar handle long notes, with the formatting bar staying put
+- Maximized notes now take the full screen and close with a flush slide-out, no dashboard flash underneath
+- Code blocks land properly: typing three backticks creates one instantly, pasted fences convert automatically, and inline code gets real monospace styling
+- The sidebar stopped twitching: stationary track when toggling, tidy vertical stacking when collapsed, and the bento grid holds its layout instead of reshuffling
+- Dock and multi-monitor fixes: the tray companion respects the taskbar and work area on every monitor, and normal screens no longer misfire vertical mode
+- Category icons are here and they persist across restarts, managed in one unified editor with instant search
+- Store-ready packaging: dual NSIS/MSI installers with offline WebView2, plus the official privacy policy linked at the bottom
 
 The full history lives in the release log below.
 
 <details>
 <summary><strong>Release log</strong> (click to expand)</summary>
+
+<details>
+<summary><strong>v1.1.7</strong> — November 5, 2026</summary>
+
+- Notes maximize to 100% of the screen; the flexbox bug that capped them at half width is gone
+- Closing a maximized note slides flush off the edge instead of revealing the dashboard mid-animation
+- Maximized mode gets a 36px title, taller line height and wider toolbar buttons
+- Typing three backticks, with or without a language tag, creates a styled code block; pasted fence pairs convert too
+- Shift+Enter or a fresh fence line exits a code block cleanly; a code button sits in the toolbar; inline backticks render monospace
+- Typing --- or *** on its own line draws a horizontal rule instantly
+- The heading/text style dropdown floats above all layers so nothing ever clips it
+- The sidebar track stays stationary while toggling; collapsed + New Note / Import / Scan buttons stack vertically, pixel-centered
+- Category counts and hover actions get comfortable padding from the highlight border
+- Category icons persist through restarts via native settings storage, with rename and icon editing merged into one searchable dialog
+- The bento grid no longer rearranges when the sidebar opens or closes
+- Orientation detection fixed for standard horizontal monitors; the tray dock clamps to the taskbar and work area across multi-monitor setups
+- Heavy background blurs removed from sliding panels for smooth 60-120 FPS animation
+- Dual NSIS/MSI packaging backed by offline WebView2, plus PRIVACY_POLICY.md linked in the README
+
+</details>
 
 <details>
 <summary><strong>v1.1.6</strong> — November 1, 2026</summary>
