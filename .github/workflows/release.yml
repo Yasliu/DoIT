@@ -33,7 +33,7 @@ jobs:
         with:
           tagName: ${{ github.ref_name }}
           releaseName: 'DoIT Desktop Core ${{ github.ref_name }}'
-          releaseBody: 'DoIT v1.1.6 - Dynamic Quadrant-Based Dock Expansion, Full-Height Dock Note Scrolling & Viewport Clamping. Includes persistent single-show update notes and responsive modal enhancements.'
+          releaseBody: 'DoIT v1.1.7 - Full 100% Note Maximization with Continuous Flush Exit, Monospaced Code Blocks, Floating Text Style Portal, Persistent Category Icons, and Dual NSIS/MSI Microsoft Store Packaging.'
           releaseDraft: false
           prerelease: false
           includeUpdaterJson: true

@@ -55,3 +55,4 @@ npm run tauri dev
 
 - **License:** Open Source under the permissive MIT standards. 
 - **Security Profile:** Hardened client-side boundaries. The app actively restricts file imports to 30 MB boundaries to guarantee thread stability and completely isolates path operations from administrative elevations.
+- **Privacy Policy:** Read our complete, plain-language [Privacy Policy](PRIVACY_POLICY.md) (100% local-first, zero tracking, zero data collection).
