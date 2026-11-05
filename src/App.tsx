@@ -8,6 +8,7 @@ import { CategoryMenu } from "./components/CategoryMenu";
 import { IconPickerModal } from "./components/IconPickerModal";
 import { setMarkdownBaseDir } from "./lib/format";
 import { applyShortcutSettings } from "./lib/shortcuts";
+import { initCategoryIcons } from "./lib/categoryIcons";
 import { NoteSheet } from "./components/NoteSheet";
 import { SettingsPanel } from "./components/SettingsPanel";
 import { Sidebar } from "./components/Sidebar";
@@ -236,6 +237,9 @@ export default function App() {
       if (s.theme_mode) {
         setThemeMode(s.theme_mode as "glass" | "monochrome");
         document.documentElement.dataset.theme = s.theme_mode;
+      }
+      if (s.category_icons) {
+        initCategoryIcons(s.category_icons);
       }
     });
   }, []);
@@ -540,10 +544,10 @@ export default function App() {
                 ref={canvasRef}
                 style={{
                   contain: "layout paint",
-                  flex: isNoteMaximized ? "0 0 0px" : "1 1 0%",
-                  opacity: isNoteMaximized ? 0 : 1,
-                  pointerEvents: isNoteMaximized ? "none" : "auto",
-                  transition: "flex 360ms cubic-bezier(0.22, 1, 0.36, 1), opacity 240ms ease-out",
+                  flex: "1 1 0%",
+                  opacity: isNoteMaximized && !sheetClosing ? 0 : 1,
+                  pointerEvents: isNoteMaximized && !sheetClosing ? "none" : "auto",
+                  transition: "opacity 280ms ease-out",
                 }}
                 className="relative min-w-0 min-h-0 overflow-hidden w-full h-full"
               >
@@ -599,17 +603,17 @@ export default function App() {
               <aside
                 className={cx(
                   "relative min-h-0 min-w-0 overflow-hidden shrink-0",
-                  isNoteMaximized && "flex-1 w-full h-full",
+                  isNoteMaximized && !sheetClosing && "flex-1 w-full h-full",
                 )}
                 style={{
-                  width: isNoteMaximized
+                  width: isNoteMaximized && !sheetClosing
                     ? "100%"
                     : isVerticalMode
                       ? "100%"
                       : openFresh && openNote && !sheetClosing
                         ? drawerWidth
                         : 0,
-                  height: isNoteMaximized
+                  height: isNoteMaximized && !sheetClosing
                     ? "100%"
                     : isVerticalMode
                       ? openFresh && openNote && !sheetClosing
@@ -622,11 +626,11 @@ export default function App() {
                     ? "none"
                     : sheetClosing
                       ? isVerticalMode
-                        ? "height 280ms cubic-bezier(0.25, 1, 0.5, 1), margin-top 280ms cubic-bezier(0.25, 1, 0.5, 1)"
-                        : "width 280ms cubic-bezier(0.25, 1, 0.5, 1), margin-left 280ms cubic-bezier(0.25, 1, 0.5, 1)"
+                        ? "height 280ms cubic-bezier(0.22, 1, 0.36, 1), margin-top 280ms cubic-bezier(0.22, 1, 0.36, 1)"
+                        : "width 280ms cubic-bezier(0.22, 1, 0.36, 1), margin-left 280ms cubic-bezier(0.22, 1, 0.36, 1)"
                       : isVerticalMode
-                        ? "height 360ms cubic-bezier(0.22, 1, 0.36, 1), margin-top 360ms cubic-bezier(0.22, 1, 0.36, 1)"
-                        : "width 360ms cubic-bezier(0.22, 1, 0.36, 1), margin-left 360ms cubic-bezier(0.22, 1, 0.36, 1)",
+                        ? "height 340ms cubic-bezier(0.22, 1, 0.36, 1), margin-top 340ms cubic-bezier(0.22, 1, 0.36, 1)"
+                        : "width 340ms cubic-bezier(0.22, 1, 0.36, 1), margin-left 340ms cubic-bezier(0.22, 1, 0.36, 1)",
                 }}
               >
                 {openFresh && openNote && (

@@ -3,6 +3,7 @@ import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { motion } from "motion/react";
 import { getCurrentWindow } from "@tauri-apps/api/window";
 import { Mark } from "./Mark";
+import { initCategoryIcons } from "../lib/categoryIcons";
 import { HeadingSelect } from "./HeadingSelect";
 import { ImageLightbox } from "./ImageLightbox";
 import { ModeToggle } from "./ModeToggle";
@@ -284,6 +285,9 @@ export function TrayCompanion() {
     void tauriApi.getSettings().then((s) => {
       if (s.theme_mode) {
         document.documentElement.dataset.theme = s.theme_mode;
+      }
+      if (s.category_icons) {
+        initCategoryIcons(s.category_icons);
       }
       setMarkdownBaseDir(s.storage_path);
       applyShortcutSettings(s);

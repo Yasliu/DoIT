@@ -74,6 +74,7 @@ export interface AppSettings {
   theme_mode?: "glass" | "monochrome";
   dock_on_close?: boolean;
   last_seen_version?: string;
+  category_icons?: Record<string, string>;
 }
 
 export const DEFAULT_SETTINGS: AppSettings = {

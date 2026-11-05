@@ -1,4 +1,5 @@
 import React from "react";
+import { tauriApi } from "../api/tauriBridge";
 import {
   Folder,
   BookOpen,
@@ -84,13 +85,30 @@ export const CATEGORY_ICON_NAMES = Object.keys(CATEGORY_ICONS);
 
 const STORAGE_KEY = "doit.category_icons";
 
+let memoryIcons: Record<string, string> | null = null;
+
+export function initCategoryIcons(icons: Record<string, string>): void {
+  memoryIcons = { ...icons };
+  try {
+    localStorage.setItem(STORAGE_KEY, JSON.stringify(icons));
+  } catch {
+    /* ignore */
+  }
+  window.dispatchEvent(new CustomEvent("category-icons-changed"));
+}
+
 export function getStoredCategoryIcons(): Record<string, string> {
+  if (memoryIcons) return memoryIcons;
   try {
     const raw = localStorage.getItem(STORAGE_KEY);
-    return raw ? JSON.parse(raw) : {};
+    if (raw) {
+      memoryIcons = JSON.parse(raw);
+      return memoryIcons!;
+    }
   } catch {
-    return {};
+    /* ignore */
   }
+  return {};
 }
 
 export function getDefaultCategoryIcon(category: string): string {
@@ -124,15 +142,27 @@ export function getCategoryIconName(category: string): string {
 export function setCategoryIcon(category: string, iconName: string | null): void {
   if (!category) return;
   try {
-    const icons = getStoredCategoryIcons();
+    const icons = { ...getStoredCategoryIcons() };
     const key = category.toLowerCase();
     if (iconName) {
       icons[key] = iconName;
     } else {
       delete icons[key];
     }
+    memoryIcons = icons;
     localStorage.setItem(STORAGE_KEY, JSON.stringify(icons));
     window.dispatchEvent(new CustomEvent("category-icons-changed", { detail: { category, iconName } }));
+
+    // Persist to settings.json in Rust backend
+    void tauriApi.getSettings().then((s) => {
+      const current = s.category_icons || {};
+      if (iconName) {
+        current[key] = iconName;
+      } else {
+        delete current[key];
+      }
+      void tauriApi.updateSettings({ ...s, category_icons: current });
+    }).catch(() => undefined);
   } catch {
     /* ignore storage errors */
   }
@@ -140,14 +170,24 @@ export function setCategoryIcon(category: string, iconName: string | null): void
 
 export function renameCategoryIcon(oldName: string, newName: string): void {
   try {
-    const icons = getStoredCategoryIcons();
+    const icons = { ...getStoredCategoryIcons() };
     const oldKey = oldName.toLowerCase();
     const newKey = newName.toLowerCase();
     if (icons[oldKey]) {
       icons[newKey] = icons[oldKey];
       delete icons[oldKey];
+      memoryIcons = icons;
       localStorage.setItem(STORAGE_KEY, JSON.stringify(icons));
       window.dispatchEvent(new CustomEvent("category-icons-changed"));
+
+      void tauriApi.getSettings().then((s) => {
+        const current = s.category_icons || {};
+        if (current[oldKey]) {
+          current[newKey] = current[oldKey];
+          delete current[oldKey];
+          void tauriApi.updateSettings({ ...s, category_icons: current });
+        }
+      }).catch(() => undefined);
     }
   } catch {
     /* ignore */
@@ -156,12 +196,19 @@ export function renameCategoryIcon(oldName: string, newName: string): void {
 
 export function removeCategoryIcon(category: string): void {
   try {
-    const icons = getStoredCategoryIcons();
+    const icons = { ...getStoredCategoryIcons() };
     const key = category.toLowerCase();
     if (icons[key]) {
       delete icons[key];
+      memoryIcons = icons;
       localStorage.setItem(STORAGE_KEY, JSON.stringify(icons));
       window.dispatchEvent(new CustomEvent("category-icons-changed"));
+
+      void tauriApi.getSettings().then((s) => {
+        const current = s.category_icons || {};
+        delete current[key];
+        void tauriApi.updateSettings({ ...s, category_icons: current });
+      }).catch(() => undefined);
     }
   } catch {
     /* ignore */

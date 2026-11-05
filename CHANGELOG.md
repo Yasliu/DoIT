@@ -2,8 +2,10 @@
 
 ## [2026-11-04] - Version 1.1.7: Full Note Maximization, Peak Arrow Navigation, Bullet Exit Mechanics & Taskbar Clamping
 
-### 16. Microsoft Store Packaging Restoration (`src-tauri/tauri.conf.json`)
-- **Microsoft Store MSIX Packaging Target**: Re-enabled MSIX bundler target alongside NSIS in `tauri.conf.json` with store publisher and packageName "Yasliu.DoIT".
+### 16. Dual NSIS + MSI Store Packaging & Persistent Category Icons (`src-tauri/tauri.conf.json`, `src-tauri/src/models.rs`, `src/lib/categoryIcons.tsx`, `src/App.tsx`, `src/components/NoteSheet.tsx`)
+- **Dual Bundle Targets (`["nsis", "msi"]`) & Offline WebView**: Configured `tauri.conf.json` with both NSIS setup target (for GitHub releases) and MSI target (for Microsoft Store MSIX conversion), backed by offline installer WebView distribution.
+- **Persistent Category Icons**: Linked category icons directly into `AppSettings` in the native Rust backend (`settings.json`). Icons now reliably survive app restarts, system reboots, and storage flushes.
+- **Fluid Note Maximize Close & Right-Panel Lock**: Eliminated right-side panel detachment on note exit by pinning the aside boundary to the right edge and synchronizing `<main>`'s opacity and flex transitions on frame 0 of sheet close, revealing dashboard notes naturally behind the exiting card.
 
 ### 15. Pixel-Perfect Sidebar Alignment, Canvas Squeeze Shield & Responsive Toolbar (`src/components/Sidebar.tsx`, `src/components/NoteSheet.tsx`, `src/App.tsx`, `src/components/CategoryShelf.tsx`, `src/components/NoteTile.tsx`)
 - **Pixel-Perfect Collapsed Sidebar Centerline ($x = 32\text{px}$)**:

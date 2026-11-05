@@ -588,9 +588,9 @@ export function NoteSheet({
           opacity: phase === "pre" ? 0 : 1,
           transition:
             phase === "out"
-              ? "transform 280ms cubic-bezier(0.25, 1, 0.5, 1), opacity 180ms ease-out"
+              ? "transform 280ms cubic-bezier(0.22, 1, 0.36, 1), opacity 200ms ease-out"
               : phase === "in"
-                ? "transform 360ms cubic-bezier(0.22, 1, 0.36, 1), opacity 220ms ease-out"
+                ? "transform 340ms cubic-bezier(0.22, 1, 0.36, 1), opacity 220ms ease-out"
                 : "none",
           willChange: phase === "settled" ? "auto" : "transform",
         }}
