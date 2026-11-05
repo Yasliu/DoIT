@@ -3,7 +3,7 @@ import type { PointerEvent as ReactPointerEvent } from "react";
 import { useEffect, useState } from "react";
 import type { NoteItem } from "../api/tauriBridge";
 import { accentFor, cleanText, cx } from "../lib/text";
-import { CATEGORY_ICONS, getStoredCategoryIcons } from "../lib/categoryIcons";
+import { CATEGORY_ICONS, getCategoryIconName } from "../lib/categoryIcons";
 import { NoteTile } from "./NoteTile";
 
 interface CategoryShelfProps {
@@ -49,16 +49,16 @@ export function CategoryShelf({
   onToggleItem,
   onContextMenu,
 }: CategoryShelfProps) {
-  const [icons, setIcons] = useState<Record<string, string>>(getStoredCategoryIcons);
+  const [, setIconsVersion] = useState(0);
 
   useEffect(() => {
-    const handleUpdate = () => setIcons(getStoredCategoryIcons());
+    const handleUpdate = () => setIconsVersion((v) => v + 1);
     window.addEventListener("category-icons-changed", handleUpdate);
     return () => window.removeEventListener("category-icons-changed", handleUpdate);
   }, []);
 
-  const iconName = icons[shelf.toLowerCase()];
-  const CustomIcon = iconName ? CATEGORY_ICONS[iconName] : null;
+  const iconKey = getCategoryIconName(shelf);
+  const CustomIcon = iconKey && iconKey !== "dot" ? CATEGORY_ICONS[iconKey] : null;
   const accent = accentFor(shelf, shelves);
 
   return (

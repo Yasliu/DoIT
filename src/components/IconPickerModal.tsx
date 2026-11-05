@@ -30,7 +30,7 @@ export function IconPickerModal({ shelf, accent = "#ffffff", onClose }: IconPick
     setCategoryIcon(shelf, iconName);
   };
 
-  const CurrentIconComp = selected ? CATEGORY_ICONS[selected] : null;
+  const CurrentIconComp = selected && selected !== "dot" ? CATEGORY_ICONS[selected] : null;
 
   return (
     <>
@@ -132,26 +132,37 @@ export function IconPickerModal({ shelf, accent = "#ffffff", onClose }: IconPick
           </div>
 
           {/* Footer Actions */}
-          <div className="mt-4 pt-3 flex items-center justify-between border-t border-white/10">
-            <button
-              type="button"
-              onClick={() => handleSelect(null)}
-              className={cx(
-                "flex items-center gap-1.5 px-2.5 py-1.5 rounded-[8px] text-[11px] font-medium transition-colors cursor-pointer",
-                selected === null
-                  ? "bg-white/15 text-white"
-                  : "text-ink-4 hover:bg-white/[0.06] hover:text-ink-2",
-              )}
-              title="Reset to default accent dot"
-            >
-              <RotateCcw size={12} strokeWidth={2} />
-              <span>Reset to default dot</span>
-            </button>
+          <div className="mt-4 pt-3 flex items-center justify-between border-t border-white/10 gap-2">
+            <div className="flex items-center gap-1.5">
+              <button
+                type="button"
+                onClick={() => handleSelect("dot")}
+                className={cx(
+                  "flex items-center gap-1.5 px-2.5 py-1.5 rounded-[8px] text-[11px] font-medium transition-colors cursor-pointer",
+                  selected === "dot"
+                    ? "bg-white/15 text-white shadow-sm"
+                    : "text-ink-4 hover:bg-white/[0.06] hover:text-ink-2",
+                )}
+                title="Use a minimalist accent dot"
+              >
+                <span className="size-2 rounded-full" style={{ backgroundColor: accent }} />
+                <span>Dot</span>
+              </button>
+              <button
+                type="button"
+                onClick={() => handleSelect(null)}
+                className="flex items-center gap-1.5 px-2.5 py-1.5 rounded-[8px] text-[11px] font-medium text-ink-4 hover:bg-white/[0.06] hover:text-ink-2 transition-colors cursor-pointer"
+                title="Reset to default theme icon"
+              >
+                <RotateCcw size={11} strokeWidth={2} />
+                <span>Reset</span>
+              </button>
+            </div>
 
             <button
               type="button"
               onClick={onClose}
-              className="px-3.5 py-1.5 rounded-[8px] bg-white text-black text-[12px] font-medium hover:bg-white/90 transition-colors cursor-pointer shadow-sm"
+              className="px-3.5 py-1.5 rounded-[8px] bg-white text-black text-[12px] font-medium hover:bg-white/90 transition-colors cursor-pointer shadow-sm shrink-0"
             >
               Done
             </button>

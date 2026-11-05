@@ -538,7 +538,7 @@ export function NoteSheet({
     // settled -> in (re-enable transition) -> out (slide away), then unmount
     setPhase("in");
     requestAnimationFrame(() => requestAnimationFrame(() => setPhase("out")));
-    phaseTimer.current = window.setTimeout(() => onClose(), 320);
+    phaseTimer.current = window.setTimeout(() => onClose(), 250);
   };
   closeRef.current = close;
 
@@ -587,9 +587,9 @@ export function NoteSheet({
           opacity: phase === "pre" ? 0 : 1,
           transition:
             phase === "out"
-              ? "transform 300ms ease-out"
+              ? "transform 240ms cubic-bezier(0.16, 1, 0.3, 1), opacity 180ms ease-out"
               : phase === "in"
-                ? "transform 460ms cubic-bezier(0.32, 0.72, 0, 1), opacity 240ms ease-out"
+                ? "transform 240ms cubic-bezier(0.16, 1, 0.3, 1), opacity 180ms ease-out"
                 : "none",
           willChange: phase === "settled" ? "auto" : "transform",
         }}

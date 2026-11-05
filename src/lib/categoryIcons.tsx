@@ -93,10 +93,32 @@ export function getStoredCategoryIcons(): Record<string, string> {
   }
 }
 
-export function getCategoryIconName(category: string): string | null {
-  if (!category) return null;
+export function getDefaultCategoryIcon(category: string): string {
+  const q = (category || "").toLowerCase().trim();
+  if (!q || q === "uncategorized") return "Folder";
+  if (/(igcse|school|study|exam|math|phys|chem|bio|class|learn|academy|edu|student)/.test(q)) return "GraduationCap";
+  if (/(code|dev|tech|prog|web|app|script|git|software|frontend|backend)/.test(q)) return "Code";
+  if (/(work|job|corp|office|client|project|business|career)/.test(q)) return "Briefcase";
+  if (/(todo|task|plan|checklist|action|goal)/.test(q)) return "CheckSquare";
+  if (/(idea|brain|think|spark|innovat)/.test(q)) return "Lightbulb";
+  if (/(design|art|ui|ux|draw|paint|creative)/.test(q)) return "Palette";
+  if (/(personal|life|self|me|home|health|family)/.test(q)) return "Heart";
+  if (/(finance|money|invest|crypto|bank|stock)/.test(q)) return "TrendingUp";
+  if (/(read|book|doc|note|paper|article)/.test(q)) return "BookOpen";
+  if (/(archive|old|store|backup|vault)/.test(q)) return "Archive";
+  if (/(music|audio|song|sound)/.test(q)) return "Music";
+  if (/(video|film|movie|media)/.test(q)) return "Film";
+  if (/(coffee|daily|journal|diary)/.test(q)) return "Coffee";
+  if (/(star|fav|priority|urgent|imp)/.test(q)) return "Star";
+  return "Folder";
+}
+
+export function getCategoryIconName(category: string): string {
+  if (!category) return "Folder";
   const icons = getStoredCategoryIcons();
-  return icons[category.toLowerCase()] || null;
+  const stored = icons[category.toLowerCase()];
+  if (stored) return stored; // can be "dot" or icon name
+  return getDefaultCategoryIcon(category);
 }
 
 export function setCategoryIcon(category: string, iconName: string | null): void {
@@ -104,7 +126,7 @@ export function setCategoryIcon(category: string, iconName: string | null): void
   try {
     const icons = getStoredCategoryIcons();
     const key = category.toLowerCase();
-    if (iconName && CATEGORY_ICONS[iconName]) {
+    if (iconName) {
       icons[key] = iconName;
     } else {
       delete icons[key];
@@ -153,14 +175,15 @@ export function renderCategoryIcon(
   strokeWidth = 1.8,
   className = "shrink-0",
 ): React.ReactNode {
-  if (iconName && CATEGORY_ICONS[iconName]) {
-    const IconComp = CATEGORY_ICONS[iconName];
-    return <IconComp size={size} strokeWidth={strokeWidth} className={className} style={{ color: fallbackAccent }} />;
+  if (iconName === "dot") {
+    return (
+      <span
+        className="shrink-0 size-2 rounded-full pointer-events-none"
+        style={{ backgroundColor: fallbackAccent }}
+      />
+    );
   }
-  return (
-    <span
-      className="shrink-0 size-2 rounded-full pointer-events-none"
-      style={{ backgroundColor: fallbackAccent }}
-    />
-  );
+  const resolved = (iconName && CATEGORY_ICONS[iconName]) ? iconName : "Folder";
+  const IconComp = CATEGORY_ICONS[resolved] || Folder;
+  return <IconComp size={size} strokeWidth={strokeWidth} className={className} style={{ color: fallbackAccent }} />;
 }

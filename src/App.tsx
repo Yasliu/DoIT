@@ -534,118 +534,127 @@ export default function App() {
           isSettings={isSettings}
         />
 
-        <div className={cx("min-h-0 flex-1 px-3 pb-3", isVerticalScreen ? "flex flex-col" : "flex")}>
-          <main
-            ref={canvasRef}
-            className={cx(
-              "relative min-w-0 min-h-0 overflow-hidden flex-1 w-full h-full transition-opacity duration-300 ease-out",
-              isNoteMaximized && !sheetClosing
-                ? "opacity-0 pointer-events-none"
-                : "opacity-100",
-            )}
-          >
-            <div aria-hidden="true" className="lightscape" />
-            <div className="relative z-10 h-full">
-            {isSettings ? (
-              <div className="scroll relative h-full overflow-y-scroll" style={{ scrollbarGutter: "stable" }}>
-                <SettingsPanel
-                  onBack={() => setIsSettings(false)}
-                  onStoragePathChanged={() => void workspace.reload()}
-                  onThemeChanged={(mode) => setThemeMode(mode)}
-                />
-              </div>
-            ) : state === "error" ? (
-              <div className="flex h-full flex-col items-start justify-center px-10">
-                <p className="text-[20px] tracking-[-0.02em] text-ink-2">The workspace did not open.</p>
-                <p className="mt-2 max-w-[46ch] text-[12.5px] leading-relaxed text-ink-4">
-                  The local store could not be read. Nothing has been written over it.
-                </p>
-                <button type="button" onClick={() => void workspace.reload()} className="btn mt-5">
-                  Try again
-                </button>
-              </div>
-            ) : (
-              <BentoCanvas
-                notes={notes}
-                shelves={shelves}
-                active={active}
-                query={query}
-                loading={state === "loading"}
-                locked={false}
-                collapsed={collapsed}
-                onToggleCollapse={toggleCollapse}
-                onOpen={openTile}
-                onNewNote={newNote}
-                onNewCategory={(name) => {
-                  void createCategory(name);
-                  setActive(name);
-                }}
-                onToggleItem={toggleItem}
-                onMoveCategory={(id, shelf) => void moveCategory(id, shelf)}
-                onDeleteCategory={(cat) => void deleteCategory(cat)}
-                onCategoryContextMenu={(event, shelf) => setCategoryMenu({ x: event.clientX, y: event.clientY, shelf })}
-                onOpenIconPicker={(shelf) => setIconPickerShelf(shelf)}
-                onReorderNotes={(shelf, activeId, overId) => reorderNote(shelf, activeId, overId)}
-                onContextMenu={(event, note) => setContextMenu({ x: event.clientX, y: event.clientY, note })}
-              />
-            )}
-            </div>
-          </main>
+        {(() => {
+          const isVerticalMode = isVerticalScreen || (!isNoteMaximized && window.innerWidth - (railOpen ? 246 : 66) - drawerWidth < 380);
+          return (
+            <div className={cx("min-h-0 flex-1 px-3 pb-3", isVerticalMode ? "flex flex-col" : "flex")}>
+              <main
+                ref={canvasRef}
+                style={{ contain: "layout paint" }}
+                className={cx(
+                  "relative min-w-0 min-h-0 overflow-hidden flex-1 w-full h-full transition-opacity duration-240 ease-out",
+                  isNoteMaximized && !sheetClosing
+                    ? "hidden"
+                    : "opacity-100",
+                )}
+              >
+                <div aria-hidden="true" className="lightscape" />
+                <div className="relative z-10 h-full">
+                {isSettings ? (
+                  <div className="scroll relative h-full overflow-y-scroll" style={{ scrollbarGutter: "stable" }}>
+                    <SettingsPanel
+                      onBack={() => setIsSettings(false)}
+                      onStoragePathChanged={() => void workspace.reload()}
+                      onThemeChanged={(mode) => setThemeMode(mode)}
+                    />
+                  </div>
+                ) : state === "error" ? (
+                  <div className="flex h-full flex-col items-start justify-center px-10">
+                    <p className="text-[20px] tracking-[-0.02em] text-ink-2">The workspace did not open.</p>
+                    <p className="mt-2 max-w-[46ch] text-[12.5px] leading-relaxed text-ink-4">
+                      The local store could not be read. Nothing has been written over it.
+                    </p>
+                    <button type="button" onClick={() => void workspace.reload()} className="btn mt-5">
+                      Try again
+                    </button>
+                  </div>
+                ) : (
+                  <BentoCanvas
+                    notes={notes}
+                    shelves={shelves}
+                    active={active}
+                    query={query}
+                    loading={state === "loading"}
+                    locked={false}
+                    collapsed={collapsed}
+                    onToggleCollapse={toggleCollapse}
+                    onOpen={openTile}
+                    onNewNote={newNote}
+                    onNewCategory={(name) => {
+                      void createCategory(name);
+                      setActive(name);
+                    }}
+                    onToggleItem={toggleItem}
+                    onMoveCategory={(id, shelf) => void moveCategory(id, shelf)}
+                    onDeleteCategory={(cat) => void deleteCategory(cat)}
+                    onCategoryContextMenu={(event, shelf) => setCategoryMenu({ x: event.clientX, y: event.clientY, shelf })}
+                    onOpenIconPicker={(shelf) => setIconPickerShelf(shelf)}
+                    onReorderNotes={(shelf, activeId, overId) => reorderNote(shelf, activeId, overId)}
+                    onContextMenu={(event, note) => setContextMenu({ x: event.clientX, y: event.clientY, note })}
+                  />
+                )}
+                </div>
+              </main>
 
-          {/* Sliding editor drawer: reserves space so the dashboard stays visible + interactive */}
-          <aside
-            className="relative min-h-0 min-w-0 overflow-hidden shrink-0"
-            style={{
-              width: isNoteMaximized
-                ? "100%"
-                : isVerticalScreen
-                  ? "100%"
-                  : openFresh && openNote && sheetReserve && !sheetClosing
-                    ? drawerWidth
-                    : 0,
-              height: isNoteMaximized
-                ? "100%"
-                : isVerticalScreen
-                  ? openFresh && openNote && sheetReserve && !sheetClosing
-                    ? "54vh"
-                    : 0
-                  : "100%",
-              marginLeft: !isVerticalScreen && !isNoteMaximized && openFresh && openNote && sheetReserve && !sheetClosing ? 12 : 0,
-              marginTop: isVerticalScreen && !isNoteMaximized && openFresh && openNote && sheetReserve && !sheetClosing ? 12 : 0,
-              transition: isResizingSheet
-                ? "none"
-                : sheetClosing
-                  ? isVerticalScreen
-                    ? "height 300ms ease-out, margin-top 300ms ease-out"
-                    : "width 300ms ease-out, margin-left 300ms ease-out"
-                  : isVerticalScreen
-                    ? "height 380ms cubic-bezier(0.22, 1, 0.36, 1), margin-top 380ms cubic-bezier(0.22, 1, 0.36, 1)"
-                    : "width 380ms cubic-bezier(0.22, 1, 0.36, 1), margin-left 380ms cubic-bezier(0.22, 1, 0.36, 1)",
-            }}
-          >
-            {openFresh && openNote && (
-              <NoteSheet
-                key={openFresh.id}
-                note={openFresh}
-                origin={openNote.origin}
-                canvas={canvasRef.current}
-                shelves={shelves}
-                instant={wasSheetOpen.current}
-                width={isNoteMaximized || isVerticalScreen ? undefined : drawerWidth}
-                onResizeWidth={setDrawerWidth}
-                onResizeStateChange={setIsResizingSheet}
-                isMaximized={isNoteMaximized}
-                onToggleMaximize={() => setIsNoteMaximized((v) => !v)}
-                isBottomMode={isVerticalScreen}
-                onClosing={() => setSheetClosing(true)}
-                onOpening={() => setSheetReserve(true)}
-                onCommit={commitSheet}
-                onClose={closeSheet}
-                onDelete={deleteNote}
-              />
-            )}
-          </aside>
-        </div>
+              {/* Sliding editor drawer: reserves space so the dashboard stays visible + interactive */}
+              <aside
+                className={cx(
+                  "relative min-h-0 min-w-0 overflow-hidden shrink-0",
+                  isNoteMaximized && "flex-1 w-full h-full",
+                )}
+                style={{
+                  width: isNoteMaximized
+                    ? "100%"
+                    : isVerticalMode
+                      ? "100%"
+                      : openFresh && openNote && sheetReserve && !sheetClosing
+                        ? drawerWidth
+                        : 0,
+                  height: isNoteMaximized
+                    ? "100%"
+                    : isVerticalMode
+                      ? openFresh && openNote && sheetReserve && !sheetClosing
+                        ? "54vh"
+                        : 0
+                      : "100%",
+                  marginLeft: !isVerticalMode && !isNoteMaximized && openFresh && openNote && sheetReserve && !sheetClosing ? 12 : 0,
+                  marginTop: isVerticalMode && !isNoteMaximized && openFresh && openNote && sheetReserve && !sheetClosing ? 12 : 0,
+                  transition: isResizingSheet
+                    ? "none"
+                    : sheetClosing
+                      ? isVerticalMode
+                        ? "height 240ms cubic-bezier(0.16, 1, 0.3, 1), margin-top 240ms cubic-bezier(0.16, 1, 0.3, 1)"
+                        : "width 240ms cubic-bezier(0.16, 1, 0.3, 1), margin-left 240ms cubic-bezier(0.16, 1, 0.3, 1)"
+                      : isVerticalMode
+                        ? "height 240ms cubic-bezier(0.16, 1, 0.3, 1), margin-top 240ms cubic-bezier(0.16, 1, 0.3, 1)"
+                        : "width 240ms cubic-bezier(0.16, 1, 0.3, 1), margin-left 240ms cubic-bezier(0.16, 1, 0.3, 1)",
+                }}
+              >
+                {openFresh && openNote && (
+                  <NoteSheet
+                    key={openFresh.id}
+                    note={openFresh}
+                    origin={openNote.origin}
+                    canvas={canvasRef.current}
+                    shelves={shelves}
+                    instant={wasSheetOpen.current}
+                    width={isNoteMaximized || isVerticalMode ? undefined : drawerWidth}
+                    onResizeWidth={setDrawerWidth}
+                    onResizeStateChange={setIsResizingSheet}
+                    isMaximized={isNoteMaximized}
+                    onToggleMaximize={() => setIsNoteMaximized((v) => !v)}
+                    isBottomMode={isVerticalMode}
+                    onClosing={() => setSheetClosing(true)}
+                    onOpening={() => setSheetReserve(true)}
+                    onCommit={commitSheet}
+                    onClose={closeSheet}
+                    onDelete={deleteNote}
+                  />
+                )}
+              </aside>
+            </div>
+          );
+        })()}
       </div>
 
       {contextMenu && (
