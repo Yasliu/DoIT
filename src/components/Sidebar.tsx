@@ -360,14 +360,14 @@ export function Sidebar({
                 {/* Sliding label + count */}
                 <div
                   className={cx(
-                    "flex flex-1 items-center justify-between min-w-0 overflow-hidden whitespace-nowrap ml-1 pr-2.5 transition-opacity duration-150 ease-out",
+                    "flex flex-1 items-center justify-between min-w-0 overflow-hidden whitespace-nowrap ml-1 pr-3.5 transition-opacity duration-150 ease-out",
                     open ? "opacity-100" : "opacity-0 pointer-events-none",
                   )}
                 >
                   <span className="truncate text-[12.5px]">{item.label}</span>
                   <span
                     className={cx(
-                      "font-mono text-[10px] tabular-nums text-ink-4 shrink-0 ml-1.5",
+                      "font-mono text-[10.5px] tabular-nums text-ink-4 shrink-0 ml-2 mr-0.5",
                       item.key && item.key.toLowerCase() !== "uncategorized" && (onDeleteCategory || onOpenIconPicker) && "group-hover/row:hidden",
                     )}
                   >

@@ -33,7 +33,7 @@ jobs:
         with:
           tagName: ${{ github.ref_name }}
           releaseName: 'DoIT Desktop Core ${{ github.ref_name }}'
-          releaseBody: 'DoIT v1.1.7 - Full 100% Note Maximization with Continuous Flush Exit, Monospaced Code Blocks, Floating Text Style Portal, Persistent Category Icons, and Dual NSIS/MSI Microsoft Store Packaging.'
+          releaseBody: 'DoIT v1.1.8 - Bento card drag alignment, scoped editor zoom in sheet and dock mode, animated insert tools burger menu, category menu cleanup, blurred glass mode fix, and bug report tile.'
           releaseDraft: false
           prerelease: false
           includeUpdaterJson: true

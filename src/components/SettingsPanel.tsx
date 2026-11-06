@@ -2,8 +2,10 @@ import { useEffect, useState } from "react";
 import {
   AlertCircle,
   ArrowLeft,
+  Bug,
   Check,
   CheckCircle2,
+  ExternalLink,
   Folder,
   FolderSearch,
   HardDrive,
@@ -38,6 +40,44 @@ const MD_SHORTCUT_ROWS = [
   { key: "hotkey_table_col", label: "Table: Add Column", hint: "Inside a table cell: new column on every row", def: DEFAULT_MD_SHORTCUTS.tableCol },
   { key: "hotkey_table_row", label: "Table: Add Row", hint: "Inside a table cell: new row at the bottom", def: DEFAULT_MD_SHORTCUTS.tableRow },
 ] as const;
+
+function BugReportSection() {
+  const handleOpenIssues = (e: React.MouseEvent) => {
+    e.preventDefault();
+    const url = "https://github.com/Yasliu/DoIT/issues/";
+    void import("@tauri-apps/plugin-opener")
+      .then(({ openUrl }) => openUrl(url))
+      .catch(() => window.open(url, "_blank", "noopener,noreferrer"));
+  };
+
+  return (
+    <section className="glass rounded-[20px] border border-white/10 p-5 shadow-[0_20px_50px_-20px_rgba(0,0,0,0.8)]">
+      <a
+        href="https://github.com/Yasliu/DoIT/issues/"
+        onClick={handleOpenIssues}
+        className="group flex items-center justify-between gap-4 cursor-pointer"
+      >
+        <div className="flex items-center gap-3.5">
+          <div className="grid size-9 shrink-0 place-items-center rounded-xl bg-white/[0.06] text-white group-hover:bg-white/[0.12] transition-colors">
+            <Bug size={17} strokeWidth={1.8} />
+          </div>
+          <div>
+            <h2 className="text-[14px] font-semibold text-ink-1 group-hover:text-white transition-colors">
+              Spotted a bug? Report Here
+            </h2>
+            <p className="text-[11.5px] text-ink-4">
+              Open an issue on GitHub to report unexpected behavior or suggest improvements.
+            </p>
+          </div>
+        </div>
+        <div className="flex h-9 shrink-0 items-center gap-2 rounded-xl border border-white/15 bg-white/[0.07] px-3.5 text-[12px] font-medium text-white transition-all group-hover:bg-white/[0.14] group-hover:border-white/25">
+          <span>Report issue</span>
+          <ExternalLink size={13} />
+        </div>
+      </a>
+    </section>
+  );
+}
 
 function AppUpdatesSection() {
   const [version, setVersion] = useState("");
@@ -622,6 +662,7 @@ export function SettingsPanel({ onBack, onStoragePathChanged, onThemeChanged }: 
           </div>
         </section>
 
+        <BugReportSection />
         <AppUpdatesSection />
       </div>
     </div>

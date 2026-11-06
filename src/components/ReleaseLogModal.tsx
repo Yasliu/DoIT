@@ -38,42 +38,38 @@ export function ReleaseLogModal({ onClose }: ReleaseLogModalProps) {
             <Sparkles size={14} />
           </div>
           <span className="font-mono text-[10px] uppercase tracking-[0.14em] text-ink-4">
-            Version 1.1.7 Update
+            Version 1.1.8 Update
           </span>
         </div>
 
         <h2 className="text-[17px] font-semibold text-white tracking-tight mb-3">
-          What&apos;s New in v1.1.7
+          What&apos;s New in v1.1.8
         </h2>
 
         <ul className="space-y-2 mb-5 text-[12px] text-ink-2 leading-relaxed">
           <li className="flex items-start gap-2">
             <span className="size-1.5 rounded-full bg-white/60 mt-2 shrink-0" />
-            <span>Maximize note button to expand notes to full-canvas view instantly.</span>
+            <span>Note Editor Zoom: zoom in/out with Ctrl+/Ctrl- (or Ctrl+Wheel), with toolbar stepper and proportional layout spacing.</span>
           </li>
           <li className="flex items-start gap-2">
             <span className="size-1.5 rounded-full bg-white/60 mt-2 shrink-0" />
-            <span>Peak arrow key navigation seamlessly flowing between title and editor.</span>
+            <span>Fixed Bento Drag & Drop: portaled drag ghost maintains exact cursor coordinates regardless of canvas scroll depth.</span>
           </li>
           <li className="flex items-start gap-2">
             <span className="size-1.5 rounded-full bg-white/60 mt-2 shrink-0" />
-            <span>Clean bullet points handling: pressing Enter on empty items exits back to text.</span>
+            <span>Restored Blurred Glass Mode: authentic frosted backdrop blurs and translucent materials across all surfaces.</span>
           </li>
           <li className="flex items-start gap-2">
             <span className="size-1.5 rounded-full bg-white/60 mt-2 shrink-0" />
-            <span>Taskbar work area clamping & topmost lock prevents dock hiding behind taskbar.</span>
+            <span>Settings Bug Reporting: direct one-click &quot;Spotted a bug? Report Here&quot; tile linking to GitHub Issues.</span>
           </li>
           <li className="flex items-start gap-2">
             <span className="size-1.5 rounded-full bg-white/60 mt-2 shrink-0" />
-            <span>Vertical screen optimization: adaptive layout prevents narrow screen squeezing.</span>
+            <span>Simplified Category Menu: unified &quot;Rename &amp; icon&quot; option without redundant icon buttons.</span>
           </li>
           <li className="flex items-start gap-2">
             <span className="size-1.5 rounded-full bg-white/60 mt-2 shrink-0" />
-            <span>Smooth spring hover bubble animation on floating dock pill.</span>
-          </li>
-          <li className="flex items-start gap-2">
-            <span className="size-1.5 rounded-full bg-white/60 mt-2 shrink-0" />
-            <span>Spacious table shortcut tiles & consolidated keyboard reference in Settings.</span>
+            <span>Sidebar Polish: generous right padding and breathing room for category note count badges.</span>
           </li>
         </ul>
 

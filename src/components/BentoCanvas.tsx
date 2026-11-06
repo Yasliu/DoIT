@@ -1,5 +1,6 @@
 import type { PointerEvent as ReactPointerEvent } from "react";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import { createPortal } from "react-dom";
 import { Check, FolderPlus, Plus, X } from "lucide-react";
 import type { NoteItem } from "../api/tauriBridge";
 import { cx, longDate, noteMatches, relativeShort } from "../lib/text";
@@ -166,13 +167,22 @@ export function BentoCanvas({
       if (!moved) {
         moved = true;
         setPressed(null);
+        const ghostWidth = Math.min(Math.max(rect.width, 220), 320);
+        // Anchor the compact ghost pill directly under the pointer:
+        // Clamping dx keeps the pointer naturally within the pill bounds,
+        // and fixed dy=27 centers the ~54px chip vertically on the cursor,
+        // preventing tall notes from projecting the ghost chip high above the cursor.
+        const grabX = startX - rect.left;
+        const clampedDx = Math.min(Math.max(24, grabX), ghostWidth - 24);
+        const clampedDy = 27;
+
         setDrag({
           note,
           x: pointer.clientX,
           y: pointer.clientY,
-          dx: startX - rect.left,
-          dy: startY - rect.top,
-          w: rect.width,
+          dx: clampedDx,
+          dy: clampedDy,
+          w: ghostWidth,
         });
         document.body.style.cursor = "grabbing";
       } else {
@@ -423,24 +433,26 @@ export function BentoCanvas({
         </div>
       </div>
 
-      {drag && (
-        <div
-          className="pointer-events-none fixed z-[80]"
-          style={{ left: drag.x - drag.dx, top: drag.y - drag.dy, width: drag.w }}
-        >
+      {drag &&
+        createPortal(
           <div
-            className="glass rounded-[18px] px-4 py-3.5"
-            style={{ transform: "rotate(1.4deg) scale(1.015)", opacity: 0.94 }}
+            className="pointer-events-none fixed z-[9999]"
+            style={{ left: drag.x - drag.dx, top: drag.y - drag.dy, width: drag.w }}
           >
-            <div className="truncate text-[14px] font-medium tracking-[-0.01em] text-ink-1">
-              {drag.note.title || "Untitled"}
+            <div
+              className="glass rounded-[18px] px-4 py-3.5 border border-white/20 shadow-[0_25px_60px_rgba(0,0,0,0.95)]"
+              style={{ transform: "rotate(1.4deg) scale(1.02)", opacity: 0.96 }}
+            >
+              <div className="truncate text-[14px] font-medium tracking-[-0.01em] text-ink-1">
+                {drag.note.title || "Untitled"}
+              </div>
+              <div className="mt-1.5 font-mono text-[9px] uppercase tracking-[0.12em] text-ink-4">
+                {drag.note.category} → {over ?? "…"}
+              </div>
             </div>
-            <div className="mt-1.5 font-mono text-[9px] uppercase tracking-[0.12em] text-ink-4">
-              {drag.note.category} → {over ?? "…"}
-            </div>
-          </div>
-        </div>
-      )}
+          </div>,
+          document.body,
+        )}
     </div>
   );
 }
