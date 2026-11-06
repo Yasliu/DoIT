@@ -167,13 +167,22 @@ export function BentoCanvas({
       if (!moved) {
         moved = true;
         setPressed(null);
+        const ghostWidth = Math.min(Math.max(rect.width, 220), 320);
+        // Anchor the compact ghost pill directly under the pointer:
+        // Clamping dx keeps the pointer naturally within the pill bounds,
+        // and fixed dy=27 centers the ~54px chip vertically on the cursor,
+        // preventing tall notes from projecting the ghost chip high above the cursor.
+        const grabX = startX - rect.left;
+        const clampedDx = Math.min(Math.max(24, grabX), ghostWidth - 24);
+        const clampedDy = 27;
+
         setDrag({
           note,
           x: pointer.clientX,
           y: pointer.clientY,
-          dx: startX - rect.left,
-          dy: startY - rect.top,
-          w: rect.width,
+          dx: clampedDx,
+          dy: clampedDy,
+          w: ghostWidth,
         });
         document.body.style.cursor = "grabbing";
       } else {

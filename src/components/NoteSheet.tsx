@@ -157,6 +157,28 @@ export function NoteSheet({
     } catch {}
   }, []);
 
+  // Measure actual toolbar rendered width dynamically for fluid responsive scaling
+  const toolbarRef = useRef<HTMLDivElement>(null);
+  const [toolbarWidth, setToolbarWidth] = useState<number>(() => (width && width > 0 ? width : 580));
+
+  useLayoutEffect(() => {
+    const el = toolbarRef.current;
+    if (!el) return;
+    const ro = new ResizeObserver((entries) => {
+      for (const entry of entries) {
+        if (entry.contentRect.width > 0) {
+          setToolbarWidth(entry.contentRect.width);
+        }
+      }
+    });
+    ro.observe(el);
+    return () => ro.disconnect();
+  }, []);
+
+  const effectiveWidth = isMaximized ? 1200 : (toolbarWidth || width || 580);
+  const isTight = !isMaximized && effectiveWidth < 680;
+  const isVeryTight = !isMaximized && effectiveWidth < 520;
+
   // Load system fonts deferred to not block initial slide-in
   useEffect(() => {
     const timer = window.setTimeout(() => {
@@ -792,12 +814,15 @@ export function NoteSheet({
         </div>
 
         {/* Row 2: Mode Toggle & Formatting Tools */}
-        <div className={cx(
-          "flex w-full shrink-0 items-center justify-between gap-2 pb-2.5 pt-1 overflow-x-auto scrollbar-none pointer-events-auto border-b border-white/[0.06]",
-          isMaximized ? "px-6" : "px-3 sm:px-4",
-        )}>
-          <div className="flex items-center gap-1.5 shrink-0">
-            <ModeToggle rawMode={rawMode} onChange={setMode} compact={!isMaximized && (!width || width < 520)} large={isMaximized} />
+        <div
+          ref={toolbarRef}
+          className={cx(
+            "flex w-full shrink-0 items-center justify-between pb-2 pt-1 overflow-x-auto scrollbar-none pointer-events-auto border-b border-white/[0.06] transition-all duration-150",
+            isMaximized ? "px-6 gap-2" : (isVeryTight ? "px-2.5 gap-1" : "px-3 sm:px-4 gap-1.5"),
+          )}
+        >
+          <div className="flex items-center gap-1 shrink-0">
+            <ModeToggle rawMode={rawMode} onChange={setMode} compact={isTight} large={isMaximized} />
             {external && (
               <div className="flex min-w-0 items-center gap-1.5">
                 {saveError && (
@@ -826,7 +851,12 @@ export function NoteSheet({
           </div>
 
           {!rawMode && (
-          <div className="flex shrink-0 items-center gap-1 overflow-visible pointer-events-auto">
+          <div
+            className={cx(
+              "flex shrink-0 items-center overflow-visible pointer-events-auto transition-all duration-150",
+              isVeryTight ? "gap-0.5" : "gap-1",
+            )}
+          >
             <div ref={fontWrapRef} className="relative pointer-events-auto">
               <button
                 type="button"
@@ -836,18 +866,18 @@ export function NoteSheet({
                   setFontOpen((v) => !v);
                 }}
                 className={cx(
-                  "flex items-center gap-1.5 rounded-md text-ink-3 transition-all duration-200 ease-out hover:bg-white/[0.06] hover:text-ink-1 cursor-pointer pointer-events-auto shrink-0",
-                  isMaximized ? "h-8.5 px-2.5 text-[12px]" : "h-7 px-1.5 text-[11px]",
+                  "flex items-center gap-1 rounded-md text-ink-3 transition-all duration-150 ease-out hover:bg-white/[0.06] hover:text-ink-1 cursor-pointer pointer-events-auto shrink-0",
+                  isMaximized ? "h-8.5 px-2.5 text-[12px]" : (isVeryTight ? "h-6.5 px-1 text-[10.5px]" : "h-7 px-1.5 text-[11px]"),
                 )}
                 title={`Note typeface: ${cleanText(draft.font_family) || "Instrument Sans"}`}
               >
-                <Type size={isMaximized ? 14.5 : 12.5} strokeWidth={1.8} className="shrink-0" />
+                <Type size={isMaximized ? 14.5 : (isVeryTight ? 11.5 : 12.5)} strokeWidth={1.8} className="shrink-0" />
                 <span
                   className={cx(
-                    "truncate transition-all duration-200 ease-out overflow-hidden inline-block",
+                    "truncate transition-all duration-150 ease-out overflow-hidden inline-block",
                     isMaximized
                       ? "max-w-[140px] opacity-100 ml-1.5"
-                      : (width && width >= 580 ? "max-w-[85px] opacity-100 hidden sm:inline-block ml-1.5" : "hidden"),
+                      : (!isTight && effectiveWidth >= 640 ? "max-w-[85px] opacity-100 hidden sm:inline-block ml-1" : "hidden"),
                   )}
                 >
                   {cleanText(draft.font_family) || "Instrument Sans"}
@@ -978,7 +1008,7 @@ export function NoteSheet({
  )}
             </div>
 
-            <span className="mx-0.5 h-4 w-px bg-white/[0.08]" />
+            <span className={cx("h-3.5 w-px bg-white/[0.08] shrink-0", isVeryTight ? "mx-0" : "mx-0.5")} />
             <button
               type="button"
               onMouseDown={(e) => e.preventDefault()}
@@ -987,12 +1017,12 @@ export function NoteSheet({
               title="Bold text (Ctrl+B)"
               data-active={isBoldActive || undefined}
               className={cx(
-                "icon-btn cursor-pointer shrink-0 transition-all duration-200 ease-out",
-                isMaximized ? "!size-8.5" : "!size-7",
+                "icon-btn cursor-pointer shrink-0 transition-all duration-150 ease-out",
+                isMaximized ? "!size-8.5" : (isVeryTight ? "!size-6.5" : "!size-7"),
                 isBoldActive && "!bg-white/20 !text-white",
               )}
             >
-              <Bold size={isMaximized ? 14.5 : 12.5} strokeWidth={2.4} />
+              <Bold size={isMaximized ? 14.5 : (isVeryTight ? 11.5 : 12.5)} strokeWidth={2.4} />
             </button>
             <button
               type="button"
@@ -1002,17 +1032,17 @@ export function NoteSheet({
               title="Italic text (Ctrl+I)"
               data-active={isItalicActive || undefined}
               className={cx(
-                "icon-btn cursor-pointer shrink-0 transition-all duration-200 ease-out",
-                isMaximized ? "!size-8.5" : "!size-7",
+                "icon-btn cursor-pointer shrink-0 transition-all duration-150 ease-out",
+                isMaximized ? "!size-8.5" : (isVeryTight ? "!size-6.5" : "!size-7"),
                 isItalicActive && "!bg-white/20 !text-white",
               )}
             >
-              <Italic size={isMaximized ? 14.5 : 12.5} strokeWidth={2.4} />
+              <Italic size={isMaximized ? 14.5 : (isVeryTight ? 11.5 : 12.5)} strokeWidth={2.4} />
             </button>
 
-            <span className="mx-0.5 h-4 w-px bg-white/[0.08]" />
+            <span className={cx("h-3.5 w-px bg-white/[0.08] shrink-0", isVeryTight ? "mx-0" : "mx-0.5")} />
             <HeadingSelect
-              compact={!isMaximized && (!width || width < 520)}
+              compact={isTight}
               large={isMaximized}
               editorRef={editorRef}
               onSelect={(level) => runEditorCommand((ed) => applyHeading(ed, level))}
@@ -1024,11 +1054,11 @@ export function NoteSheet({
               aria-label="Insert table"
               title="Insert table (Ctrl+T)"
               className={cx(
-                "icon-btn cursor-pointer shrink-0 transition-all duration-200 ease-out",
-                isMaximized ? "!size-8.5" : "!size-7",
+                "icon-btn cursor-pointer shrink-0 transition-all duration-150 ease-out",
+                isMaximized ? "!size-8.5" : (isVeryTight ? "!size-6.5" : "!size-7"),
               )}
             >
-              <TableIcon size={isMaximized ? 15 : 13} strokeWidth={1.8} />
+              <TableIcon size={isMaximized ? 15 : (isVeryTight ? 12 : 13)} strokeWidth={1.8} />
             </button>
             <button
               type="button"
@@ -1037,11 +1067,11 @@ export function NoteSheet({
               aria-label="Task checkbox"
               title="Task checkbox (- [ ])"
               className={cx(
-                "icon-btn cursor-pointer shrink-0 transition-all duration-200 ease-out",
-                isMaximized ? "!size-8.5" : "!size-7",
+                "icon-btn cursor-pointer shrink-0 transition-all duration-150 ease-out",
+                isMaximized ? "!size-8.5" : (isVeryTight ? "!size-6.5" : "!size-7"),
               )}
             >
-              <ListChecks size={isMaximized ? 15.5 : 13.5} strokeWidth={1.8} />
+              <ListChecks size={isMaximized ? 15.5 : (isVeryTight ? 12.5 : 13.5)} strokeWidth={1.8} />
             </button>
             <button
               type="button"
@@ -1050,13 +1080,13 @@ export function NoteSheet({
               aria-label="Insert code block"
               title="Code block (```)"
               className={cx(
-                "icon-btn cursor-pointer shrink-0 transition-all duration-200 ease-out",
-                isMaximized ? "!size-8.5" : "!size-7",
+                "icon-btn cursor-pointer shrink-0 transition-all duration-150 ease-out",
+                isMaximized ? "!size-8.5" : (isVeryTight ? "!size-6.5" : "!size-7"),
               )}
             >
-              <Code size={isMaximized ? 15 : 13} strokeWidth={1.8} />
+              <Code size={isMaximized ? 15 : (isVeryTight ? 12 : 13)} strokeWidth={1.8} />
             </button>
-            <span className="mx-0.5 h-4 w-px bg-white/[0.08]" />
+            <span className={cx("h-3.5 w-px bg-white/[0.08] shrink-0", isVeryTight ? "mx-0" : "mx-0.5")} />
             <input
               ref={fileInputRef}
               type="file"
@@ -1090,16 +1120,19 @@ export function NoteSheet({
               aria-label="Attach media"
               title="Attach image (or paste screenshot directly with Ctrl+V)"
               data-active={(draft.media_urls && draft.media_urls.length > 0) || !!draft.media_url || undefined}
-              className={cx("icon-btn", isMaximized ? "!size-8.5" : "!size-7")}
+              className={cx(
+                "icon-btn cursor-pointer shrink-0 transition-all duration-150 ease-out",
+                isMaximized ? "!size-8.5" : (isVeryTight ? "!size-6.5" : "!size-7"),
+              )}
             >
-              <ImageIcon size={isMaximized ? 15 : 12.5} strokeWidth={1.7} />
+              <ImageIcon size={isMaximized ? 15 : (isVeryTight ? 11.5 : 12.5)} strokeWidth={1.7} />
             </button>
 
-            <span className="mx-0.5 h-4 w-px bg-white/[0.08]" />
+            <span className={cx("h-3.5 w-px bg-white/[0.08] shrink-0", isVeryTight ? "mx-0" : "mx-0.5")} />
             <div
               className={cx(
-                "flex items-center rounded-lg bg-white/[0.04] border border-white/10 px-1 shrink-0 transition-all duration-200 select-none",
-                isMaximized ? "h-8.5 gap-1" : "h-7 gap-0.5",
+                "flex items-center rounded-lg bg-white/[0.04] border border-white/10 shrink-0 transition-all duration-150 select-none",
+                isMaximized ? "h-8.5 gap-1 px-1.5" : (isVeryTight ? "h-6.5 gap-0.5 px-0.5" : "h-7 gap-0.5 px-1"),
               )}
               title="Note zoom: Ctrl+ to zoom in, Ctrl- to zoom out, Ctrl 0 to reset"
             >
@@ -1111,10 +1144,10 @@ export function NoteSheet({
                 title="Zoom out (Ctrl -)"
                 className={cx(
                   "grid place-items-center rounded text-ink-4 hover:text-white hover:bg-white/10 transition-colors cursor-pointer",
-                  isMaximized ? "size-6.5" : "size-5",
+                  isMaximized ? "size-6.5" : (isVeryTight ? "size-4.5" : "size-5"),
                 )}
               >
-                <ZoomOut size={isMaximized ? 13 : 11} strokeWidth={2} />
+                <ZoomOut size={isMaximized ? 13 : (isVeryTight ? 9.5 : 11)} strokeWidth={2} />
               </button>
               <button
                 type="button"
@@ -1123,8 +1156,8 @@ export function NoteSheet({
                 aria-label="Reset zoom"
                 title="Reset zoom to 100% (Ctrl 0)"
                 className={cx(
-                  "font-mono tabular-nums text-ink-3 hover:text-white px-1 transition-colors cursor-pointer",
-                  isMaximized ? "text-[11.5px]" : "text-[10px]",
+                  "font-mono tabular-nums text-ink-3 hover:text-white transition-colors cursor-pointer",
+                  isMaximized ? "text-[11.5px] px-1" : (isVeryTight ? "text-[9px] px-0.5" : "text-[10px] px-1"),
                 )}
               >
                 {zoom}%
@@ -1137,10 +1170,10 @@ export function NoteSheet({
                 title="Zoom in (Ctrl +)"
                 className={cx(
                   "grid place-items-center rounded text-ink-4 hover:text-white hover:bg-white/10 transition-colors cursor-pointer",
-                  isMaximized ? "size-6.5" : "size-5",
+                  isMaximized ? "size-6.5" : (isVeryTight ? "size-4.5" : "size-5"),
                 )}
               >
-                <ZoomIn size={isMaximized ? 13 : 11} strokeWidth={2} />
+                <ZoomIn size={isMaximized ? 13 : (isVeryTight ? 9.5 : 11)} strokeWidth={2} />
               </button>
             </div>
 
