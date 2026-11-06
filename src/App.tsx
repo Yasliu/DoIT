@@ -362,7 +362,7 @@ export default function App() {
 
   const newNote = useCallback(
     (shelf?: string) => {
-      const target = shelf ?? active ?? shelves[0] ?? "Uncategorized";
+      const target = shelf ?? active ?? shelves.find((s) => s.toLowerCase() !== "uncategorized") ?? shelves[0] ?? "Uncategorized";
       const created = create(target);
       setIsNoteMaximized(false);
       setSheetClosing(false);

@@ -71,6 +71,15 @@ export interface AppSettings {
   hotkey_table_col?: string;
   hotkey_table_row?: string;
   hotkey_task?: string;
+  hotkey_strikethrough?: string;
+  hotkey_highlight?: string;
+  hotkey_inline_code?: string;
+  hotkey_link?: string;
+  hotkey_ordered_list?: string;
+  hotkey_blockquote?: string;
+  hotkey_footnote?: string;
+  hotkey_subscript?: string;
+  hotkey_superscript?: string;
   theme_mode?: "glass" | "monochrome";
   dock_on_close?: boolean;
   last_seen_version?: string;

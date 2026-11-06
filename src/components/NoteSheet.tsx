@@ -41,6 +41,17 @@ import {
   applyHeading,
   insertTableAtCaret,
   insertCodeBlockAtCaret,
+  applyOrderedList,
+  applyBlockquote,
+  applyDefinitionList,
+  applyInlineCode,
+  applyLink,
+  applyFootnote,
+  applyStrikethrough,
+  applyHighlight,
+  applySubscript,
+  applySuperscript,
+  insertEmojiAtCaret,
   isCaretAtEditorStart,
   placeCaretAtEditorStart,
   fixCheckboxCaret,
@@ -1049,8 +1060,19 @@ export function NoteSheet({
               editorRef={editorRef}
               onInsertTable={() => runEditorCommand((ed) => insertTableAtCaret(ed))}
               onInsertTask={() => runEditorCommand((ed) => applyTask(ed))}
+              onInsertOrderedList={() => runEditorCommand((ed) => applyOrderedList(ed))}
+              onInsertBlockquote={() => runEditorCommand((ed) => applyBlockquote(ed))}
               onInsertCode={() => runEditorCommand((ed) => insertCodeBlockAtCaret(ed))}
+              onInsertDefinitionList={() => runEditorCommand((ed) => applyDefinitionList(ed))}
               onAttachImage={() => fileInputRef.current?.click()}
+              onInsertInlineCode={() => runEditorCommand((ed) => applyInlineCode(ed))}
+              onInsertLink={() => runEditorCommand((ed) => applyLink(ed))}
+              onInsertFootnote={() => runEditorCommand((ed) => applyFootnote(ed))}
+              onInsertStrikethrough={() => runEditorCommand((ed) => applyStrikethrough(ed))}
+              onInsertHighlight={() => runEditorCommand((ed) => applyHighlight(ed))}
+              onInsertSubscript={() => runEditorCommand((ed) => applySubscript(ed))}
+              onInsertSuperscript={() => runEditorCommand((ed) => applySuperscript(ed))}
+              onInsertEmoji={(emoji) => runEditorCommand((ed) => insertEmojiAtCaret(ed, emoji))}
               hasMedia={Boolean((draft.media_urls && draft.media_urls.length > 0) || draft.media_url)}
               large={isMaximized}
               compact={isVeryTight}

@@ -729,7 +729,67 @@ html[data-theme="monochrome"] .lightscape {
 .md-h4, .md-h5, .md-h6 { font-size: 1.04em; font-weight: 600; line-height: 1.4; margin: 0.25em 0 0.05em; }
 .md-li { position: relative; padding-left: 1.4em; }
 .md-li::before { content: "\2022"; position: absolute; left: 0.4em; color: rgba(255, 255, 255, 0.6); }
+.md-ol { position: relative; padding-left: 1.8em; }
+.md-ol::before {
+  content: attr(data-p);
+  position: absolute;
+  left: 0.2em;
+  color: rgba(255, 255, 255, 0.55);
+  font-variant-numeric: tabular-nums;
+  font-size: 0.9em;
+  line-height: 1.6;
+}
+.md-dd { position: relative; padding-left: 1.8em; color: rgba(236, 238, 241, 0.85); }
+.md-dd::before {
+  content: ":";
+  position: absolute;
+  left: 0.6em;
+  font-weight: 700;
+  color: rgba(255, 255, 255, 0.45);
+}
+.md-footnote-def {
+  border-left: 2px solid rgba(165, 180, 252, 0.4);
+  padding-left: 0.8em;
+  font-size: 0.9em;
+  color: rgba(236, 238, 241, 0.78);
+  margin: 0.25em 0;
+}
+.md-fn-badge {
+  color: #a5b4fc;
+  font-family: "JetBrains Mono", ui-monospace, SFMono-Regular, Consolas, monospace;
+  font-size: 0.85em;
+  margin-right: 0.4em;
+  user-select: none;
+}
 .md-quote { border-left: 2px solid rgba(255, 255, 255, 0.28); padding-left: 0.9em; color: rgba(236, 238, 241, 0.72); }
+.md-del { text-decoration: line-through; opacity: 0.7; }
+.md-mark {
+  background: rgba(250, 204, 21, 0.22);
+  color: #fef08a;
+  padding: 0.1em 0.35em;
+  border-radius: 4px;
+  border: 1px solid rgba(250, 204, 21, 0.35);
+}
+.md-link {
+  color: #60a5fa;
+  text-decoration: underline;
+  text-underline-offset: 2.5px;
+  cursor: pointer;
+  transition: color 0.15s ease;
+}
+.md-link:hover { color: #93c5fd; }
+.md-sub { font-size: 0.78em; vertical-align: sub; line-height: 0; color: rgba(255, 255, 255, 0.9); }
+.md-sup { font-size: 0.78em; vertical-align: super; line-height: 0; color: rgba(255, 255, 255, 0.9); }
+.md-footnote-ref {
+  font-size: 0.75em;
+  vertical-align: super;
+  line-height: 0;
+  color: #a5b4fc;
+  font-family: "JetBrains Mono", ui-monospace, SFMono-Regular, Consolas, monospace;
+  font-weight: 600;
+  padding: 0 2px;
+  cursor: pointer;
+}
 .md-hr { padding: 0.55em 0; user-select: none; }
 .md-hr hr { border: 0; border-top: 1px solid rgba(255, 255, 255, 0.14); margin: 0; }
 .md-pre {

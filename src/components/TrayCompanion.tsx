@@ -52,6 +52,17 @@ import {
   applyHeading,
   insertTableAtCaret,
   insertCodeBlockAtCaret,
+  applyOrderedList,
+  applyBlockquote,
+  applyDefinitionList,
+  applyInlineCode,
+  applyLink,
+  applyFootnote,
+  applyStrikethrough,
+  applyHighlight,
+  applySubscript,
+  applySuperscript,
+  insertEmojiAtCaret,
   setMarkdownBaseDir,
   isCaretAtEditorStart,
   placeCaretAtEditorStart,
@@ -170,7 +181,16 @@ export function TrayCompanion() {
     [notes, activeNoteId],
   );
 
-  const shelves = useMemo(() => categories.map((c) => c.name), [categories]);
+  const shelves = useMemo(() => {
+    const list = categories.map((c) => c.name);
+    return list.sort((a, b) => {
+      const aUn = a.toLowerCase() === "uncategorized";
+      const bUn = b.toLowerCase() === "uncategorized";
+      if (aUn && !bUn) return 1;
+      if (!aUn && bUn) return -1;
+      return a.localeCompare(b, undefined, { sensitivity: "base" });
+    });
+  }, [categories]);
   const rawMode = activeNote?.format === "txt";
   const [tableMenu, setTableMenu] = useState<{ x: number; y: number; cell: HTMLElement } | null>(null);
 
@@ -980,8 +1000,19 @@ export function TrayCompanion() {
                 editorRef={editorRef}
                 onInsertTable={() => runEditorCommand((ed) => insertTableAtCaret(ed))}
                 onInsertTask={() => runEditorCommand((ed) => applyTask(ed))}
+                onInsertOrderedList={() => runEditorCommand((ed) => applyOrderedList(ed))}
+                onInsertBlockquote={() => runEditorCommand((ed) => applyBlockquote(ed))}
                 onInsertCode={() => runEditorCommand((ed) => insertCodeBlockAtCaret(ed))}
+                onInsertDefinitionList={() => runEditorCommand((ed) => applyDefinitionList(ed))}
                 onAttachImage={() => fileInputRef.current?.click()}
+                onInsertInlineCode={() => runEditorCommand((ed) => applyInlineCode(ed))}
+                onInsertLink={() => runEditorCommand((ed) => applyLink(ed))}
+                onInsertFootnote={() => runEditorCommand((ed) => applyFootnote(ed))}
+                onInsertStrikethrough={() => runEditorCommand((ed) => applyStrikethrough(ed))}
+                onInsertHighlight={() => runEditorCommand((ed) => applyHighlight(ed))}
+                onInsertSubscript={() => runEditorCommand((ed) => applySubscript(ed))}
+                onInsertSuperscript={() => runEditorCommand((ed) => applySuperscript(ed))}
+                onInsertEmoji={(emoji) => runEditorCommand((ed) => insertEmojiAtCaret(ed, emoji))}
                 hasMedia={Boolean((activeNote.media_urls && activeNote.media_urls.length > 0) || activeNote.media_url)}
                 compact
               />

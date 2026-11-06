@@ -2,6 +2,7 @@ import React from "react";
 import { convertFileSrc } from "@tauri-apps/api/core";
 import type { ContentItem } from "../api/tauriBridge";
 import { getMarkdownShortcuts, matchesCombo } from "./shortcuts";
+import { EMOJI_MAP } from "./emoji";
 
 /**
  * Renders inline markdown bold and italic formatting without raw asterisks.
@@ -60,9 +61,9 @@ function resolveImageSrc(raw: string): string | null {
 }
 
 export function inlineMarkdownToHtml(line: string): string {
-  // Pull images out first so their paths are never touched by bold/italic rules
+  // Pull images out first so their paths are never touched by other rules
   const images: string[] = [];
-  const work = line.replace(IMAGE_MD, (match: string, alt: string, src: string) => {
+  let work = line.replace(IMAGE_MD, (match: string, alt: string, src: string) => {
     const url = resolveImageSrc(src);
     if (!url) return match;
     images.push(
@@ -71,7 +72,22 @@ export function inlineMarkdownToHtml(line: string): string {
     return `\u0001${images.length - 1}\u0002`;
   });
 
+  // Pull links out next: [title](url)
+  const links: string[] = [];
+  work = work.replace(/\[([^\]\n]+)\]\(([^)\n\s]+)\)/g, (_m: string, title: string, url: string) => {
+    links.push(
+      `<a class="md-link" href="${escapeAttr(url)}" target="_blank" rel="noopener noreferrer" contenteditable="false" title="${escapeAttr(url)}">${escapeHtml(title)}</a>`,
+    );
+    return `\u0003${links.length - 1}\u0004`;
+  });
+
   let formatted = escapeHtml(work);
+
+  // Emojis: :name: -> emoji
+  formatted = formatted.replace(/:([a-z0-9_+-]+):/g, (match, name) => EMOJI_MAP[name] ?? match);
+
+  // Footnote references: [^1]
+  formatted = formatted.replace(/\[\^([^\]\n]+)\](?!:)/g, '<sup class="md-footnote-ref" data-fn="$1">[$1]</sup>');
 
   // Replace bold+italic ***text*** -> <strong><em>text</em></strong>
   formatted = formatted.replace(/\*\*\*([^*]+?)\*\*\*/g, "<strong><em>$1</em></strong>");
@@ -79,9 +95,20 @@ export function inlineMarkdownToHtml(line: string): string {
   formatted = formatted.replace(/\*\*([^*]+?)\*\*/g, "<strong>$1</strong>");
   // Replace italic *text* -> <em>text</em>
   formatted = formatted.replace(/(?<!\*)\*([^*]+?)\*(?!\*)/g, "<em>$1</em>");
-  // Replace inline code `text` -> <code class="md-code">text</code>
-  formatted = formatted.replace(/(?<!`)(`)([^`\n]+?)\1(?!`)/g, '<code class="md-code">$2</code>');
+  // Replace strikethrough ~~text~~ -> <del class="md-del">$1</del>
+  formatted = formatted.replace(/~~([^~\n]+?)~~/g, '<del class="md-del">$1</del>');
+  // Replace highlight ===text=== or ==text== -> <mark class="md-mark">$1</mark>
+  formatted = formatted.replace(/(?:===|==)([^=\n]+?)(?:===|==)/g, '<mark class="md-mark">$1</mark>');
+  // Replace inline code `text` -> <code class="md-code">$2</code>
+  formatted = formatted.replace(/(?<!`)([`])([^`\n]+?)\1(?!`)/g, '<code class="md-code">$2</code>');
+  // Replace subscript ~text~ (single ~ not adjacent to ~)
+  formatted = formatted.replace(/(?<!~)~([^~\s\n]+?)~(?!~)/g, '<sub class="md-sub">$1</sub>');
+  // Replace superscript ^text^ or letter^number (e.g. x^2)
+  formatted = formatted.replace(/\^([^^ \n]+?)\^/g, '<sup class="md-sup">$1</sup>');
+  formatted = formatted.replace(/([a-zA-Z0-9])\^(\d+)\b/g, '$1<sup class="md-sup">$2</sup>');
 
+  // Restore links and images
+  formatted = formatted.replace(/\u0003(\d+)\u0004/g, (_m: string, i: string) => links[Number(i)] ?? "");
   return formatted.replace(/\u0001(\d+)\u0002/g, (_m: string, i: string) => images[Number(i)] ?? "");
 }
 
@@ -123,6 +150,15 @@ function blockPrefix(text: string, typed = false): { cls: string; prefix: string
       };
     }
   }
+  const ol = text.match(/^(\s*\d+\.\s+)/);
+  if (ol) return { cls: "md-ol", prefix: ol[1], consumed: ol[1].length };
+
+  const fn = text.match(/^(\[\^([^\]\n]+)\]:\s*)/);
+  if (fn) return { cls: "md-footnote-def", prefix: fn[1], consumed: fn[1].length };
+
+  const dl = text.match(/^(:{1,2}\s+)/);
+  if (dl) return { cls: "md-dd", prefix: dl[1], consumed: dl[1].length };
+
   const h = text.match(/^(#{1,6})\s+/);
   if (h) return { cls: `md-h${h[1].length}`, prefix: h[0], consumed: h[0].length };
   const li = text.match(/^(\s*[-*\u2022]\s+)/);
@@ -245,8 +281,9 @@ export function markdownToHtml(md: string): string {
     if (info) {
       const rest = line.slice(info.consumed);
       const cb = info.cls.startsWith("md-task") ? CHECKBOX_HTML : "";
+      const fnBadge = info.cls === "md-footnote-def" ? `<span class="md-fn-badge" contenteditable="false">${escapeHtml(info.prefix)}</span>` : "";
       out.push(
-        `<div class="${info.cls}" data-p="${escapeAttr(info.prefix)}">${cb}${rest ? inlineMarkdownToHtml(rest) : "<br>"}</div>`,
+        `<div class="${info.cls}" data-p="${escapeAttr(info.prefix)}">${cb}${fnBadge}${rest ? inlineMarkdownToHtml(rest) : "<br>"}</div>`,
       );
       continue;
     }
@@ -566,7 +603,26 @@ export function htmlToMarkdown(container: HTMLElement): string {
     const el = node as HTMLElement;
     const tag = el.tagName.toUpperCase();
 
-    if (el.classList.contains("md-cb")) return;
+    if (el.classList.contains("md-cb") || el.classList.contains("md-fn-badge")) return;
+
+    if (tag === "A") {
+      const href = el.getAttribute("href") || "";
+      const text = el.textContent || "";
+      cur += `[${text}](${href})`;
+      return;
+    }
+
+    if (tag === "CODE" || el.classList.contains("md-code")) {
+      const codeText = el.textContent || "";
+      cur += `\`${codeText}\``;
+      return;
+    }
+
+    if (el.classList.contains("md-footnote-ref") || (tag === "SUP" && el.hasAttribute("data-fn"))) {
+      const fnId = el.getAttribute("data-fn") || (el.textContent || "").replace(/[\[\]]/g, "") || "1";
+      cur += `[^${fnId}]`;
+      return;
+    }
 
     if (el.classList.contains("md-tablewrap")) {
       if (cur !== "") flush();
@@ -618,18 +674,29 @@ export function htmlToMarkdown(container: HTMLElement): string {
       el.style.fontWeight === "bold" ||
       parseInt(el.style.fontWeight, 10) >= 600;
     const isItalic = tag === "EM" || tag === "I" || el.style.fontStyle === "italic";
+    const isDel = tag === "DEL" || tag === "S" || tag === "STRIKE" || el.classList.contains("md-del") || (el.style.textDecoration && el.style.textDecoration.includes("line-through"));
+    const isMark = tag === "MARK" || el.classList.contains("md-mark");
+    const isSub = tag === "SUB" || el.classList.contains("md-sub");
+    const isSup = tag === "SUP" || el.classList.contains("md-sup");
 
     const before = cur;
     const startLines = lines.length;
     for (const child of Array.from(el.childNodes)) walk(child);
 
-    if ((isBold || isItalic) && lines.length === startLines) {
+    if ((isBold || isItalic || isDel || isMark || isSub || isSup) && lines.length === startLines) {
       const inner = cur.slice(before.length);
       const trimmed = inner.trim();
       if (trimmed) {
         const lead = inner.match(/^\s*/)?.[0] || "";
         const trail = inner.match(/\s*$/)?.[0] || "";
-        const mark = isBold && isItalic ? "***" : isBold ? "**" : "*";
+        let mark = "";
+        if (isBold && isItalic) mark = "***";
+        else if (isBold) mark = "**";
+        else if (isItalic) mark = "*";
+        else if (isDel) mark = "~~";
+        else if (isMark) mark = "==";
+        else if (isSub) mark = "~";
+        else if (isSup) mark = "^";
         cur = `${before}${lead}${mark}${trimmed}${mark}${trail}`;
       }
     }
@@ -716,7 +783,28 @@ export function handleRichEditorKeyDown(
   const headingLevel = matchesCombo(e, sc.h1) ? 1 : matchesCombo(e, sc.h2) ? 2 : matchesCombo(e, sc.h3) ? 3 : 0;
   const wantsTable = matchesCombo(e, sc.table);
   const wantsTask = matchesCombo(e, sc.task);
-  const isShortcut = headingLevel > 0 || wantsTable || wantsTask;
+  const wantsDel = matchesCombo(e, sc.strikethrough);
+  const wantsMark = matchesCombo(e, sc.highlight);
+  const wantsCode = matchesCombo(e, sc.inlineCode);
+  const wantsLink = matchesCombo(e, sc.link);
+  const wantsOl = matchesCombo(e, sc.orderedList);
+  const wantsQuote = matchesCombo(e, sc.blockquote);
+  const wantsSub = matchesCombo(e, sc.subscript);
+  const wantsSup = matchesCombo(e, sc.superscript);
+  const wantsFn = matchesCombo(e, sc.footnote);
+  const isShortcut =
+    headingLevel > 0 ||
+    wantsTable ||
+    wantsTask ||
+    wantsDel ||
+    wantsMark ||
+    wantsCode ||
+    wantsLink ||
+    wantsOl ||
+    wantsQuote ||
+    wantsSub ||
+    wantsSup ||
+    wantsFn;
 
   // ---- inside a table cell ----
   const cell = startEl?.closest("td,th") as HTMLElement | null;
@@ -811,7 +899,16 @@ export function handleRichEditorKeyDown(
     e.preventDefault();
     if (wantsTable) insertTableAtCaret(editor);
     else if (wantsTask) applyTask(editor);
-    else applyHeading(editor, headingLevel);
+    else if (headingLevel > 0) applyHeading(editor, headingLevel);
+    else if (wantsDel) applyStrikethrough(editor);
+    else if (wantsMark) applyHighlight(editor);
+    else if (wantsCode) applyInlineCode(editor);
+    else if (wantsLink) applyLink(editor);
+    else if (wantsOl) applyOrderedList(editor);
+    else if (wantsQuote) applyBlockquote(editor);
+    else if (wantsSub) applySubscript(editor);
+    else if (wantsSup) applySuperscript(editor);
+    else if (wantsFn) applyFootnote(editor);
     onInput();
     return true;
   }
@@ -821,6 +918,9 @@ export function handleRichEditorKeyDown(
 
   const isList = block.classList.contains("md-li") || block.classList.contains("md-quote");
   const isTask = block.classList.contains("md-task");
+  const isOl = block.classList.contains("md-ol");
+  const isDd = block.classList.contains("md-dd");
+  const isFnDef = block.classList.contains("md-footnote-def");
   const isHeading = /\bmd-h\d\b/.test(block.className);
   const hasPrefix = block.hasAttribute("data-p");
 
@@ -858,7 +958,7 @@ export function handleRichEditorKeyDown(
     }
   }
 
-  if (!hasPrefix && !isList && !isTask && !isHeading) {
+  if (!hasPrefix && !isList && !isTask && !isHeading && !isOl && !isDd && !isFnDef) {
     if (e.key === "Backspace" && caretOffsetIn(block, range) === 0) {
       const prev = block.previousElementSibling;
       if (prev && prev instanceof HTMLElement && (prev.classList.contains("md-hr") || prev.hasAttribute("data-raw"))) {
@@ -872,7 +972,7 @@ export function handleRichEditorKeyDown(
   }
 
   if (e.key === "Enter") {
-    if (isEmpty && (isList || isTask || isHeading)) {
+    if (isEmpty && (isList || isTask || isHeading || isOl || isDd || isFnDef)) {
       // Empty bullet / task / quote / heading line: exit to normal text paragraph!
       e.preventDefault();
       clearPrefix(block);
@@ -903,6 +1003,22 @@ export function handleRichEditorKeyDown(
       const next = document.createElement("div");
       next.setAttribute("data-p", block.getAttribute("data-p") || "- ");
       next.className = block.className || "md-li";
+      next.appendChild(document.createElement("br"));
+      block.after(next);
+      placeCaretStart(next);
+      onInput();
+      return true;
+    }
+
+    if (isOl && caretAtEnd(block, range)) {
+      e.preventDefault();
+      const currentPrefix = block.getAttribute("data-p") || "1. ";
+      const numMatch = currentPrefix.match(/\d+/);
+      const nextNum = numMatch ? parseInt(numMatch[0], 10) + 1 : 1;
+      const nextPrefix = `${nextNum}. `;
+      const next = document.createElement("div");
+      next.setAttribute("data-p", nextPrefix);
+      next.className = "md-ol";
       next.appendChild(document.createElement("br"));
       block.after(next);
       placeCaretStart(next);
@@ -953,7 +1069,7 @@ export function handleRichEditorKeyDown(
       onInput();
       return true;
     }
-    if (isList || isTask || isHeading || hasPrefix) {
+    if (isList || isTask || isHeading || hasPrefix || isOl || isDd || isFnDef) {
       e.preventDefault();
       clearPrefix(block);
       placeCaretStart(block);
@@ -1073,7 +1189,7 @@ function caretAtEnd(block: HTMLElement, range: Range): boolean {
 function clearPrefix(block: HTMLElement): void {
   block.removeAttribute("data-p");
   block.removeAttribute("class");
-  block.querySelectorAll(".md-cb").forEach((b) => b.remove());
+  block.querySelectorAll(".md-cb, .md-fn-badge").forEach((b) => b.remove());
   if (!block.firstChild) block.appendChild(document.createElement("br"));
 }
 
@@ -1341,3 +1457,201 @@ export function deleteTableColumn(cell: HTMLElement): boolean {
   if (target) selectContents(target, true);
   return true;
 }
+
+/**
+ * Wraps the current selection with prefix and suffix, or inserts a placeholder.
+ */
+export function applyInlineWrapper(editor: HTMLElement, prefix: string, suffix: string, defaultPlaceholder = "text"): void {
+  const sel = window.getSelection();
+  if (!sel || sel.rangeCount === 0 || !editor.contains(sel.anchorNode)) editor.focus();
+  const currentSel = window.getSelection();
+  if (!currentSel || currentSel.rangeCount === 0) return;
+  const range = currentSel.getRangeAt(0);
+
+  if (range.collapsed) {
+    const textNode = document.createTextNode(`${prefix}${defaultPlaceholder}${suffix}`);
+    range.insertNode(textNode);
+    const newRange = document.createRange();
+    newRange.setStart(textNode, prefix.length);
+    newRange.setEnd(textNode, prefix.length + defaultPlaceholder.length);
+    currentSel.removeAllRanges();
+    currentSel.addRange(newRange);
+  } else {
+    const selectedText = range.toString();
+    const textNode = document.createTextNode(`${prefix}${selectedText}${suffix}`);
+    range.deleteContents();
+    range.insertNode(textNode);
+    const newRange = document.createRange();
+    newRange.setStart(textNode, prefix.length);
+    newRange.setEnd(textNode, prefix.length + selectedText.length);
+    currentSel.removeAllRanges();
+    currentSel.addRange(newRange);
+  }
+}
+
+export function applyInlineCode(editor: HTMLElement): void {
+  applyInlineWrapper(editor, "`", "`", "code");
+}
+
+export function applyStrikethrough(editor: HTMLElement): void {
+  applyInlineWrapper(editor, "~~", "~~", "strikethrough");
+}
+
+export function applyHighlight(editor: HTMLElement): void {
+  applyInlineWrapper(editor, "==", "==", "highlight");
+}
+
+export function applySubscript(editor: HTMLElement): void {
+  applyInlineWrapper(editor, "~", "~", "subscript");
+}
+
+export function applySuperscript(editor: HTMLElement): void {
+  applyInlineWrapper(editor, "^", "^", "superscript");
+}
+
+export function applyLink(editor: HTMLElement, customUrl?: string): void {
+  const sel = window.getSelection();
+  if (!sel || sel.rangeCount === 0 || !editor.contains(sel.anchorNode)) editor.focus();
+  const currentSel = window.getSelection();
+  if (!currentSel || currentSel.rangeCount === 0) return;
+  const range = currentSel.getRangeAt(0);
+
+  const selectedText = range.collapsed ? "Link title" : range.toString();
+  const url = customUrl || "https://";
+  const linkText = `[${selectedText}](${url})`;
+  const textNode = document.createTextNode(linkText);
+  range.deleteContents();
+  range.insertNode(textNode);
+
+  const newRange = document.createRange();
+  const urlStart = 1 + selectedText.length + 2;
+  newRange.setStart(textNode, urlStart);
+  newRange.setEnd(textNode, urlStart + url.length);
+  currentSel.removeAllRanges();
+  currentSel.addRange(newRange);
+}
+
+export function applyFootnote(editor: HTMLElement): void {
+  const sel = window.getSelection();
+  if (!sel || sel.rangeCount === 0 || !editor.contains(sel.anchorNode)) editor.focus();
+  const currentSel = window.getSelection();
+  if (!currentSel || currentSel.rangeCount === 0) return;
+  const range = currentSel.getRangeAt(0);
+
+  const allText = editor.textContent || "";
+  const matches = allText.match(/\[\^(\d+)\]/g);
+  let nextIdx = 1;
+  if (matches) {
+    const nums = matches.map((m) => parseInt(m.slice(2, -1), 10)).filter((n) => !isNaN(n));
+    if (nums.length > 0) nextIdx = Math.max(...nums) + 1;
+  }
+
+  const fnRef = `[^${nextIdx}]`;
+  const textNode = document.createTextNode(fnRef);
+  range.deleteContents();
+  range.insertNode(textNode);
+
+  const fnDefLine = document.createElement("div");
+  fnDefLine.setAttribute("data-p", `[^${nextIdx}]: `);
+  fnDefLine.className = "md-footnote-def";
+  const badge = document.createElement("span");
+  badge.className = "md-fn-badge";
+  badge.setAttribute("contenteditable", "false");
+  badge.textContent = `[^${nextIdx}]: `;
+  fnDefLine.appendChild(badge);
+  fnDefLine.appendChild(document.createTextNode("Footnote explanation"));
+  editor.appendChild(fnDefLine);
+
+  const newRange = document.createRange();
+  newRange.setStartAfter(textNode);
+  newRange.collapse(true);
+  currentSel.removeAllRanges();
+  currentSel.addRange(newRange);
+}
+
+export function applyOrderedList(editor: HTMLElement): void {
+  wrapStrayNodes(editor);
+  let block = currentBlock(editor);
+  if (!block) block = editor.lastElementChild as HTMLElement | null;
+  if (!block) {
+    block = document.createElement("div");
+    block.appendChild(document.createElement("br"));
+    editor.appendChild(block);
+  }
+  if (block.tagName !== "DIV" || isSpecialBlock(block)) return;
+
+  if (block.classList.contains("md-ol")) {
+    clearPrefix(block);
+    return;
+  }
+  block.querySelectorAll(".md-cb, .md-fn-badge").forEach((b) => b.remove());
+  block.setAttribute("data-p", "1. ");
+  block.className = "md-ol";
+}
+
+export function applyBlockquote(editor: HTMLElement): void {
+  wrapStrayNodes(editor);
+  let block = currentBlock(editor);
+  if (!block) block = editor.lastElementChild as HTMLElement | null;
+  if (!block) {
+    block = document.createElement("div");
+    block.appendChild(document.createElement("br"));
+    editor.appendChild(block);
+  }
+  if (block.tagName !== "DIV" || isSpecialBlock(block)) return;
+
+  if (block.classList.contains("md-quote")) {
+    clearPrefix(block);
+    return;
+  }
+  block.querySelectorAll(".md-cb, .md-fn-badge").forEach((b) => b.remove());
+  block.setAttribute("data-p", "> ");
+  block.className = "md-quote";
+}
+
+export function applyDefinitionList(editor: HTMLElement): void {
+  wrapStrayNodes(editor);
+  let block = currentBlock(editor);
+  if (!block) block = editor.lastElementChild as HTMLElement | null;
+  if (!block) {
+    block = document.createElement("div");
+    block.appendChild(document.createElement("br"));
+    editor.appendChild(block);
+  }
+  if (block.tagName !== "DIV" || isSpecialBlock(block)) return;
+
+  if (block.classList.contains("md-dd")) {
+    clearPrefix(block);
+    return;
+  }
+  const termText = block.textContent?.trim() || "Term";
+  block.textContent = termText;
+  block.removeAttribute("data-p");
+  block.removeAttribute("class");
+
+  const defLine = document.createElement("div");
+  defLine.setAttribute("data-p", ": ");
+  defLine.className = "md-dd";
+  defLine.appendChild(document.createTextNode("Definition here"));
+  block.after(defLine);
+
+  selectContents(defLine, true);
+}
+
+export function insertEmojiAtCaret(editor: HTMLElement, emoji: string): void {
+  const sel = window.getSelection();
+  if (!sel || sel.rangeCount === 0 || !editor.contains(sel.anchorNode)) editor.focus();
+  const currentSel = window.getSelection();
+  if (!currentSel || currentSel.rangeCount === 0) return;
+  const range = currentSel.getRangeAt(0);
+
+  const textNode = document.createTextNode(emoji);
+  range.deleteContents();
+  range.insertNode(textNode);
+  const newRange = document.createRange();
+  newRange.setStartAfter(textNode);
+  newRange.collapse(true);
+  currentSel.removeAllRanges();
+  currentSel.addRange(newRange);
+}
+

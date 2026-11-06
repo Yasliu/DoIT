@@ -1,5 +1,39 @@
 # DoIT Developer Architecture & Engineering Changelog
 
+## [2026-11-06] - Version 1.1.9: Comprehensive Markdown Engine Expansion, Persistent Uncategorized Anchor, & Extended Insert Menu
+
+### 20. Extended Markdown Grammar, Bottom-Pinned Uncategorized Shelf, & Multi-Tool Formatting Burger Dropdown (`src/lib/format.tsx`, `src/lib/shortcuts.ts`, `src/components/InsertMenu.tsx`, `src/components/NoteSheet.tsx`, `src/components/TrayCompanion.tsx`, `src/components/SettingsPanel.tsx`, `src/hooks/useWorkspace.ts`)
+- **Bottom-Pinned Uncategorized Shelf (`useWorkspace.ts`, `TrayCompanion.tsx`, `Sidebar.tsx`, `BentoCanvas.tsx`)**:
+  - Pinned the `Uncategorized` shelf to always sort at the very bottom across both the sidebar shelf list and the canvas dashboard.
+  - Custom user-created categories remain cleanly alphabetized above it.
+- **Ordered List Engine (`format.tsx`)**:
+  - Added support for ordered lists (`1. `, `2. `, etc.) with live prefix detection, sequential counter continuation on <kbd>Enter</kbd>, and clean exit on <kbd>Backspace</kbd> or empty lines.
+  - Added keyboard shortcut `Ctrl+Shift+7` and burger menu trigger.
+- **Inline Code Formatting (`format.tsx`, `globals.css`)**:
+  - Full bidirectional support for inline code (`` `code` ``) with monospaced styling and tag serialization.
+  - Added shortcut `Ctrl+\`` and burger menu trigger.
+- **Markdown Links (`format.tsx`, `globals.css`)**:
+  - Full support for `[title](url)` markdown links with blue styling, title attributes, and shortcut `Ctrl+K`.
+- **Footnotes & Footnote Definitions (`format.tsx`, `globals.css`)**:
+  - Added inline footnote references (`[^1]`) and footnote definition blocks (`[^1]: Explanation`) with badge indicators.
+  - Added shortcut `Ctrl+Shift+F` and burger menu trigger.
+- **Definition Lists (`format.tsx`, `globals.css`)**:
+  - Added support for definition lists (`Term` followed by `: Definition`).
+- **Strikethrough, Highlight, Subscript & Superscript (`format.tsx`, `globals.css`)**:
+  - Strikethrough (`~~text~~`) with shortcut `Ctrl+Shift+X`.
+  - Highlight (`==word==` and `===word===`) with radiant yellow background and shortcut `Ctrl+Shift+H`.
+  - Subscript (`H~2~O`) with shortcut `Ctrl+,`.
+  - Superscript (`x^2^` / `x^2`) with shortcut `Ctrl+.`.
+- **Markdown Emoji Shortcodes (`emoji.ts`, `format.tsx`)**:
+  - Replaces `:name:` shortcodes (e.g. `:fire:`, `:rocket:`, `:smile:`, `:check:`) with unicode emoji.
+  - Added quick emoji row in the burger menu.
+- **Comprehensive Insert Burger Dropdown (`InsertMenu.tsx`)**:
+  - Consolidated all block tools (Table, Checklist, Numbered List, Blockquote, Code Block, Definition List, Attach Image) and inline styling (Inline Code, Link, Strikethrough, Highlight, Subscript, Superscript, Footnote, Quick Emojis) into a portaled, auto-flipping dropdown.
+- **Settings & Shortcut Guide (`SettingsPanel.tsx`)**:
+  - Added editable shortcuts for all new formatting options.
+  - Added explicit mention of blockquote trigger `>` at line start.
+  - Added a dedicated "Markdown Live Typing Triggers & Shortcuts" guide card.
+
 ## [2026-11-06] - Version 1.1.8: Note Zoom Engine, Scroll-Proof Bento Drag & Drop, Restored Blurred Glass Mode & Community Bug Reporting
 
 ### 19. Note Zoom Controls, Bento Drag Coordinate Portaling, Glass Mode Texture Restoration & Issue Tracker Tile (`src/components/NoteSheet.tsx`, `src/components/BentoCanvas.tsx`, `src/styles/globals.css`, `src/components/SettingsPanel.tsx`, `src/components/CategoryMenu.tsx`, `src/components/Sidebar.tsx`)

@@ -35,8 +35,17 @@ const MD_SHORTCUT_ROWS = [
   { key: "hotkey_h3", label: "Heading 3", hint: "Toggle H3 on the current line", def: DEFAULT_MD_SHORTCUTS.h3 },
   { key: "hotkey_bold", label: "Bold", hint: "Wrap selection in **bold**", def: DEFAULT_MD_SHORTCUTS.bold },
   { key: "hotkey_italic", label: "Italic", hint: "Wrap selection in *italic*", def: DEFAULT_MD_SHORTCUTS.italic },
-  { key: "hotkey_table", label: "Insert Table", hint: "Drop a markdown table at the cursor", def: DEFAULT_MD_SHORTCUTS.table },
+  { key: "hotkey_strikethrough", label: "Strikethrough", hint: "Wrap selection in ~~strikethrough~~", def: DEFAULT_MD_SHORTCUTS.strikethrough },
+  { key: "hotkey_highlight", label: "Highlight", hint: "Wrap selection in ==highlight==", def: DEFAULT_MD_SHORTCUTS.highlight },
+  { key: "hotkey_inline_code", label: "Inline Code", hint: "Wrap selection in `code`", def: DEFAULT_MD_SHORTCUTS.inlineCode },
+  { key: "hotkey_link", label: "Insert Link", hint: "Wrap selection in [title](url)", def: DEFAULT_MD_SHORTCUTS.link },
+  { key: "hotkey_blockquote", label: "Blockquote", hint: "Toggle blockquote (or type > at line start)", def: DEFAULT_MD_SHORTCUTS.blockquote },
+  { key: "hotkey_ordered_list", label: "Ordered List", hint: "Toggle numbered list (or type 1. at start)", def: DEFAULT_MD_SHORTCUTS.orderedList },
   { key: "hotkey_task", label: "Task Checkbox", hint: "Turn the line into a - [ ] task (or type [] and a space)", def: DEFAULT_MD_SHORTCUTS.task },
+  { key: "hotkey_table", label: "Insert Table", hint: "Drop a markdown table at the cursor", def: DEFAULT_MD_SHORTCUTS.table },
+  { key: "hotkey_footnote", label: "Footnote", hint: "Insert footnote reference [^1] and definition", def: DEFAULT_MD_SHORTCUTS.footnote },
+  { key: "hotkey_subscript", label: "Subscript", hint: "Wrap selection in ~subscript~ (e.g. H~2~O)", def: DEFAULT_MD_SHORTCUTS.subscript },
+  { key: "hotkey_superscript", label: "Superscript", hint: "Wrap selection in ^superscript^ (e.g. x^2)", def: DEFAULT_MD_SHORTCUTS.superscript },
   { key: "hotkey_table_col", label: "Table: Add Column", hint: "Inside a table cell: new column on every row", def: DEFAULT_MD_SHORTCUTS.tableCol },
   { key: "hotkey_table_row", label: "Table: Add Row", hint: "Inside a table cell: new row at the bottom", def: DEFAULT_MD_SHORTCUTS.tableRow },
 ] as const;
@@ -657,6 +666,108 @@ export function SettingsPanel({ onBack, onStoragePathChanged, onThemeChanged }: 
                   <kbd className="px-2 py-0.5 rounded bg-white/[0.08] border border-white/15 text-[11px] font-mono font-medium text-white shadow-sm shrink-0">Enter on Blank Row</kbd>
                 </div>
                 <p className="mt-2 text-[11px] leading-relaxed text-ink-4">Exits table into a normal text line underneath</p>
+              </div>
+            </div>
+          </div>
+
+          {/* Quick Markdown Typing Triggers & Shortcuts Guide */}
+          <div className="mt-6 border-t border-white/[0.06] pt-5">
+            <div className="mb-3">
+              <h3 className="text-[13.5px] font-semibold text-white tracking-tight">
+                Markdown Live Typing Triggers & Shortcuts
+              </h3>
+              <p className="text-[11.5px] text-ink-4">
+                Type these directly in the note editor or insert them via the burger menu (☰)
+              </p>
+            </div>
+
+            <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-3">
+              <div className="flex flex-col justify-between rounded-xl bg-white/[0.03] p-3.5 border border-white/[0.08] hover:border-white/20 transition-colors">
+                <div className="flex items-center justify-between gap-2">
+                  <span className="text-[12.5px] font-medium text-ink-1">Blockquote</span>
+                  <kbd className="px-2 py-0.5 rounded bg-white/[0.08] border border-white/15 text-[11px] font-mono font-medium text-white shadow-sm shrink-0">&gt; at start</kbd>
+                </div>
+                <p className="mt-2 text-[11px] leading-relaxed text-ink-4">Type <code className="font-mono text-white/80">&gt; </code> at line start to format as a blockquote</p>
+              </div>
+
+              <div className="flex flex-col justify-between rounded-xl bg-white/[0.03] p-3.5 border border-white/[0.08] hover:border-white/20 transition-colors">
+                <div className="flex items-center justify-between gap-2">
+                  <span className="text-[12.5px] font-medium text-ink-1">Numbered List</span>
+                  <kbd className="px-2 py-0.5 rounded bg-white/[0.08] border border-white/15 text-[11px] font-mono font-medium text-white shadow-sm shrink-0">1. at start</kbd>
+                </div>
+                <p className="mt-2 text-[11px] leading-relaxed text-ink-4">Type <code className="font-mono text-white/80">1. </code> at line start; Enter continues with 2., 3., etc.</p>
+              </div>
+
+              <div className="flex flex-col justify-between rounded-xl bg-white/[0.03] p-3.5 border border-white/[0.08] hover:border-white/20 transition-colors">
+                <div className="flex items-center justify-between gap-2">
+                  <span className="text-[12.5px] font-medium text-ink-1">Checklist Task</span>
+                  <kbd className="px-2 py-0.5 rounded bg-white/[0.08] border border-white/15 text-[11px] font-mono font-medium text-white shadow-sm shrink-0">[] at start</kbd>
+                </div>
+                <p className="mt-2 text-[11px] leading-relaxed text-ink-4">Type <code className="font-mono text-white/80">[] </code> or <code className="font-mono text-white/80">- [ ] </code> to create an interactive task</p>
+              </div>
+
+              <div className="flex flex-col justify-between rounded-xl bg-white/[0.03] p-3.5 border border-white/[0.08] hover:border-white/20 transition-colors">
+                <div className="flex items-center justify-between gap-2">
+                  <span className="text-[12.5px] font-medium text-ink-1">Inline Code</span>
+                  <kbd className="px-2 py-0.5 rounded bg-white/[0.08] border border-white/15 text-[11px] font-mono font-medium text-white shadow-sm shrink-0">`code`</kbd>
+                </div>
+                <p className="mt-2 text-[11px] leading-relaxed text-ink-4">Wrap words with backticks for monospaced inline code</p>
+              </div>
+
+              <div className="flex flex-col justify-between rounded-xl bg-white/[0.03] p-3.5 border border-white/[0.08] hover:border-white/20 transition-colors">
+                <div className="flex items-center justify-between gap-2">
+                  <span className="text-[12.5px] font-medium text-ink-1">Link</span>
+                  <kbd className="px-2 py-0.5 rounded bg-white/[0.08] border border-white/15 text-[11px] font-mono font-medium text-white shadow-sm shrink-0">[title](url)</kbd>
+                </div>
+                <p className="mt-2 text-[11px] leading-relaxed text-ink-4">Formats clickable web and file links (Ctrl+K)</p>
+              </div>
+
+              <div className="flex flex-col justify-between rounded-xl bg-white/[0.03] p-3.5 border border-white/[0.08] hover:border-white/20 transition-colors">
+                <div className="flex items-center justify-between gap-2">
+                  <span className="text-[12.5px] font-medium text-ink-1">Footnote</span>
+                  <kbd className="px-2 py-0.5 rounded bg-white/[0.08] border border-white/15 text-[11px] font-mono font-medium text-white shadow-sm shrink-0">[^1] & [^1]:</kbd>
+                </div>
+                <p className="mt-2 text-[11px] leading-relaxed text-ink-4">Superscript reference and footnote explanation line</p>
+              </div>
+
+              <div className="flex flex-col justify-between rounded-xl bg-white/[0.03] p-3.5 border border-white/[0.08] hover:border-white/20 transition-colors">
+                <div className="flex items-center justify-between gap-2">
+                  <span className="text-[12.5px] font-medium text-ink-1">Definition List</span>
+                  <kbd className="px-2 py-0.5 rounded bg-white/[0.08] border border-white/15 text-[11px] font-mono font-medium text-white shadow-sm shrink-0">: Definition</kbd>
+                </div>
+                <p className="mt-2 text-[11px] leading-relaxed text-ink-4">Type <code className="font-mono text-white/80">: </code> on the line beneath a term to define it</p>
+              </div>
+
+              <div className="flex flex-col justify-between rounded-xl bg-white/[0.03] p-3.5 border border-white/[0.08] hover:border-white/20 transition-colors">
+                <div className="flex items-center justify-between gap-2">
+                  <span className="text-[12.5px] font-medium text-ink-1">Strikethrough</span>
+                  <kbd className="px-2 py-0.5 rounded bg-white/[0.08] border border-white/15 text-[11px] font-mono font-medium text-white shadow-sm shrink-0">~~text~~</kbd>
+                </div>
+                <p className="mt-2 text-[11px] leading-relaxed text-ink-4">Wrap text with double tildes for crossed-out text</p>
+              </div>
+
+              <div className="flex flex-col justify-between rounded-xl bg-white/[0.03] p-3.5 border border-white/[0.08] hover:border-white/20 transition-colors">
+                <div className="flex items-center justify-between gap-2">
+                  <span className="text-[12.5px] font-medium text-ink-1">Highlight</span>
+                  <kbd className="px-2 py-0.5 rounded bg-white/[0.08] border border-white/15 text-[11px] font-mono font-medium text-white shadow-sm shrink-0">==word==</kbd>
+                </div>
+                <p className="mt-2 text-[11px] leading-relaxed text-ink-4">Wrap words with double equal signs for neon marker highlight</p>
+              </div>
+
+              <div className="flex flex-col justify-between rounded-xl bg-white/[0.03] p-3.5 border border-white/[0.08] hover:border-white/20 transition-colors">
+                <div className="flex items-center justify-between gap-2">
+                  <span className="text-[12.5px] font-medium text-ink-1">Sub & Super</span>
+                  <kbd className="px-2 py-0.5 rounded bg-white/[0.08] border border-white/15 text-[11px] font-mono font-medium text-white shadow-sm shrink-0">~2~ & ^2^</kbd>
+                </div>
+                <p className="mt-2 text-[11px] leading-relaxed text-ink-4">Formulas like <code className="font-mono text-white/80">H~2~O</code> and powers like <code className="font-mono text-white/80">x^2</code></p>
+              </div>
+
+              <div className="flex flex-col justify-between rounded-xl bg-white/[0.03] p-3.5 border border-white/[0.08] hover:border-white/20 transition-colors">
+                <div className="flex items-center justify-between gap-2">
+                  <span className="text-[12.5px] font-medium text-ink-1">Emoji Shortcodes</span>
+                  <kbd className="px-2 py-0.5 rounded bg-white/[0.08] border border-white/15 text-[11px] font-mono font-medium text-white shadow-sm shrink-0">:fire:</kbd>
+                </div>
+                <p className="mt-2 text-[11px] leading-relaxed text-ink-4">Type <code className="font-mono text-white/80">:smile:</code>, <code className="font-mono text-white/80">:heart:</code>, <code className="font-mono text-white/80">:rocket:</code>, etc.</p>
               </div>
             </div>
           </div>
