@@ -2,8 +2,8 @@ import { useEffect, useLayoutEffect, useRef, useState } from "react";
 import { createPortal } from "react-dom";
 import {
   BookOpen,
+  Bookmark,
   Code,
-  FileText,
   Highlighter,
   Image as ImageIcon,
   Link2,
@@ -16,6 +16,7 @@ import {
   Subscript,
   Superscript,
   Table as TableIcon,
+  Terminal,
 } from "lucide-react";
 import { cx } from "../lib/text";
 import { QUICK_EMOJIS } from "../lib/emoji";
@@ -176,7 +177,7 @@ export function InsertMenu({
                 zIndex: 9999,
                 animation: "bubblePop 160ms cubic-bezier(0.16, 1, 0.3, 1) both",
               }}
-              className="w-[240px] rounded-[15px] border border-white/20 bg-[#14151a]/95 p-1.5 shadow-[0_25px_60px_rgba(0,0,0,0.95)] backdrop-blur-2xl select-none flex flex-col gap-0.5 overflow-y-auto scrollbar-thin scrollbar-thumb-white/10"
+              className="w-[240px] rounded-[15px] border border-white/15 bg-[#121317]/95 p-1.5 shadow-[0_25px_60px_rgba(0,0,0,0.95)] backdrop-blur-2xl select-none flex flex-col gap-0.5 overflow-y-auto scrollbar-thin scrollbar-thumb-white/10"
               onPointerDown={(e) => e.stopPropagation()}
               onClick={(e) => e.stopPropagation()}
             >
@@ -189,10 +190,10 @@ export function InsertMenu({
               <button
                 type="button"
                 onClick={() => handleAction(onInsertTable)}
-                className="flex h-7.5 w-full items-center justify-between rounded-[7px] px-2 text-[12px] text-ink-2 transition-colors hover:bg-white/[0.08] hover:text-white cursor-pointer"
+                className="group flex h-7.5 w-full items-center justify-between rounded-[7px] px-2 text-[12px] text-ink-2 transition-colors hover:bg-white/[0.08] hover:text-white cursor-pointer"
               >
                 <div className="flex items-center gap-2">
-                  <TableIcon size={13.5} strokeWidth={1.8} className="shrink-0 text-white/70" />
+                  <TableIcon size={13.5} strokeWidth={1.8} className="shrink-0 text-white/70 group-hover:text-white transition-colors" />
                   <span>Table</span>
                 </div>
                 <kbd className="font-mono text-[9px] text-ink-4 bg-white/[0.06] border border-white/10 px-1.5 py-0.5 rounded">
@@ -204,10 +205,10 @@ export function InsertMenu({
               <button
                 type="button"
                 onClick={() => handleAction(onInsertTask)}
-                className="flex h-7.5 w-full items-center justify-between rounded-[7px] px-2 text-[12px] text-ink-2 transition-colors hover:bg-white/[0.08] hover:text-white cursor-pointer"
+                className="group flex h-7.5 w-full items-center justify-between rounded-[7px] px-2 text-[12px] text-ink-2 transition-colors hover:bg-white/[0.08] hover:text-white cursor-pointer"
               >
                 <div className="flex items-center gap-2">
-                  <ListChecks size={13.5} strokeWidth={1.8} className="shrink-0 text-white/70" />
+                  <ListChecks size={13.5} strokeWidth={1.8} className="shrink-0 text-white/70 group-hover:text-white transition-colors" />
                   <span>Checklist</span>
                 </div>
                 <kbd className="font-mono text-[9px] text-ink-4 bg-white/[0.06] border border-white/10 px-1.5 py-0.5 rounded">
@@ -219,10 +220,10 @@ export function InsertMenu({
               <button
                 type="button"
                 onClick={() => handleAction(onInsertOrderedList)}
-                className="flex h-7.5 w-full items-center justify-between rounded-[7px] px-2 text-[12px] text-ink-2 transition-colors hover:bg-white/[0.08] hover:text-white cursor-pointer"
+                className="group flex h-7.5 w-full items-center justify-between rounded-[7px] px-2 text-[12px] text-ink-2 transition-colors hover:bg-white/[0.08] hover:text-white cursor-pointer"
               >
                 <div className="flex items-center gap-2">
-                  <ListOrdered size={13.5} strokeWidth={1.8} className="shrink-0 text-white/70" />
+                  <ListOrdered size={13.5} strokeWidth={1.8} className="shrink-0 text-white/70 group-hover:text-white transition-colors" />
                   <span>Numbered list</span>
                 </div>
                 <kbd className="font-mono text-[9px] text-ink-4 bg-white/[0.06] border border-white/10 px-1.5 py-0.5 rounded">
@@ -234,10 +235,10 @@ export function InsertMenu({
               <button
                 type="button"
                 onClick={() => handleAction(onInsertBlockquote)}
-                className="flex h-7.5 w-full items-center justify-between rounded-[7px] px-2 text-[12px] text-ink-2 transition-colors hover:bg-white/[0.08] hover:text-white cursor-pointer"
+                className="group flex h-7.5 w-full items-center justify-between rounded-[7px] px-2 text-[12px] text-ink-2 transition-colors hover:bg-white/[0.08] hover:text-white cursor-pointer"
               >
                 <div className="flex items-center gap-2">
-                  <Quote size={13.5} strokeWidth={1.8} className="shrink-0 text-white/70" />
+                  <Quote size={13.5} strokeWidth={1.8} className="shrink-0 text-white/70 group-hover:text-white transition-colors" />
                   <span>Blockquote</span>
                 </div>
                 <kbd className="font-mono text-[9px] text-ink-4 bg-white/[0.06] border border-white/10 px-1.5 py-0.5 rounded">
@@ -249,10 +250,10 @@ export function InsertMenu({
               <button
                 type="button"
                 onClick={() => handleAction(onInsertCode)}
-                className="flex h-7.5 w-full items-center justify-between rounded-[7px] px-2 text-[12px] text-ink-2 transition-colors hover:bg-white/[0.08] hover:text-white cursor-pointer"
+                className="group flex h-7.5 w-full items-center justify-between rounded-[7px] px-2 text-[12px] text-ink-2 transition-colors hover:bg-white/[0.08] hover:text-white cursor-pointer"
               >
                 <div className="flex items-center gap-2">
-                  <Code size={13.5} strokeWidth={1.8} className="shrink-0 text-white/70" />
+                  <Terminal size={13.5} strokeWidth={1.8} className="shrink-0 text-white/70 group-hover:text-white transition-colors" />
                   <span>Code block</span>
                 </div>
                 <kbd className="font-mono text-[9px] text-ink-4 bg-white/[0.06] border border-white/10 px-1.5 py-0.5 rounded">
@@ -264,10 +265,10 @@ export function InsertMenu({
               <button
                 type="button"
                 onClick={() => handleAction(onInsertDefinitionList)}
-                className="flex h-7.5 w-full items-center justify-between rounded-[7px] px-2 text-[12px] text-ink-2 transition-colors hover:bg-white/[0.08] hover:text-white cursor-pointer"
+                className="group flex h-7.5 w-full items-center justify-between rounded-[7px] px-2 text-[12px] text-ink-2 transition-colors hover:bg-white/[0.08] hover:text-white cursor-pointer"
               >
                 <div className="flex items-center gap-2">
-                  <BookOpen size={13.5} strokeWidth={1.8} className="shrink-0 text-white/70" />
+                  <BookOpen size={13.5} strokeWidth={1.8} className="shrink-0 text-white/70 group-hover:text-white transition-colors" />
                   <span>Definition list</span>
                 </div>
                 <kbd className="font-mono text-[9px] text-ink-4 bg-white/[0.06] border border-white/10 px-1.5 py-0.5 rounded">
@@ -279,10 +280,10 @@ export function InsertMenu({
               <button
                 type="button"
                 onClick={() => handleAction(onAttachImage)}
-                className="flex h-7.5 w-full items-center justify-between rounded-[7px] px-2 text-[12px] text-ink-2 transition-colors hover:bg-white/[0.08] hover:text-white cursor-pointer"
+                className="group flex h-7.5 w-full items-center justify-between rounded-[7px] px-2 text-[12px] text-ink-2 transition-colors hover:bg-white/[0.08] hover:text-white cursor-pointer"
               >
                 <div className="flex items-center gap-2">
-                  <ImageIcon size={13.5} strokeWidth={1.8} className="shrink-0 text-white/70" />
+                  <ImageIcon size={13.5} strokeWidth={1.8} className="shrink-0 text-white/70 group-hover:text-white transition-colors" />
                   <span>Attach image</span>
                 </div>
                 <kbd className="font-mono text-[9px] text-ink-4 bg-white/[0.06] border border-white/10 px-1.5 py-0.5 rounded">
@@ -301,10 +302,10 @@ export function InsertMenu({
               <button
                 type="button"
                 onClick={() => handleAction(onInsertInlineCode)}
-                className="flex h-7.5 w-full items-center justify-between rounded-[7px] px-2 text-[12px] text-ink-2 transition-colors hover:bg-white/[0.08] hover:text-white cursor-pointer"
+                className="group flex h-7.5 w-full items-center justify-between rounded-[7px] px-2 text-[12px] text-ink-2 transition-colors hover:bg-white/[0.08] hover:text-white cursor-pointer"
               >
                 <div className="flex items-center gap-2">
-                  <Code size={13} strokeWidth={1.8} className="shrink-0 text-pink-300/80" />
+                  <Code size={13} strokeWidth={1.8} className="shrink-0 text-white/70 group-hover:text-white transition-colors" />
                   <span>Inline code</span>
                 </div>
                 <kbd className="font-mono text-[9px] text-ink-4 bg-white/[0.06] border border-white/10 px-1.5 py-0.5 rounded">
@@ -316,10 +317,10 @@ export function InsertMenu({
               <button
                 type="button"
                 onClick={() => handleAction(onInsertLink)}
-                className="flex h-7.5 w-full items-center justify-between rounded-[7px] px-2 text-[12px] text-ink-2 transition-colors hover:bg-white/[0.08] hover:text-white cursor-pointer"
+                className="group flex h-7.5 w-full items-center justify-between rounded-[7px] px-2 text-[12px] text-ink-2 transition-colors hover:bg-white/[0.08] hover:text-white cursor-pointer"
               >
                 <div className="flex items-center gap-2">
-                  <Link2 size={13.5} strokeWidth={1.8} className="shrink-0 text-blue-400" />
+                  <Link2 size={13.5} strokeWidth={1.8} className="shrink-0 text-white/70 group-hover:text-white transition-colors" />
                   <span>Link</span>
                 </div>
                 <kbd className="font-mono text-[9px] text-ink-4 bg-white/[0.06] border border-white/10 px-1.5 py-0.5 rounded">
@@ -331,10 +332,10 @@ export function InsertMenu({
               <button
                 type="button"
                 onClick={() => handleAction(onInsertStrikethrough)}
-                className="flex h-7.5 w-full items-center justify-between rounded-[7px] px-2 text-[12px] text-ink-2 transition-colors hover:bg-white/[0.08] hover:text-white cursor-pointer"
+                className="group flex h-7.5 w-full items-center justify-between rounded-[7px] px-2 text-[12px] text-ink-2 transition-colors hover:bg-white/[0.08] hover:text-white cursor-pointer"
               >
                 <div className="flex items-center gap-2">
-                  <Strikethrough size={13.5} strokeWidth={1.8} className="shrink-0 text-white/70" />
+                  <Strikethrough size={13.5} strokeWidth={1.8} className="shrink-0 text-white/70 group-hover:text-white transition-colors" />
                   <span>Strikethrough</span>
                 </div>
                 <kbd className="font-mono text-[9px] text-ink-4 bg-white/[0.06] border border-white/10 px-1.5 py-0.5 rounded">
@@ -346,10 +347,10 @@ export function InsertMenu({
               <button
                 type="button"
                 onClick={() => handleAction(onInsertHighlight)}
-                className="flex h-7.5 w-full items-center justify-between rounded-[7px] px-2 text-[12px] text-ink-2 transition-colors hover:bg-white/[0.08] hover:text-white cursor-pointer"
+                className="group flex h-7.5 w-full items-center justify-between rounded-[7px] px-2 text-[12px] text-ink-2 transition-colors hover:bg-white/[0.08] hover:text-white cursor-pointer"
               >
                 <div className="flex items-center gap-2">
-                  <Highlighter size={13.5} strokeWidth={1.8} className="shrink-0 text-yellow-300" />
+                  <Highlighter size={13.5} strokeWidth={1.8} className="shrink-0 text-white/70 group-hover:text-white transition-colors" />
                   <span>Highlight</span>
                 </div>
                 <kbd className="font-mono text-[9px] text-ink-4 bg-white/[0.06] border border-white/10 px-1.5 py-0.5 rounded">
@@ -362,22 +363,22 @@ export function InsertMenu({
                 <button
                   type="button"
                   onClick={() => handleAction(onInsertSubscript)}
-                  className="flex h-7.5 items-center justify-between rounded-[7px] px-2 text-[11.5px] text-ink-2 transition-colors hover:bg-white/[0.08] hover:text-white cursor-pointer"
+                  className="group flex h-7.5 items-center justify-between rounded-[7px] px-2 text-[11.5px] text-ink-2 transition-colors hover:bg-white/[0.08] hover:text-white cursor-pointer"
                   title="Subscript (H~2~O)"
                 >
                   <div className="flex items-center gap-1.5">
-                    <Subscript size={13} strokeWidth={1.8} className="shrink-0 text-white/70" />
+                    <Subscript size={13} strokeWidth={1.8} className="shrink-0 text-white/70 group-hover:text-white transition-colors" />
                     <span>Sub (~2~)</span>
                   </div>
                 </button>
                 <button
                   type="button"
                   onClick={() => handleAction(onInsertSuperscript)}
-                  className="flex h-7.5 items-center justify-between rounded-[7px] px-2 text-[11.5px] text-ink-2 transition-colors hover:bg-white/[0.08] hover:text-white cursor-pointer"
+                  className="group flex h-7.5 items-center justify-between rounded-[7px] px-2 text-[11.5px] text-ink-2 transition-colors hover:bg-white/[0.08] hover:text-white cursor-pointer"
                   title="Superscript (x^2^)"
                 >
                   <div className="flex items-center gap-1.5">
-                    <Superscript size={13} strokeWidth={1.8} className="shrink-0 text-white/70" />
+                    <Superscript size={13} strokeWidth={1.8} className="shrink-0 text-white/70 group-hover:text-white transition-colors" />
                     <span>Super (^2^)</span>
                   </div>
                 </button>
@@ -387,10 +388,10 @@ export function InsertMenu({
               <button
                 type="button"
                 onClick={() => handleAction(onInsertFootnote)}
-                className="flex h-7.5 w-full items-center justify-between rounded-[7px] px-2 text-[12px] text-ink-2 transition-colors hover:bg-white/[0.08] hover:text-white cursor-pointer"
+                className="group flex h-7.5 w-full items-center justify-between rounded-[7px] px-2 text-[12px] text-ink-2 transition-colors hover:bg-white/[0.08] hover:text-white cursor-pointer"
               >
                 <div className="flex items-center gap-2">
-                  <FileText size={13.5} strokeWidth={1.8} className="shrink-0 text-indigo-300" />
+                  <Bookmark size={13.5} strokeWidth={1.8} className="shrink-0 text-white/70 group-hover:text-white transition-colors" />
                   <span>Footnote</span>
                 </div>
                 <kbd className="font-mono text-[9px] text-ink-4 bg-white/[0.06] border border-white/10 px-1.5 py-0.5 rounded">

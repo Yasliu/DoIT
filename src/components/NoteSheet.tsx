@@ -20,6 +20,7 @@ import type { NoteItem } from "../api/tauriBridge";
 import { NOTE_FONTS, fontStack, tauriApi } from "../api/tauriBridge";
 import { useUndoStack } from "../hooks/useUndoStack";
 import { HeadingSelect } from "./HeadingSelect";
+import { EmojiAutocomplete } from "./EmojiAutocomplete";
 import { ImageLightbox } from "./ImageLightbox";
 import { InsertMenu } from "./InsertMenu";
 import { ModeToggle } from "./ModeToggle";
@@ -1379,6 +1380,8 @@ export function NoteSheet({
           </div>
         </div>
       </div>
+
+      <EmojiAutocomplete editorRef={editorRef} onEmojiInserted={handleEditorInput} />
 
       {tableMenu && (
         <TableMenu

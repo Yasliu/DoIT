@@ -5,11 +5,12 @@ import {
   Bug,
   Check,
   CheckCircle2,
+  ChevronDown,
+  Command,
   ExternalLink,
   Folder,
   FolderSearch,
   HardDrive,
-  Keyboard,
   Layers,
   PanelRightClose,
   RefreshCw,
@@ -17,7 +18,10 @@ import {
   ScanLine,
   Sparkles,
   Square,
+  Table,
+  Type,
 } from "lucide-react";
+import { motion, AnimatePresence } from "motion/react";
 import { AppSettings, DEFAULT_SETTINGS, tauriApi } from "../api/tauriBridge";
 import { applyShortcutSettings, DEFAULT_MD_SHORTCUTS } from "../lib/shortcuts";
 import { ShortcutField } from "./ShortcutField";
@@ -29,26 +33,106 @@ interface SettingsPanelProps {
   onThemeChanged?: (theme: "glass" | "monochrome") => void;
 }
 
-const MD_SHORTCUT_ROWS = [
-  { key: "hotkey_h1", label: "Heading 1", hint: "Toggle H1 on the current line", def: DEFAULT_MD_SHORTCUTS.h1 },
-  { key: "hotkey_h2", label: "Heading 2", hint: "Toggle H2 on the current line", def: DEFAULT_MD_SHORTCUTS.h2 },
-  { key: "hotkey_h3", label: "Heading 3", hint: "Toggle H3 on the current line", def: DEFAULT_MD_SHORTCUTS.h3 },
+const GENERAL_SHORTCUT_ROWS = [
+  { key: "hotkey_new_note", label: "Create New Note", hint: "Spawns a new note in current view", def: "Ctrl+N" },
+  { key: "hotkey_toggle_tray", label: "Toggle Docking Mode", hint: "Switch between Canvas and Dock", def: "Ctrl+D" },
+  { key: "hotkey_search", label: "Global Search", hint: "Focus search query input", def: "Ctrl+F" },
+  { key: "hotkey_settings", label: "Open Settings", hint: "Toggles this settings panel", def: "Ctrl+," },
+  { key: "hotkey_open_file", label: "Open / Ingest File", hint: "Native file picker to import note", def: "Ctrl+O" },
+] as const;
+
+const TEXT_MARKS_SHORTCUT_ROWS = [
   { key: "hotkey_bold", label: "Bold", hint: "Wrap selection in **bold**", def: DEFAULT_MD_SHORTCUTS.bold },
   { key: "hotkey_italic", label: "Italic", hint: "Wrap selection in *italic*", def: DEFAULT_MD_SHORTCUTS.italic },
   { key: "hotkey_strikethrough", label: "Strikethrough", hint: "Wrap selection in ~~strikethrough~~", def: DEFAULT_MD_SHORTCUTS.strikethrough },
   { key: "hotkey_highlight", label: "Highlight", hint: "Wrap selection in ==highlight==", def: DEFAULT_MD_SHORTCUTS.highlight },
-  { key: "hotkey_inline_code", label: "Inline Code", hint: "Wrap selection in `code`", def: DEFAULT_MD_SHORTCUTS.inlineCode },
-  { key: "hotkey_link", label: "Insert Link", hint: "Wrap selection in [title](url)", def: DEFAULT_MD_SHORTCUTS.link },
-  { key: "hotkey_blockquote", label: "Blockquote", hint: "Toggle blockquote (or type > at line start)", def: DEFAULT_MD_SHORTCUTS.blockquote },
-  { key: "hotkey_ordered_list", label: "Ordered List", hint: "Toggle numbered list (or type 1. at start)", def: DEFAULT_MD_SHORTCUTS.orderedList },
-  { key: "hotkey_task", label: "Task Checkbox", hint: "Turn the line into a - [ ] task (or type [] and a space)", def: DEFAULT_MD_SHORTCUTS.task },
-  { key: "hotkey_table", label: "Insert Table", hint: "Drop a markdown table at the cursor", def: DEFAULT_MD_SHORTCUTS.table },
-  { key: "hotkey_footnote", label: "Footnote", hint: "Insert footnote reference [^1] and definition", def: DEFAULT_MD_SHORTCUTS.footnote },
+  { key: "hotkey_inline_code", label: "Inline Code", hint: "Format selection as `code`", def: DEFAULT_MD_SHORTCUTS.inlineCode },
   { key: "hotkey_subscript", label: "Subscript", hint: "Wrap selection in ~subscript~ (e.g. H~2~O)", def: DEFAULT_MD_SHORTCUTS.subscript },
   { key: "hotkey_superscript", label: "Superscript", hint: "Wrap selection in ^superscript^ (e.g. x^2)", def: DEFAULT_MD_SHORTCUTS.superscript },
+  { key: "hotkey_link", label: "Insert Link", hint: "Wrap selection in [title](url)", def: DEFAULT_MD_SHORTCUTS.link },
+] as const;
+
+const BLOCKS_STRUCTURE_SHORTCUT_ROWS = [
+  { key: "hotkey_h1", label: "Heading 1 (H1)", hint: "Toggle # H1 heading on the current line", def: DEFAULT_MD_SHORTCUTS.h1 },
+  { key: "hotkey_h2", label: "Heading 2 (H2)", hint: "Toggle ## H2 heading on the current line", def: DEFAULT_MD_SHORTCUTS.h2 },
+  { key: "hotkey_h3", label: "Heading 3 (H3)", hint: "Toggle ### H3 heading on the current line", def: DEFAULT_MD_SHORTCUTS.h3 },
+  { key: "hotkey_task", label: "Checklist Task", hint: "Turn the line into a - [ ] task", def: DEFAULT_MD_SHORTCUTS.task },
+  { key: "hotkey_ordered_list", label: "Numbered List", hint: "Toggle numbered list (or type 1. at start)", def: DEFAULT_MD_SHORTCUTS.orderedList },
+  { key: "hotkey_blockquote", label: "Blockquote", hint: "Toggle blockquote (or type > at line start)", def: DEFAULT_MD_SHORTCUTS.blockquote },
+  { key: "hotkey_footnote", label: "Footnote", hint: "Insert footnote reference [^1] and definition", def: DEFAULT_MD_SHORTCUTS.footnote },
+  { key: "hotkey_table", label: "Insert Table", hint: "Drop a markdown table at the cursor", def: DEFAULT_MD_SHORTCUTS.table },
   { key: "hotkey_table_col", label: "Table: Add Column", hint: "Inside a table cell: new column on every row", def: DEFAULT_MD_SHORTCUTS.tableCol },
   { key: "hotkey_table_row", label: "Table: Add Row", hint: "Inside a table cell: new row at the bottom", def: DEFAULT_MD_SHORTCUTS.tableRow },
 ] as const;
+
+function CollapsibleShortcutCategory({
+  id,
+  isOpen,
+  onToggle,
+  icon: Icon,
+  title,
+  description,
+  badge,
+  children,
+}: {
+  id: string;
+  isOpen: boolean;
+  onToggle: (id: string) => void;
+  icon: React.ComponentType<{ size?: number; strokeWidth?: number; className?: string }>;
+  title: string;
+  description: string;
+  badge: string;
+  children: React.ReactNode;
+}) {
+  return (
+    <div className="glass rounded-[20px] border border-white/10 shadow-[0_20px_50px_-20px_rgba(0,0,0,0.8)] overflow-hidden transition-all">
+      <button
+        type="button"
+        onClick={() => onToggle(id)}
+        className="flex w-full items-center justify-between p-4.5 text-left hover:bg-white/[0.03] transition-colors cursor-pointer select-none"
+      >
+        <div className="flex items-center gap-3.5 min-w-0">
+          <div className="grid size-9 shrink-0 place-items-center rounded-xl bg-white/[0.06] text-white">
+            <Icon size={17} strokeWidth={1.8} />
+          </div>
+          <div className="min-w-0 flex-1">
+            <div className="flex items-center gap-2">
+              <h3 className="text-[14px] font-semibold text-ink-1 truncate">{title}</h3>
+              <span className="font-mono text-[9.5px] uppercase tracking-wider text-white/50 bg-white/[0.06] border border-white/10 px-2 py-0.5 rounded-full shrink-0">
+                {badge}
+              </span>
+            </div>
+            <p className="mt-0.5 text-[11.5px] text-ink-4 truncate">{description}</p>
+          </div>
+        </div>
+        <motion.div
+          animate={{ rotate: isOpen ? 180 : 0 }}
+          transition={{ duration: 0.22, ease: [0.16, 1, 0.3, 1] }}
+          className="text-white/40 shrink-0 ml-3"
+        >
+          <ChevronDown size={17} strokeWidth={2} />
+        </motion.div>
+      </button>
+
+      <AnimatePresence initial={false}>
+        {isOpen && (
+          <motion.div
+            key="content"
+            initial={{ height: 0, opacity: 0 }}
+            animate={{ height: "auto", opacity: 1 }}
+            exit={{ height: 0, opacity: 0 }}
+            transition={{ duration: 0.24, ease: [0.16, 1, 0.3, 1] }}
+            className="overflow-hidden"
+          >
+            <div className="border-t border-white/[0.06] p-4.5 pt-3.5">
+              {children}
+            </div>
+          </motion.div>
+        )}
+      </AnimatePresence>
+    </div>
+  );
+}
 
 function BugReportSection() {
   const handleOpenIssues = (e: React.MouseEvent) => {
@@ -128,6 +212,8 @@ export function SettingsPanel({ onBack, onStoragePathChanged, onThemeChanged }: 
     message: string;
   } | null>(null);
   const [isScanning, setIsScanning] = useState(false);
+  const [openTiles, setOpenTiles] = useState<Record<string, boolean>>({});
+  const toggleTile = (id: string) => setOpenTiles((prev) => ({ ...prev, [id]: !prev[id] }));
 
   useEffect(() => {
     void tauriApi.getSettings().then((res) => {
@@ -474,120 +560,74 @@ export function SettingsPanel({ onBack, onStoragePathChanged, onThemeChanged }: 
           )}
         </section>
 
-        {/* SECTION 2: Dynamic Keyboard Shortcuts */}
-        <section className="glass rounded-[20px] p-5 shadow-[0_20px_50px_-20px_rgba(0,0,0,0.8)] border border-white/10">
-          <div className="flex items-center justify-between pb-3 border-b border-white/[0.06]">
-            <div className="flex items-center gap-3">
-              <div className="grid size-9 shrink-0 place-items-center rounded-xl bg-white/[0.06] text-white">
-                <Keyboard size={17} strokeWidth={1.8} />
-              </div>
-              <div>
-                <h2 className="text-[14px] font-semibold text-ink-1">
-                  Editable Application Shortcuts
-                </h2>
-                <p className="text-[11.5px] text-ink-4">
-                  Remap hotkeys mapped to local <code className="font-mono text-ink-3">settings.json</code>
-                </p>
-              </div>
-            </div>
-
-            <button
-              type="button"
-              onClick={handleResetDefaults}
-              className="flex items-center gap-1 text-[11px] font-mono text-ink-4 hover:text-ink-2 transition-colors"
-            >
-              <RotateCcw size={11} />
-              <span>Reset</span>
-            </button>
+                {/* SHORTCUTS HEADER */}
+        <div className="flex items-center justify-between pt-2 pb-1">
+          <div>
+            <h2 className="text-[15px] font-semibold text-ink-1 tracking-tight">
+              Shortcuts & Keyboard Controls
+            </h2>
+            <p className="text-[12px] text-ink-4">
+              Click any category tile below to view or customize its keyboard shortcuts
+            </p>
           </div>
+          <button
+            type="button"
+            onClick={handleResetDefaults}
+            className="flex items-center gap-1.5 px-2.5 py-1 rounded-lg border border-white/10 bg-white/[0.04] text-[11px] font-mono text-ink-3 hover:text-white hover:bg-white/[0.08] transition-colors cursor-pointer"
+          >
+            <RotateCcw size={11} />
+            <span>Reset All Defaults</span>
+          </button>
+        </div>
 
-          <div className="mt-4 grid grid-cols-1 md:grid-cols-2 gap-3.5">
-            {/* New Note */}
-            <div className="rounded-xl bg-white/[0.03] p-3 border border-white/[0.06] flex items-center justify-between">
-              <div>
-                <div className="text-[12.5px] font-medium text-ink-2">Create New Note</div>
-                <div className="text-[10.5px] text-ink-4">Spawns a new note in current view</div>
+        {/* TILE 1: General & Window Hotkeys */}
+        <CollapsibleShortcutCategory
+          id="general"
+          isOpen={!!openTiles["general"]}
+          onToggle={toggleTile}
+          icon={Command}
+          title="General & Window Controls"
+          description="App-wide hotkeys for note creation, view switching, and navigation"
+          badge="5 hotkeys"
+        >
+          <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
+            {GENERAL_SHORTCUT_ROWS.map((row) => (
+              <div
+                key={row.key}
+                className="rounded-xl bg-white/[0.03] p-3 border border-white/[0.06] flex items-center justify-between"
+              >
+                <div>
+                  <div className="text-[12.5px] font-medium text-ink-2">{row.label}</div>
+                  <div className="text-[10.5px] text-ink-4">{row.hint}</div>
+                </div>
+                <input
+                  type="text"
+                  value={(settings[row.key] as string | undefined) || row.def}
+                  onChange={(e) =>
+                    setSettings({ ...settings, [row.key]: e.target.value })
+                  }
+                  className="w-24 h-7 text-center rounded-lg bg-black/40 border border-white/15 text-[11.5px] font-mono text-white outline-none focus:border-white/40"
+                />
               </div>
-              <input
-                type="text"
-                value={settings.hotkey_new_note}
-                onChange={(e) =>
-                  setSettings({ ...settings, hotkey_new_note: e.target.value })
-                }
-                className="w-24 h-7 text-center rounded-lg bg-black/40 border border-white/15 text-[11.5px] font-mono text-white outline-none focus:border-white/40"
-              />
-            </div>
-
-            {/* Toggle Docking Mode */}
-            <div className="rounded-xl bg-white/[0.03] p-3 border border-white/[0.06] flex items-center justify-between">
-              <div>
-                <div className="text-[12.5px] font-medium text-ink-2">Toggle Docking Mode</div>
-                <div className="text-[10.5px] text-ink-4">Switch between Canvas and Dock</div>
-              </div>
-              <input
-                type="text"
-                value={settings.hotkey_toggle_tray}
-                onChange={(e) =>
-                  setSettings({ ...settings, hotkey_toggle_tray: e.target.value })
-                }
-                className="w-24 h-7 text-center rounded-lg bg-black/40 border border-white/15 text-[11.5px] font-mono text-white outline-none focus:border-white/40"
-              />
-            </div>
-
-            {/* Search */}
-            <div className="rounded-xl bg-white/[0.03] p-3 border border-white/[0.06] flex items-center justify-between">
-              <div>
-                <div className="text-[12.5px] font-medium text-ink-2">Global Search</div>
-                <div className="text-[10.5px] text-ink-4">Focus search query input</div>
-              </div>
-              <input
-                type="text"
-                value={settings.hotkey_search}
-                onChange={(e) =>
-                  setSettings({ ...settings, hotkey_search: e.target.value })
-                }
-                className="w-24 h-7 text-center rounded-lg bg-black/40 border border-white/15 text-[11.5px] font-mono text-white outline-none focus:border-white/40"
-              />
-            </div>
-
-            {/* Settings */}
-            <div className="rounded-xl bg-white/[0.03] p-3 border border-white/[0.06] flex items-center justify-between">
-              <div>
-                <div className="text-[12.5px] font-medium text-ink-2">Open Settings</div>
-                <div className="text-[10.5px] text-ink-4">Toggles this settings panel</div>
-              </div>
-              <input
-                type="text"
-                value={settings.hotkey_settings}
-                onChange={(e) =>
-                  setSettings({ ...settings, hotkey_settings: e.target.value })
-                }
-                className="w-24 h-7 text-center rounded-lg bg-black/40 border border-white/15 text-[11.5px] font-mono text-white outline-none focus:border-white/40"
-              />
-            </div>
-
-            {/* Open / Ingest File */}
-            <div className="rounded-xl bg-white/[0.03] p-3 border border-white/[0.06] flex items-center justify-between">
-              <div>
-                <div className="text-[12.5px] font-medium text-ink-2">Open / Ingest File</div>
-                <div className="text-[10.5px] text-ink-4">Native file picker to import note</div>
-              </div>
-              <input
-                type="text"
-                value={settings.hotkey_open_file ?? "Ctrl+O"}
-                onChange={(e) =>
-                  setSettings({ ...settings, hotkey_open_file: e.target.value })
-                }
-                className="w-24 h-7 text-center rounded-lg bg-black/40 border border-white/15 text-[11.5px] font-mono text-white outline-none focus:border-white/40"
-              />
-            </div>
+            ))}
           </div>
+        </CollapsibleShortcutCategory>
 
-          <div className="mt-5 pb-2 text-[11px] font-mono uppercase tracking-[0.12em] text-ink-4">
-            Markdown editor - click a field, then press the new combination (Backspace restores default)
+        {/* TILE 2: Text & Inline Formatting */}
+        <CollapsibleShortcutCategory
+          id="textMarks"
+          isOpen={!!openTiles["textMarks"]}
+          onToggle={toggleTile}
+          icon={Type}
+          title="Text & Inline Marks"
+          description="Bold, italic, strikethrough, highlights, code pills, sub/superscript, and links"
+          badge="8 shortcuts"
+        >
+          <div className="mb-3 text-[11px] font-mono uppercase tracking-[0.12em] text-ink-4">
+            Click a field, then press the new combination (Backspace restores default)
           </div>
-          <div className="grid grid-cols-1 md:grid-cols-2 gap-3.5">
-            {MD_SHORTCUT_ROWS.map((row) => (
+          <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
+            {TEXT_MARKS_SHORTCUT_ROWS.map((row) => (
               <div
                 key={row.key}
                 className="rounded-xl bg-white/[0.03] p-3 border border-white/[0.06] flex items-center justify-between"
@@ -604,174 +644,206 @@ export function SettingsPanel({ onBack, onStoragePathChanged, onThemeChanged }: 
               </div>
             ))}
           </div>
+        </CollapsibleShortcutCategory>
 
-          <div className="mt-6 border-t border-white/[0.06] pt-5">
-            <div className="mb-3">
-              <h3 className="text-[13.5px] font-semibold text-white tracking-tight">
-                Table Keyboard Navigation & Actions
-              </h3>
-              <p className="text-[11.5px] text-ink-4">
-                Fixed productivity controls for structured markdown tables
-              </p>
+        {/* TILE 3: Blocks & Structure */}
+        <CollapsibleShortcutCategory
+          id="blocksStructure"
+          isOpen={!!openTiles["blocksStructure"]}
+          onToggle={toggleTile}
+          icon={Layers}
+          title="Blocks & Structure"
+          description="Headings H1-H3, task checklists, blockquotes, lists, tables, and footnotes"
+          badge="10 shortcuts"
+        >
+          <div className="mb-3 text-[11px] font-mono uppercase tracking-[0.12em] text-ink-4">
+            Click a field, then press the new combination (Backspace restores default)
+          </div>
+          <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
+            {BLOCKS_STRUCTURE_SHORTCUT_ROWS.map((row) => (
+              <div
+                key={row.key}
+                className="rounded-xl bg-white/[0.03] p-3 border border-white/[0.06] flex items-center justify-between"
+              >
+                <div>
+                  <div className="text-[12.5px] font-medium text-ink-2">{row.label}</div>
+                  <div className="text-[10.5px] text-ink-4">{row.hint}</div>
+                </div>
+                <ShortcutField
+                  value={(settings[row.key] as string | undefined) || row.def}
+                  def={row.def}
+                  onChange={(combo) => setSettings({ ...settings, [row.key]: combo })}
+                />
+              </div>
+            ))}
+          </div>
+        </CollapsibleShortcutCategory>
+
+        {/* TILE 4: Table Navigation & Productivity */}
+        <CollapsibleShortcutCategory
+          id="tableNav"
+          isOpen={!!openTiles["tableNav"]}
+          onToggle={toggleTile}
+          icon={Table}
+          title="Table Navigation & Controls"
+          description="Cell traversal, column and row appending, and table boundary management"
+          badge="6 controls"
+        >
+          <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-3">
+            <div className="flex flex-col justify-between rounded-xl bg-white/[0.03] p-3.5 border border-white/[0.08] hover:border-white/20 transition-colors">
+              <div className="flex items-center justify-between gap-2">
+                <span className="text-[12.5px] font-medium text-ink-1">Next / Prev Cell</span>
+                <div className="flex items-center gap-1 shrink-0">
+                  <kbd className="px-1.5 py-0.5 rounded bg-white/[0.08] border border-white/15 text-[11px] font-mono font-medium text-white shadow-sm">Tab</kbd>
+                  <span className="text-[10px] text-ink-4">/</span>
+                  <kbd className="px-1.5 py-0.5 rounded bg-white/[0.08] border border-white/15 text-[10px] font-mono font-medium text-white shadow-sm">Shift+Tab</kbd>
+                </div>
+              </div>
+              <p className="mt-2 text-[11px] leading-relaxed text-ink-4">Cycles caret focus horizontally across cells</p>
             </div>
 
-            <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-3">
-              <div className="flex flex-col justify-between rounded-xl bg-white/[0.03] p-3.5 border border-white/[0.08] hover:border-white/20 transition-colors">
-                <div className="flex items-center justify-between gap-2">
-                  <span className="text-[12.5px] font-medium text-ink-1">Next / Prev Cell</span>
-                  <div className="flex items-center gap-1 shrink-0">
-                    <kbd className="px-1.5 py-0.5 rounded bg-white/[0.08] border border-white/15 text-[11px] font-mono font-medium text-white shadow-sm">Tab</kbd>
-                    <span className="text-[10px] text-ink-4">/</span>
-                    <kbd className="px-1.5 py-0.5 rounded bg-white/[0.08] border border-white/15 text-[10px] font-mono font-medium text-white shadow-sm">Shift+Tab</kbd>
-                  </div>
-                </div>
-                <p className="mt-2 text-[11px] leading-relaxed text-ink-4">Cycles caret focus horizontally across cells</p>
+            <div className="flex flex-col justify-between rounded-xl bg-white/[0.03] p-3.5 border border-white/[0.08] hover:border-white/20 transition-colors">
+              <div className="flex items-center justify-between gap-2">
+                <span className="text-[12.5px] font-medium text-ink-1">Append Column</span>
+                <kbd className="px-2 py-0.5 rounded bg-white/[0.08] border border-white/15 text-[11px] font-mono font-medium text-white shadow-sm shrink-0">Tab in Header End</kbd>
               </div>
+              <p className="mt-2 text-[11px] leading-relaxed text-ink-4">Appends a brand new column across all table rows</p>
+            </div>
 
-              <div className="flex flex-col justify-between rounded-xl bg-white/[0.03] p-3.5 border border-white/[0.08] hover:border-white/20 transition-colors">
-                <div className="flex items-center justify-between gap-2">
-                  <span className="text-[12.5px] font-medium text-ink-1">Append Column</span>
-                  <kbd className="px-2 py-0.5 rounded bg-white/[0.08] border border-white/15 text-[11px] font-mono font-medium text-white shadow-sm shrink-0">Tab in Header End</kbd>
-                </div>
-                <p className="mt-2 text-[11px] leading-relaxed text-ink-4">Appends a brand new column across all table rows</p>
+            <div className="flex flex-col justify-between rounded-xl bg-white/[0.03] p-3.5 border border-white/[0.08] hover:border-white/20 transition-colors">
+              <div className="flex items-center justify-between gap-2">
+                <span className="text-[12.5px] font-medium text-ink-1">Append Row</span>
+                <kbd className="px-2 py-0.5 rounded bg-white/[0.08] border border-white/15 text-[11px] font-mono font-medium text-white shadow-sm shrink-0">Tab in Last Cell</kbd>
               </div>
+              <p className="mt-2 text-[11px] leading-relaxed text-ink-4">Adds a new row at the bottom and focuses its first cell</p>
+            </div>
 
-              <div className="flex flex-col justify-between rounded-xl bg-white/[0.03] p-3.5 border border-white/[0.08] hover:border-white/20 transition-colors">
-                <div className="flex items-center justify-between gap-2">
-                  <span className="text-[12.5px] font-medium text-ink-1">Append Row</span>
-                  <kbd className="px-2 py-0.5 rounded bg-white/[0.08] border border-white/15 text-[11px] font-mono font-medium text-white shadow-sm shrink-0">Tab in Last Cell</kbd>
-                </div>
-                <p className="mt-2 text-[11px] leading-relaxed text-ink-4">Adds a new row at the bottom and focuses its first cell</p>
+            <div className="flex flex-col justify-between rounded-xl bg-white/[0.03] p-3.5 border border-white/[0.08] hover:border-white/20 transition-colors">
+              <div className="flex items-center justify-between gap-2">
+                <span className="text-[12.5px] font-medium text-ink-1">Step Down</span>
+                <kbd className="px-2 py-0.5 rounded bg-white/[0.08] border border-white/15 text-[11px] font-mono font-medium text-white shadow-sm shrink-0">Enter</kbd>
               </div>
+              <p className="mt-2 text-[11px] leading-relaxed text-ink-4">Moves directly to the cell in the next row below</p>
+            </div>
 
-              <div className="flex flex-col justify-between rounded-xl bg-white/[0.03] p-3.5 border border-white/[0.08] hover:border-white/20 transition-colors">
-                <div className="flex items-center justify-between gap-2">
-                  <span className="text-[12.5px] font-medium text-ink-1">Step Down</span>
-                  <kbd className="px-2 py-0.5 rounded bg-white/[0.08] border border-white/15 text-[11px] font-mono font-medium text-white shadow-sm shrink-0">Enter</kbd>
-                </div>
-                <p className="mt-2 text-[11px] leading-relaxed text-ink-4">Moves directly to the cell in the next row below</p>
+            <div className="flex flex-col justify-between rounded-xl bg-white/[0.03] p-3.5 border border-white/[0.08] hover:border-white/20 transition-colors">
+              <div className="flex items-center justify-between gap-2">
+                <span className="text-[12.5px] font-medium text-ink-1">Table Actions</span>
+                <kbd className="px-2 py-0.5 rounded bg-white/[0.08] border border-white/15 text-[11px] font-mono font-medium text-white shadow-sm shrink-0">Right-Click</kbd>
               </div>
+              <p className="mt-2 text-[11px] leading-relaxed text-ink-4">Opens menu to add or delete rows and columns</p>
+            </div>
 
-              <div className="flex flex-col justify-between rounded-xl bg-white/[0.03] p-3.5 border border-white/[0.08] hover:border-white/20 transition-colors">
-                <div className="flex items-center justify-between gap-2">
-                  <span className="text-[12.5px] font-medium text-ink-1">Table Actions</span>
-                  <kbd className="px-2 py-0.5 rounded bg-white/[0.08] border border-white/15 text-[11px] font-mono font-medium text-white shadow-sm shrink-0">Right-Click</kbd>
-                </div>
-                <p className="mt-2 text-[11px] leading-relaxed text-ink-4">Opens menu to add or delete rows and columns</p>
+            <div className="flex flex-col justify-between rounded-xl bg-white/[0.03] p-3.5 border border-white/[0.08] hover:border-white/20 transition-colors">
+              <div className="flex items-center justify-between gap-2">
+                <span className="text-[12.5px] font-medium text-ink-1">Exit Table</span>
+                <kbd className="px-2 py-0.5 rounded bg-white/[0.08] border border-white/15 text-[11px] font-mono font-medium text-white shadow-sm shrink-0">Enter on Blank Row</kbd>
               </div>
-
-              <div className="flex flex-col justify-between rounded-xl bg-white/[0.03] p-3.5 border border-white/[0.08] hover:border-white/20 transition-colors">
-                <div className="flex items-center justify-between gap-2">
-                  <span className="text-[12.5px] font-medium text-ink-1">Exit Table</span>
-                  <kbd className="px-2 py-0.5 rounded bg-white/[0.08] border border-white/15 text-[11px] font-mono font-medium text-white shadow-sm shrink-0">Enter on Blank Row</kbd>
-                </div>
-                <p className="mt-2 text-[11px] leading-relaxed text-ink-4">Exits table into a normal text line underneath</p>
-              </div>
+              <p className="mt-2 text-[11px] leading-relaxed text-ink-4">Exits table into a normal text line underneath</p>
             </div>
           </div>
+        </CollapsibleShortcutCategory>
 
-          {/* Quick Markdown Typing Triggers & Shortcuts Guide */}
-          <div className="mt-6 border-t border-white/[0.06] pt-5">
-            <div className="mb-3">
-              <h3 className="text-[13.5px] font-semibold text-white tracking-tight">
-                Markdown Live Typing Triggers & Shortcuts
-              </h3>
-              <p className="text-[11.5px] text-ink-4">
-                Type these directly in the note editor or insert them via the burger menu (☰)
-              </p>
+        {/* TILE 5: Live Markdown Typing Triggers Guide */}
+        <CollapsibleShortcutCategory
+          id="syntaxGuide"
+          isOpen={!!openTiles["syntaxGuide"]}
+          onToggle={toggleTile}
+          icon={Sparkles}
+          title="Live Markdown Typing Triggers"
+          description="Type these live syntax triggers directly in the note to format on the fly"
+          badge="11 triggers"
+        >
+          <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-3">
+            <div className="flex flex-col justify-between rounded-xl bg-white/[0.03] p-3.5 border border-white/[0.08] hover:border-white/20 transition-colors">
+              <div className="flex items-center justify-between gap-2">
+                <span className="text-[12.5px] font-medium text-ink-1">Blockquote</span>
+                <kbd className="px-2 py-0.5 rounded bg-white/[0.08] border border-white/15 text-[11px] font-mono font-medium text-white shadow-sm shrink-0">&gt; at start</kbd>
+              </div>
+              <p className="mt-2 text-[11px] leading-relaxed text-ink-4">Type <code className="font-mono text-white/80">&gt; </code> at line start to format as a blockquote</p>
             </div>
 
-            <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-3">
-              <div className="flex flex-col justify-between rounded-xl bg-white/[0.03] p-3.5 border border-white/[0.08] hover:border-white/20 transition-colors">
-                <div className="flex items-center justify-between gap-2">
-                  <span className="text-[12.5px] font-medium text-ink-1">Blockquote</span>
-                  <kbd className="px-2 py-0.5 rounded bg-white/[0.08] border border-white/15 text-[11px] font-mono font-medium text-white shadow-sm shrink-0">&gt; at start</kbd>
-                </div>
-                <p className="mt-2 text-[11px] leading-relaxed text-ink-4">Type <code className="font-mono text-white/80">&gt; </code> at line start to format as a blockquote</p>
+            <div className="flex flex-col justify-between rounded-xl bg-white/[0.03] p-3.5 border border-white/[0.08] hover:border-white/20 transition-colors">
+              <div className="flex items-center justify-between gap-2">
+                <span className="text-[12.5px] font-medium text-ink-1">Numbered List</span>
+                <kbd className="px-2 py-0.5 rounded bg-white/[0.08] border border-white/15 text-[11px] font-mono font-medium text-white shadow-sm shrink-0">1. at start</kbd>
               </div>
+              <p className="mt-2 text-[11px] leading-relaxed text-ink-4">Type <code className="font-mono text-white/80">1. </code> at line start; Enter continues with 2., 3., etc.</p>
+            </div>
 
-              <div className="flex flex-col justify-between rounded-xl bg-white/[0.03] p-3.5 border border-white/[0.08] hover:border-white/20 transition-colors">
-                <div className="flex items-center justify-between gap-2">
-                  <span className="text-[12.5px] font-medium text-ink-1">Numbered List</span>
-                  <kbd className="px-2 py-0.5 rounded bg-white/[0.08] border border-white/15 text-[11px] font-mono font-medium text-white shadow-sm shrink-0">1. at start</kbd>
-                </div>
-                <p className="mt-2 text-[11px] leading-relaxed text-ink-4">Type <code className="font-mono text-white/80">1. </code> at line start; Enter continues with 2., 3., etc.</p>
+            <div className="flex flex-col justify-between rounded-xl bg-white/[0.03] p-3.5 border border-white/[0.08] hover:border-white/20 transition-colors">
+              <div className="flex items-center justify-between gap-2">
+                <span className="text-[12.5px] font-medium text-ink-1">Checklist Task</span>
+                <kbd className="px-2 py-0.5 rounded bg-white/[0.08] border border-white/15 text-[11px] font-mono font-medium text-white shadow-sm shrink-0">[] at start</kbd>
               </div>
+              <p className="mt-2 text-[11px] leading-relaxed text-ink-4">Type <code className="font-mono text-white/80">[] </code> or <code className="font-mono text-white/80">- [ ] </code> to create an interactive task</p>
+            </div>
 
-              <div className="flex flex-col justify-between rounded-xl bg-white/[0.03] p-3.5 border border-white/[0.08] hover:border-white/20 transition-colors">
-                <div className="flex items-center justify-between gap-2">
-                  <span className="text-[12.5px] font-medium text-ink-1">Checklist Task</span>
-                  <kbd className="px-2 py-0.5 rounded bg-white/[0.08] border border-white/15 text-[11px] font-mono font-medium text-white shadow-sm shrink-0">[] at start</kbd>
-                </div>
-                <p className="mt-2 text-[11px] leading-relaxed text-ink-4">Type <code className="font-mono text-white/80">[] </code> or <code className="font-mono text-white/80">- [ ] </code> to create an interactive task</p>
+            <div className="flex flex-col justify-between rounded-xl bg-white/[0.03] p-3.5 border border-white/[0.08] hover:border-white/20 transition-colors">
+              <div className="flex items-center justify-between gap-2">
+                <span className="text-[12.5px] font-medium text-ink-1">Inline Code</span>
+                <kbd className="px-2 py-0.5 rounded bg-white/[0.08] border border-white/15 text-[11px] font-mono font-medium text-white shadow-sm shrink-0">`code`</kbd>
               </div>
+              <p className="mt-2 text-[11px] leading-relaxed text-ink-4">Wrap words with backticks for monospaced inline code</p>
+            </div>
 
-              <div className="flex flex-col justify-between rounded-xl bg-white/[0.03] p-3.5 border border-white/[0.08] hover:border-white/20 transition-colors">
-                <div className="flex items-center justify-between gap-2">
-                  <span className="text-[12.5px] font-medium text-ink-1">Inline Code</span>
-                  <kbd className="px-2 py-0.5 rounded bg-white/[0.08] border border-white/15 text-[11px] font-mono font-medium text-white shadow-sm shrink-0">`code`</kbd>
-                </div>
-                <p className="mt-2 text-[11px] leading-relaxed text-ink-4">Wrap words with backticks for monospaced inline code</p>
+            <div className="flex flex-col justify-between rounded-xl bg-white/[0.03] p-3.5 border border-white/[0.08] hover:border-white/20 transition-colors">
+              <div className="flex items-center justify-between gap-2">
+                <span className="text-[12.5px] font-medium text-ink-1">Link</span>
+                <kbd className="px-2 py-0.5 rounded bg-white/[0.08] border border-white/15 text-[11px] font-mono font-medium text-white shadow-sm shrink-0">[title](url)</kbd>
               </div>
+              <p className="mt-2 text-[11px] leading-relaxed text-ink-4">Formats clickable web and file links (Ctrl+K)</p>
+            </div>
 
-              <div className="flex flex-col justify-between rounded-xl bg-white/[0.03] p-3.5 border border-white/[0.08] hover:border-white/20 transition-colors">
-                <div className="flex items-center justify-between gap-2">
-                  <span className="text-[12.5px] font-medium text-ink-1">Link</span>
-                  <kbd className="px-2 py-0.5 rounded bg-white/[0.08] border border-white/15 text-[11px] font-mono font-medium text-white shadow-sm shrink-0">[title](url)</kbd>
-                </div>
-                <p className="mt-2 text-[11px] leading-relaxed text-ink-4">Formats clickable web and file links (Ctrl+K)</p>
+            <div className="flex flex-col justify-between rounded-xl bg-white/[0.03] p-3.5 border border-white/[0.08] hover:border-white/20 transition-colors">
+              <div className="flex items-center justify-between gap-2">
+                <span className="text-[12.5px] font-medium text-ink-1">Footnote</span>
+                <kbd className="px-2 py-0.5 rounded bg-white/[0.08] border border-white/15 text-[11px] font-mono font-medium text-white shadow-sm shrink-0">[^1] & [^1]:</kbd>
               </div>
+              <p className="mt-2 text-[11px] leading-relaxed text-ink-4">Superscript reference and footnote explanation line</p>
+            </div>
 
-              <div className="flex flex-col justify-between rounded-xl bg-white/[0.03] p-3.5 border border-white/[0.08] hover:border-white/20 transition-colors">
-                <div className="flex items-center justify-between gap-2">
-                  <span className="text-[12.5px] font-medium text-ink-1">Footnote</span>
-                  <kbd className="px-2 py-0.5 rounded bg-white/[0.08] border border-white/15 text-[11px] font-mono font-medium text-white shadow-sm shrink-0">[^1] & [^1]:</kbd>
-                </div>
-                <p className="mt-2 text-[11px] leading-relaxed text-ink-4">Superscript reference and footnote explanation line</p>
+            <div className="flex flex-col justify-between rounded-xl bg-white/[0.03] p-3.5 border border-white/[0.08] hover:border-white/20 transition-colors">
+              <div className="flex items-center justify-between gap-2">
+                <span className="text-[12.5px] font-medium text-ink-1">Definition List</span>
+                <kbd className="px-2 py-0.5 rounded bg-white/[0.08] border border-white/15 text-[11px] font-mono font-medium text-white shadow-sm shrink-0">: Definition</kbd>
               </div>
+              <p className="mt-2 text-[11px] leading-relaxed text-ink-4">Type <code className="font-mono text-white/80">: </code> on the line beneath a term to define it</p>
+            </div>
 
-              <div className="flex flex-col justify-between rounded-xl bg-white/[0.03] p-3.5 border border-white/[0.08] hover:border-white/20 transition-colors">
-                <div className="flex items-center justify-between gap-2">
-                  <span className="text-[12.5px] font-medium text-ink-1">Definition List</span>
-                  <kbd className="px-2 py-0.5 rounded bg-white/[0.08] border border-white/15 text-[11px] font-mono font-medium text-white shadow-sm shrink-0">: Definition</kbd>
-                </div>
-                <p className="mt-2 text-[11px] leading-relaxed text-ink-4">Type <code className="font-mono text-white/80">: </code> on the line beneath a term to define it</p>
+            <div className="flex flex-col justify-between rounded-xl bg-white/[0.03] p-3.5 border border-white/[0.08] hover:border-white/20 transition-colors">
+              <div className="flex items-center justify-between gap-2">
+                <span className="text-[12.5px] font-medium text-ink-1">Strikethrough</span>
+                <kbd className="px-2 py-0.5 rounded bg-white/[0.08] border border-white/15 text-[11px] font-mono font-medium text-white shadow-sm shrink-0">~~text~~</kbd>
               </div>
+              <p className="mt-2 text-[11px] leading-relaxed text-ink-4">Wrap text with double tildes for crossed-out text</p>
+            </div>
 
-              <div className="flex flex-col justify-between rounded-xl bg-white/[0.03] p-3.5 border border-white/[0.08] hover:border-white/20 transition-colors">
-                <div className="flex items-center justify-between gap-2">
-                  <span className="text-[12.5px] font-medium text-ink-1">Strikethrough</span>
-                  <kbd className="px-2 py-0.5 rounded bg-white/[0.08] border border-white/15 text-[11px] font-mono font-medium text-white shadow-sm shrink-0">~~text~~</kbd>
-                </div>
-                <p className="mt-2 text-[11px] leading-relaxed text-ink-4">Wrap text with double tildes for crossed-out text</p>
+            <div className="flex flex-col justify-between rounded-xl bg-white/[0.03] p-3.5 border border-white/[0.08] hover:border-white/20 transition-colors">
+              <div className="flex items-center justify-between gap-2">
+                <span className="text-[12.5px] font-medium text-ink-1">Highlight</span>
+                <kbd className="px-2 py-0.5 rounded bg-white/[0.08] border border-white/15 text-[11px] font-mono font-medium text-white shadow-sm shrink-0">==word==</kbd>
               </div>
+              <p className="mt-2 text-[11px] leading-relaxed text-ink-4">Wrap words with double equal signs for neon marker highlight</p>
+            </div>
 
-              <div className="flex flex-col justify-between rounded-xl bg-white/[0.03] p-3.5 border border-white/[0.08] hover:border-white/20 transition-colors">
-                <div className="flex items-center justify-between gap-2">
-                  <span className="text-[12.5px] font-medium text-ink-1">Highlight</span>
-                  <kbd className="px-2 py-0.5 rounded bg-white/[0.08] border border-white/15 text-[11px] font-mono font-medium text-white shadow-sm shrink-0">==word==</kbd>
-                </div>
-                <p className="mt-2 text-[11px] leading-relaxed text-ink-4">Wrap words with double equal signs for neon marker highlight</p>
+            <div className="flex flex-col justify-between rounded-xl bg-white/[0.03] p-3.5 border border-white/[0.08] hover:border-white/20 transition-colors">
+              <div className="flex items-center justify-between gap-2">
+                <span className="text-[12.5px] font-medium text-ink-1">Sub & Super</span>
+                <kbd className="px-2 py-0.5 rounded bg-white/[0.08] border border-white/15 text-[11px] font-mono font-medium text-white shadow-sm shrink-0">~2~ & ^2^</kbd>
               </div>
+              <p className="mt-2 text-[11px] leading-relaxed text-ink-4">Formulas like <code className="font-mono text-white/80">H~2~O</code> and powers like <code className="font-mono text-white/80">x^2</code></p>
+            </div>
 
-              <div className="flex flex-col justify-between rounded-xl bg-white/[0.03] p-3.5 border border-white/[0.08] hover:border-white/20 transition-colors">
-                <div className="flex items-center justify-between gap-2">
-                  <span className="text-[12.5px] font-medium text-ink-1">Sub & Super</span>
-                  <kbd className="px-2 py-0.5 rounded bg-white/[0.08] border border-white/15 text-[11px] font-mono font-medium text-white shadow-sm shrink-0">~2~ & ^2^</kbd>
-                </div>
-                <p className="mt-2 text-[11px] leading-relaxed text-ink-4">Formulas like <code className="font-mono text-white/80">H~2~O</code> and powers like <code className="font-mono text-white/80">x^2</code></p>
+            <div className="flex flex-col justify-between rounded-xl bg-white/[0.03] p-3.5 border border-white/[0.08] hover:border-white/20 transition-colors">
+              <div className="flex items-center justify-between gap-2">
+                <span className="text-[12.5px] font-medium text-ink-1">Emoji Shortcodes</span>
+                <kbd className="px-2 py-0.5 rounded bg-white/[0.08] border border-white/15 text-[11px] font-mono font-medium text-white shadow-sm shrink-0">:fire:</kbd>
               </div>
-
-              <div className="flex flex-col justify-between rounded-xl bg-white/[0.03] p-3.5 border border-white/[0.08] hover:border-white/20 transition-colors">
-                <div className="flex items-center justify-between gap-2">
-                  <span className="text-[12.5px] font-medium text-ink-1">Emoji Shortcodes</span>
-                  <kbd className="px-2 py-0.5 rounded bg-white/[0.08] border border-white/15 text-[11px] font-mono font-medium text-white shadow-sm shrink-0">:fire:</kbd>
-                </div>
-                <p className="mt-2 text-[11px] leading-relaxed text-ink-4">Type <code className="font-mono text-white/80">:smile:</code>, <code className="font-mono text-white/80">:heart:</code>, <code className="font-mono text-white/80">:rocket:</code>, etc.</p>
-              </div>
+              <p className="mt-2 text-[11px] leading-relaxed text-ink-4">Type <code className="font-mono text-white/80">:smile:</code>, <code className="font-mono text-white/80">:heart:</code>, <code className="font-mono text-white/80">:rocket:</code>, etc.</p>
             </div>
           </div>
-        </section>
+        </CollapsibleShortcutCategory>
 
         <BugReportSection />
         <AppUpdatesSection />

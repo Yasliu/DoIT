@@ -11,6 +11,7 @@ import { ModeToggle } from "./ModeToggle";
 import { TrayPill } from "./TrayPill";
 import { RawEditor } from "./RawEditor";
 import { TableMenu } from "./TableMenu";
+import { EmojiAutocomplete } from "./EmojiAutocomplete";
 import {
   ArrowLeft,
   ArrowUpRight,
@@ -1480,6 +1481,8 @@ export function TrayCompanion() {
         </div>
       )}
       </div>
+
+      <EmojiAutocomplete editorRef={editorRef} onEmojiInserted={handleEditorInput} />
 
       {tableMenu && (
         <TableMenu

@@ -278,10 +278,11 @@
       background-color 150ms var(--ease-out),
       box-shadow 150ms var(--ease-out);
     backface-visibility: hidden;
-    transform: translateZ(0);
     content-visibility: auto;
     contain: content;
     contain-intrinsic-size: auto 160px;
+    -webkit-font-smoothing: antialiased;
+    text-rendering: optimizeLegibility;
   }
 
   .card::before {
@@ -778,8 +779,24 @@ html[data-theme="monochrome"] .lightscape {
   transition: color 0.15s ease;
 }
 .md-link:hover { color: #93c5fd; }
-.md-sub { font-size: 0.78em; vertical-align: sub; line-height: 0; color: rgba(255, 255, 255, 0.9); }
-.md-sup { font-size: 0.78em; vertical-align: super; line-height: 0; color: rgba(255, 255, 255, 0.9); }
+.md-sub {
+  font-size: 0.82em;
+  vertical-align: baseline;
+  position: relative;
+  bottom: -0.28em;
+  line-height: 1;
+  color: rgba(255, 255, 255, 0.96);
+  font-weight: 500;
+}
+.md-sup {
+  font-size: 0.82em;
+  vertical-align: baseline;
+  position: relative;
+  top: -0.38em;
+  line-height: 1;
+  color: rgba(255, 255, 255, 0.96);
+  font-weight: 500;
+}
 .md-footnote-ref {
   font-size: 0.75em;
   vertical-align: super;
@@ -888,13 +905,27 @@ html[data-theme="monochrome"] .lightscape {
 .md-task-done { opacity: 0.55; text-decoration: line-through; }
 /* ---- Card previews: same rendering as the opened note, read-only and clamped ---- */
 .md-preview {
-  font-size: 12.5px;
+  font-size: 13.5px;
   line-height: 1.55;
-  color: var(--color-ink-2, #c3c6cc);
+  color: rgba(240, 243, 246, 0.94);
   overflow: hidden;
   user-select: none;
   cursor: inherit;
   word-break: break-word;
+  -webkit-font-smoothing: antialiased;
+  text-rendering: optimizeLegibility;
+}
+.md-preview .md-sub {
+  font-size: 0.84em;
+  font-weight: 600;
+  color: #ffffff;
+  bottom: -0.25em;
+}
+.md-preview .md-sup {
+  font-size: 0.84em;
+  font-weight: 600;
+  color: #ffffff;
+  top: -0.35em;
 }
 .md-preview > div { min-height: 1.2em; }
 .md-preview .md-tablewrap { overflow: hidden; margin: 0.35em 0; }

@@ -644,6 +644,79 @@ function convertInlineInTextNodes(container: HTMLElement): void {
       }
       return;
     }
+
+    // 7. Subscript ~text~ e.g. H~2~O
+    const subMatch = val.match(/(?<!~)~([^~\s\n]+)~(?!~)/);
+    if (subMatch && subMatch.index !== undefined) {
+      const startIdx = subMatch.index;
+      const fullLen = subMatch[0].length;
+      const innerText = subMatch[1];
+      const isCaretAtEnd = anchorNode === node && anchorOffset >= startIdx + fullLen;
+
+      const beforeText = val.slice(0, startIdx);
+      const afterText = val.slice(startIdx + fullLen);
+
+      const subEl = document.createElement("sub");
+      subEl.className = "md-sub";
+      subEl.textContent = innerText;
+
+      const afterNode = document.createTextNode(afterText || "\u200B");
+      node.data = beforeText;
+      node.after(subEl);
+      subEl.after(afterNode);
+
+      if (isCaretAtEnd && sel) {
+        const r = document.createRange();
+        r.setStart(afterNode, afterText ? 0 : 1);
+        r.collapse(true);
+        sel.removeAllRanges();
+        sel.addRange(r);
+      }
+      return;
+    }
+
+    // 8. Superscript ^text^ e.g. x^2^ or x^2
+    let supMatch = val.match(/\^([^^ \n]+)\^/);
+    let innerSup = "";
+    let sIdx = -1;
+    let sLen = 0;
+
+    if (supMatch && supMatch.index !== undefined) {
+      sIdx = supMatch.index;
+      sLen = supMatch[0].length;
+      innerSup = supMatch[1];
+    } else {
+      const shortMatch = val.match(/([a-zA-Z0-9])\^(\d+)/);
+      if (shortMatch && shortMatch.index !== undefined) {
+        sIdx = shortMatch.index + shortMatch[1].length;
+        sLen = shortMatch[0].length - shortMatch[1].length;
+        innerSup = shortMatch[2];
+      }
+    }
+
+    if (sIdx >= 0) {
+      const isCaretAtEnd = anchorNode === node && anchorOffset >= sIdx + sLen;
+      const beforeText = val.slice(0, sIdx);
+      const afterText = val.slice(sIdx + sLen);
+
+      const supEl = document.createElement("sup");
+      supEl.className = "md-sup";
+      supEl.textContent = innerSup;
+
+      const afterNode = document.createTextNode(afterText || "\u200B");
+      node.data = beforeText;
+      node.after(supEl);
+      supEl.after(afterNode);
+
+      if (isCaretAtEnd && sel) {
+        const r = document.createRange();
+        r.setStart(afterNode, afterText ? 0 : 1);
+        r.collapse(true);
+        sel.removeAllRanges();
+        sel.addRange(r);
+      }
+      return;
+    }
   }
 }
 
