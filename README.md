@@ -1,1 +1,159 @@
-PGRpdiBhbGlnbj0iY2VudGVyIj4KCjxpbWcgc3JjPSJsb2dvLnN2ZyIgd2lkdGg9IjkwIiBhbHQ9IkRvSVQgbG9nbyI+CgojIERvSVQKCioqTG9jYWwtZmlyc3Qgbm90ZXMgYW5kIHRhc2tzLCBhcnJhbmdlZCBhcyBhbiBvcmdhbmljIGJlbnRvIGdyaWQuKioKCk5vIGNsb3VkLiBObyBhY2NvdW50cy4gTm8gdHJhY2tpbmcuIFlvdXIgbm90ZXMgYXJlIHBsYWluIE1hcmtkb3duIGZpbGVzIG9uIHlvdXIgb3duIG1hY2hpbmUuCgpbIVtMYXRlc3QgcmVsZWFzZV0oaHR0cHM6Ly9pbWcuc2hpZWxkcy5pby9naXRodWIvdi9yZWxlYXNlL1lhc2xpdS9Eb0lUKV0oaHR0cHM6Ly9naXRodWIuY29tL1lhc2xpdS9Eb0lUL3JlbGVhc2VzKQpbIVtNaWNyb3NvZnQgU3RvcmVdKGh0dHBzOi8vaW1nLnNoaWVsZHMuaW8vYmFkZ2UvZG93bmxvYWQtTWljcm9zb2Z0JTIwU3RvcmUtMDA3OEQ0KV0oaHR0cHM6Ly9hcHBzLm1pY3Jvc29mdC5jb20vZGV0YWlsLzlQTVhEWFhLSkRGRz9obD1lbi11cyZnbD1VUyZvY2lkPXBkcHNoYXJlKQpbIVtMaWNlbnNlXShodHRwczovL2ltZy5zaGllbGRzLmlvL2dpdGh1Yi9saWNlbnNlL1lhc2xpdS9Eb0lUKV0oTElDRU5TRSkKWyFbUGxhdGZvcm1dKGh0dHBzOi8vaW1nLnNoaWVsZHMuaW8vYmFkZ2UvcGxhdGZvcm0tV2luZG93cy1ibHVlKV0oKQpbIVtCdWlsdCB3aXRoXShodHRwczovL2ltZy5zaGllbGRzLmlvL2JhZGdlL2J1aWx0JTIwd2l0aC1UYXVyaSUyMCUyQiUyMFJ1c3QtMjQ5NEVBKV0oaHR0cHM6Ly92Mi50YXVyaS5hcHAvKQoKPGltZyBzcmM9ImRvY3Mvc2hvdC1kYXNoYm9hcmQuanBnIiB3aWR0aD0iODAwIiBhbHQ9IlRoZSBEb0lUIGJlbnRvIGdyaWQ6IGV2ZXJ5IG5vdGUgYXMgYSBjYXJkIj4KCjwvZGl2PgoKLS0tCgojIyBXaHkgRG9JVAoKTW9zdCBub3RlIGFwcHMgd2FudCBhbiBhY2NvdW50IGJlZm9yZSB0aGV5IHdhbnQgeW91ciB0aG91Z2h0cy4gRG9JVCBkb2Vzbid0LiBFdmVyeSBub3RlIGlzIGEgcGxhaW4gTWFya2Rvd24gZmlsZSBpbiBhIGZvbGRlciB5b3UgY2hvb3NlIOKAlCBvcGVuYWJsZSBpbiBhbnkgZWRpdG9yLCBwb3J0YWJsZSBhbnl3aGVyZSwgeW91cnMgZm9yZXZlci4KCi0gKipQbGFpbiBmaWxlcywgbm90IGEgZGF0YWJhc2UuKiogTm90ZXMgc2F2ZSBhcyBzdGFuZGFyZCBodW1hbi1yZWFkYWJsZSBgLm1kYCBmaWxlcyBpbnNpZGUgYSBkaXJlY3RvcnkgeW91IGNvbnRyb2wuIEJhY2sgdGhlbSB1cCB3aXRoIGFueXRoaW5nLCBzeW5jIHRoZW0gd2l0aCBhbnl0aGluZywgb3BlbiB0aGVtIHdpdGggYW55dGhpbmcuCi0gKipPcGVuIGV4dGVybmFsIGZpbGVzIGluIHBsYWNlLioqIFBvaW50IERvSVQgYXQgYW55IGAubWRgIG9yIGAudHh0YCBhbmQgZWRpdCBpdCB3aGVyZSBpdCBsaXZlcy4gRXh0ZXJuYWxseSBvcGVuZWQgZmlsZXMgc2F2ZSB3aXRoIGFuIGV4cGxpY2l0IFNhdmU7IERvSVQncyBvd24gbm90ZXMgYWx3YXlzIGF1dG9zYXZlLgotICoqQSBjYW52YXMsIG5vdCBhIGxpc3QuKiogQW4gYXN5bW1ldHJpYyBiZW50byBncmlkIHRoYXQgZ3Jvd3MgZWFjaCBjYXJkIHRvIG1hdGNoIGl0cyBjb250ZW50IGRlbnNpdHkg4oCUIHBhcmFncmFwaCwgdGFibGUsIGNoZWNrbGlzdCwgb3IgY29kZS4KLSAqKlRyYXktbmF0aXZlLioqIEZvbGRzIGludG8gdGhlIFdpbmRvd3Mgc3lzdGVtIHRyYXkgYW5kIGNvbWVzIGJhY2sgaW5zdGFudGx5LgotICoqTGlnaHQuKiogTmF0aXZlIFJ1c3QgdmlhIFRhdXJpIHYyLCBmbGF0IGlkbGUgZm9vdHByaW50IHVuZGVyIDIwIE1CIFJBTS4KLSAqKlplcm8gY2xvdWQsIHplcm8gYWNjb3VudHMsIHplcm8gdHJhY2tpbmcuKiogTm8gcmVtb3RlIGF1dGgsIG5vIHRlbGVtZXRyeSwgTUlULWxpY2Vuc2VkIHNvdXJjZS4KCjxwIGFsaWduPSJjZW50ZXIiPgogIDxpbWcgc3JjPSJkb2NzL3Nob3QtZWRpdG9yLmpwZyIgd2lkdGg9IjgwMCIgYWx0PSJUaGUgbm90ZSBlZGl0b3IgaW4gTUQgbW9kZSBhbmQgdGV4dCBtb2RlIHNpZGUgYnkgc2lkZSI+CjwvcD4KCjxwIGFsaWduPSJjZW50ZXIiPgogIDxpbWcgc3JjPSJkb2NzL2RlbW8uZ2lmIiB3aWR0aD0iODAwIiBhbHQ9IkRvSVQgYmVudG8gZ3JpZCBpbiBtb3Rpb24iPgo8L3A+CgojIyMgVGhlIHRyYXkgY29tcGFuaW9uCgpEb0lUIGxpdmVzIGluIHRoZSBzeXN0ZW0gdHJheSBhcyBhIGZsb2F0aW5nIGNvbXBhbmlvbiDigJQgb25lIGNsaWNrIGV4cGFuZHMgaXQgaW50byBhIG1pbmkgbm90ZSBzdXJmYWNlLCB3aGVyZXZlciB5b3UgYXJlIG9uIGFueSBtb25pdG9yLgoKPHAgYWxpZ249ImNlbnRlciI+CiAgPGltZyBzcmM9ImRvY3MvdHJheS5naWYiIHdpZHRoPSI0ODAiIGFsdD0iVGhlIERvSVQgdHJheSBjb21wYW5pb24gZXhwYW5kaW5nIG92ZXIgdGhlIGRlc2t0b3AiPgo8L3A+CgojIyBHZXR0aW5nIHN0YXJ0ZWQKCjEuIEluc3RhbGwgZnJvbSB0aGUgW01pY3Jvc29mdCBTdG9yZV0oaHR0cHM6Ly9hcHBzLm1pY3Jvc29mdC5jb20vZGV0YWlsLzlQTVhEWFhLSkRGRz9obD1lbi11cyZnbD1VUyZvY2lkPXBkcHNoYXJlKSwgb3IgZ3JhYiB0aGUgc3RhbmRhbG9uZSBpbnN0YWxsZXIgZnJvbSB0aGUgW1JlbGVhc2VzXShodHRwczovL2dpdGh1Yi5jb20vWWFzbGl1L0RvSVQvcmVsZWFzZXMpIHBhZ2UuCjIuIFJ1biB0aGUgc2V0dXAgd2l6YXJkIGFuZCBwaWNrIHlvdXIgaW5zdGFsbCBkaXJlY3RvcnkuCjMuIE9uIGZpcnN0IGxhdW5jaCwgc2V0IHlvdXIgbm90ZSByZXBvc2l0b3J5IGZvbGRlciBpbiBTZXR0aW5ncyDigJQgZXZlcnkgbm90ZSB5b3UgY3JlYXRlIGxhbmRzIHRoZXJlIGFzIGEgTWFya2Rvd24gZmlsZS4KCj4gKipXaW5kb3dzIFNtYXJ0U2NyZWVuIG5vdGljZSAoc3RhbmRhbG9uZSBpbnN0YWxsZXIgb25seSk6KiogRG9JVCBpcyBhbiBpbmRlcGVuZGVudCBvcGVuLXNvdXJjZSBidWlsZCwgc28gU21hcnRTY3JlZW4gbWF5IHNob3cgYSBibHVlIHdhcm5pbmcuIENsaWNrICoqTW9yZSBpbmZvIOKGkiBSdW4gYW55d2F5KiouIEluc3RhbGxpbmcgZnJvbSB0aGUgTWljcm9zb2Z0IFN0b3JlIG5ldmVyIHRyaWdnZXJzIHRoaXMuCgpGaWxlIGhhbmRsaW5nIHN0YXlzIHNhbmRib3hlZDogaW1wb3J0cyBhcmUgY2FwcGVkIGF0IDMwIE1CIGFuZCBwYXRoIG9wZXJhdGlvbnMgYXJlIGlzb2xhdGVkIGZyb20gYWRtaW5pc3RyYXRpdmUgZWxldmF0aW9uLgoKIyMgRXh0ZXJuYWwgZmlsZXM6IG9wZW4sIGVkaXQsIHN5bmMKCkRvSVQgZG91YmxlcyBhcyB5b3VyIGV4dGVybmFsIE1hcmtkb3duIGVkaXRvci4gUmlnaHQtY2xpY2sgYW55IGAubWRgIG9yIGAudHh0YCBpbiBFeHBsb3JlciwgY2hvb3NlICoqT3BlbiB3aXRoIOKGkiBEb0lUKiosIGFuZCB0aGUgZmlsZSBvcGVucyBpbiBwbGFjZSDigJQgaXQgaXMgbm90IGNvcGllZCBpbnRvIHlvdXIgRG9JVCBzaGVsZi4gRWRpdCBpbiBNRCBtb2RlIG9yIHRleHQgbW9kZSwgdGhlbiBoaXQgKipTYXZlKiogdG8gd3JpdGUgaXQgYmFjayB0byB0aGUgc2FtZSBmaWxlLiBEb0lUJ3Mgb3duIG5vdGVzIGF1dG9zYXZlIGFzIGFsd2F5cy4KCjxwIGFsaWduPSJjZW50ZXIiPgogIDxpbWcgc3JjPSJkb2NzL3Nob3Qtb3BlbndpdGguanBnIiB3aWR0aD0iNDgwIiBhbHQ9Ik9wZW5pbmcgYSBmaWxlIHdpdGggRG9JVCBmcm9tIHRoZSBXaW5kb3dzIGNvbnRleHQgbWVudSI+CjwvcD4KCkRyb3AgYW55IGAubWRgIG9yIGAudHh0YCBmaWxlcyBpbnRvIHlvdXIgbm90ZSByZXBvc2l0b3J5IGZvbGRlciwgaGl0ICoqU3luYyBSZXBvc2l0b3J5KiogaW4gU2V0dGluZ3MsIGFuZCB0aGV5IHJlLWluZGV4IGludG8geW91ciBncmlkIGluc3RhbnRseS4KCjxwIGFsaWduPSJjZW50ZXIiPgogIDxpbWcgc3JjPSJkb2NzL3Nob3Qtc2F2ZS5qcGciIHdpZHRoPSI3MDAiIGFsdD0iVGhlIFNhdmUgYnV0dG9uIGZvciBleHRlcm5hbGx5IG9wZW5lZCBmaWxlcyI+CjwvcD4KCiMjIFdoYXQncyBuZXcgaW4gdjEuMS43CgotIE1heGltaXplZCBub3RlcyBub3cgdGFrZSB0aGUgZnVsbCBzY3JlZW4gYW5kIGNsb3NlIHdpdGggYSBmbHVzaCBzbGlkZS1vdXQsIG5vIGRhc2hib2FyZCBmbGFzaCB1bmRlcm5lYXRoCi0gQ29kZSBibG9ja3MgbGFuZCBwcm9wZXJseTogdHlwaW5nIHRocmVlIGJhY2t0aWNrcyBjcmVhdGVzIG9uZSBpbnN0YW50bHksIHBhc3RlZCBmZW5jZXMgY29udmVydCBhdXRvbWF0aWNhbGx5LCBhbmQgaW5saW5lIGNvZGUgZ2V0cyByZWFsIG1vbm9zcGFjZSBzdHlsaW5nCi0gVGhlIHNpZGViYXIgc3RvcHBlZCB0d2l0Y2hpbmc6IHN0YXRpb25hcnkgdHJhY2sgd2hlbiB0b2dnbGluZywgdGlkeSB2ZXJ0aWNhbCBzdGFja2luZyB3aGVuIGNvbGxhcHNlZCwgYW5kIHRoZSBiZW50byBncmlkIGhvbGRzIGl0cyBsYXlvdXQgaW5zdGVhZCBvZiByZXNodWZmbGluZwotIERvY2sgYW5kIG11bHRpLW1vbml0b3IgZml4ZXM6IHRoZSB0cmF5IGNvbXBhbmlvbiByZXNwZWN0cyB0aGUgdGFza2JhciBhbmQgd29yayBhcmVhIG9uIGV2ZXJ5IG1vbml0b3IsIGFuZCBub3JtYWwgc2NyZWVucyBubyBsb25nZXIgbWlzZmlyZSB2ZXJ0aWNhbCBtb2RlCi0gQ2F0ZWdvcnkgaWNvbnMgYXJlIGhlcmUgYW5kIHRoZXkgcGVyc2lzdCBhY3Jvc3MgcmVzdGFydHMsIG1hbmFnZWQgaW4gb25lIHVuaWZpZWQgZWRpdG9yIHdpdGggaW5zdGFudCBzZWFyY2gKLSBTdG9yZS1yZWFkeSBwYWNrYWdpbmc6IGR1YWwgTlNJUy9NU0kgaW5zdGFsbGVycyB3aXRoIG9mZmxpbmUgV2ViVmlldzIsIHBsdXMgdGhlIG9mZmljaWFsIHByaXZhY3kgcG9saWN5IGxpbmtlZCBhdCB0aGUgYm90dG9tCgpUaGUgZnVsbCBoaXN0b3J5IGxpdmVzIGluIHRoZSByZWxlYXNlIGxvZyBiZWxvdy4KCjxkZXRhaWxzPgo8c3VtbWFyeT48c3Ryb25nPlJlbGVhc2UgbG9nPC9zdHJvbmc+IChjbGljayB0byBleHBhbmQpPC9zdW1tYXJ5PgoKPGRldGFpbHM+CjxzdW1tYXJ5PjxzdHJvbmc+djEuMS43PC9zdHJvbmc+IOKAlCBOb3ZlbWJlciA1LCAyMDI2PC9zdW1tYXJ5PgoKLSBOb3RlcyBtYXhpbWl6ZSB0byAxMDAlIG9mIHRoZSBzY3JlZW47IHRoZSBmbGV4Ym94IGJ1ZyB0aGF0IGNhcHBlZCB0aGVtIGF0IGhhbGYgd2lkdGggaXMgZ29uZQotIENsb3NpbmcgYSBtYXhpbWl6ZWQgbm90ZSBzbGlkZXMgZmx1c2ggb2ZmIHRoZSBlZGdlIGluc3RlYWQgb2YgcmV2ZWFsaW5nIHRoZSBkYXNoYm9hcmQgbWlkLWFuaW1hdGlvbgotIE1heGltaXplZCBtb2RlIGdldHMgYSAzNnB4IHRpdGxlLCB0YWxsZXIgbGluZSBoZWlnaHQgYW5kIHdpZGVyIHRvb2xiYXIgYnV0dG9ucwotIFR5cGluZyB0aHJlZSBiYWNrdGlja3MsIHdpdGggb3Igd2l0aG91dCBhIGxhbmd1YWdlIHRhZywgY3JlYXRlcyBhIHN0eWxlZCBjb2RlIGJsb2NrOyBwYXN0ZWQgZmVuY2UgcGFpcnMgY29udmVydCB0b28KLSBTaGlmdCtFbnRlciBvciBhIGZyZXNoIGZlbmNlIGxpbmUgZXhpdHMgYSBjb2RlIGJsb2NrIGNsZWFubHk7IGEgY29kZSBidXR0b24gc2l0cyBpbiB0aGUgdG9vbGJhcjsgaW5saW5lIGJhY2t0aWNrcyByZW5kZXIgbW9ub3NwYWNlCi0gVHlwaW5nIC0tLSBvciAqKiogb24gaXRzIG93biBsaW5lIGRyYXdzIGEgaG9yaXpvbnRhbCBydWxlIGluc3RhbnRseQotIFRoZSBoZWFkaW5nL3RleHQgc3R5bGUgZHJvcGRvd24gZmxvYXRzIGFib3ZlIGFsbCBsYXllcnMgc28gbm90aGluZyBldmVyIGNsaXBzIGl0Ci0gVGhlIHNpZGViYXIgdHJhY2sgc3RheXMgc3RhdGlvbmFyeSB3aGlsZSB0b2dnbGluZzsgY29sbGFwc2VkICsgTmV3IE5vdGUgLyBJbXBvcnQgLyBTY2FuIGJ1dHRvbnMgc3RhY2sgdmVydGljYWxseSwgcGl4ZWwtY2VudGVyZWQKLSBDYXRlZ29yeSBjb3VudHMgYW5kIGhvdmVyIGFjdGlvbnMgZ2V0IGNvbWZvcnRhYmxlIHBhZGRpbmcgZnJvbSB0aGUgaGlnaGxpZ2h0IGJvcmRlcgotIENhdGVnb3J5IGljb25zIHBlcnNpc3QgdGhyb3VnaCByZXN0YXJ0cyB2aWEgbmF0aXZlIHNldHRpbmdzIHN0b3JhZ2UsIHdpdGggcmVuYW1lIGFuZCBpY29uIGVkaXRpbmcgbWVyZ2VkIGludG8gb25lIHNlYXJjaGFibGUgZGlhbG9nCi0gVGhlIGJlbnRvIGdyaWQgbm8gbG9uZ2VyIHJlYXJyYW5nZXMgd2hlbiB0aGUgc2lkZWJhciBvcGVucyBvciBjbG9zZXMKLSBPcmllbnRhdGlvbiBkZXRlY3Rpb24gZml4ZWQgZm9yIHN0YW5kYXJkIGhvcml6b250YWwgbW9uaXRvcnM7IHRoZSB0cmF5IGRvY2sgY2xhbXBzIHRvIHRoZSB0YXNrYmFyIGFuZCB3b3JrIGFyZWEgYWNyb3NzIG11bHRpLW1vbml0b3Igc2V0dXBzCi0gSGVhdnkgYmFja2dyb3VuZCBibHVycyByZW1vdmVkIGZyb20gc2xpZGluZyBwYW5lbHMgZm9yIHNtb290aCA2MC0xMjAgRlBTIGFuaW1hdGlvbgotIER1YWwgTlNJUy9NU0kgcGFja2FnaW5nIGJhY2tlZCBieSBvZmZsaW5lIFdlYlZpZXcyLCBwbHVzIFBSSVZBQ1lfUE9MSUNZLm1kIGxpbmtlZCBpbiB0aGUgUkVBRE1FCgo8L2RldGFpbHM+Cgo8ZGV0YWlscz4KPHN1bW1hcnk+PHN0cm9uZz52MS4xLjY8L3N0cm9uZz4g4oCUIE5vdmVtYmVyIDEsIDIwMjY8L3N1bW1hcnk+CgotIERlbGV0aW5nIGEgbm90ZSBub3cgYXNrcyB5b3UgdG8gY29uZmlybSBmaXJzdCwgc28gbm90aGluZyBkaXNhcHBlYXJzIGJ5IGFjY2lkZW50Ci0gVGhlIGRlbGV0ZSBjb25maXJtYXRpb24gZGlhbG9nIHdyYXBzIGl0cyB0ZXh0IGFuZCByZXNpemVzIHRvIGZpdCwgaW5zdGVhZCBvZiBvdmVyZmxvd2luZyBhdCBzbWFsbCBvciBvZGQgd2luZG93IHNpemVzCi0gU2Nyb2xsaW5nIHdvcmtzIGluIGRvY2sgbW9kZSBhZ2FpbjogbW91c2Ugd2hlZWwgYW5kIGEgdGhpbiwgZHJhZ2dhYmxlIHNjcm9sbGJhciBoYW5kbGUgbG9uZyBub3RlcyB3aGlsZSB0aGUgdG9vbGJhciBzdGF5cyBmaXhlZAoKPC9kZXRhaWxzPgoKPGRldGFpbHM+CjxzdW1tYXJ5PjxzdHJvbmc+djEuMS41PC9zdHJvbmc+IOKAlCBOb3ZlbWJlciAxLCAyMDI2PC9zdW1tYXJ5PgoKLSBUaGUgdHJheSBjb21wYW5pb24gZmlndXJlcyBvdXQgd2hpY2ggcGFydCBvZiB0aGUgc2NyZWVuIGl0J3MgZG9ja2VkIHRvIGJlZm9yZSBleHBhbmRpbmcsIHNvIHRoZSBwYW5lbCBhbHdheXMgZ3Jvd3MgdG93YXJkIHlvdXIgb3BlbiBzcGFjZSBpbnN0ZWFkIG9mIG9mZiB0aGUgZWRnZQotIFRoZSBleHBhbmQgYW5pbWF0aW9uIG5vdyBtb3ZlcyBpbiBzeW5jIHdpdGggdGhlIHdpbmRvdywgcmVtb3ZpbmcgdGhlIHNtYWxsIGp1bXBzIGFuZCBzbmFwcyB5b3UgY291bGQgY2F0Y2ggd2hlbiB0aGUgcGlsbCB0dXJuZWQgaW50byBhIHBhbmVsCgo8L2RldGFpbHM+Cgo8ZGV0YWlscz4KPHN1bW1hcnk+PHN0cm9uZz52MS4xLjQ8L3N0cm9uZz4g4oCUIE5vdmVtYmVyIDEsIDIwMjY8L3N1bW1hcnk+CgotIEZvbnQgcGlja2VycyBpbiB0aGUgdHJheSBjb21wYW5pb24gYW5kIG5vdGUgZWRpdG9yIG5vIGxvbmdlciBjbGlwIHBhc3QgdGhlIHdpbmRvdyBlZGdlIG9uIHNob3J0IHdpbmRvd3MKLSBTaWRlYmFyIGltcG9ydCBidXR0b25zIHNob3cgdGhlaXIgZnVsbCBsYWJlbHMgaW5zdGVhZCBvZiB0cnVuY2F0aW5nCi0gVGhlIHVwZGF0ZSBub3RpZmljYXRpb24gbm93IHNob3dzIGV4YWN0bHkgb25jZSBwZXIgdmVyc2lvbiBhbmQgc3RheXMgZGlzbWlzc2VkIGFjcm9zcyByZXN0YXJ0cwoKPC9kZXRhaWxzPgoKPC9kZXRhaWxzPgoKIyMgQnVpbGRpbmcgZnJvbSBzb3VyY2UKCioqU3RhY2s6KiogUnVzdCArIFRhdXJpIHYyIMK3IFR5cGVTY3JpcHQgwrcgVGFpbHdpbmQgQ1NTCgoqKlByZXJlcXVpc2l0ZXM6KiogQysrIGJ1aWxkIHRvb2xzLCBSdXN0IChDYXJnbyksIE5vZGUuanMgKG5wbSkKCmBgYGJhc2gKZ2l0IGNsb25lIGh0dHBzOi8vZ2l0aHViLmNvbS9ZYXNsaXUvRG9JVC5naXQKY2QgRG9JVApucG0gaW5zdGFsbApucG0gcnVuIHRhdXJpIGRldgpgYGAKCiMjIEZlZWRiYWNrCgpGb3VuZCBhIGJ1ZyBvciB3YW50IGEgZmVhdHVyZT8gW09wZW4gYW4gaXNzdWVdKGh0dHBzOi8vZ2l0aHViLmNvbS9ZYXNsaXUvRG9JVC9pc3N1ZXMpLCBtYWlsIFt5YXNpbkB5YXNsaXUuY29tXShtYWlsdG86eWFzaW5AeWFzbGl1LmNvbSksIG9yIERNIFtAWWlzb0lBXShodHRwczovL3guY29tL1lpc29JQSkuCgojIyBQcml2YWN5IHBvbGljeQoKUmVhZCBvdXIgcGxhaW4tbGFuZ3VhZ2UgW1ByaXZhY3kgUG9saWN5XShQUklWQUNZX1BPTElDWS5tZCkgKDEwMCUgbG9jYWwtZmlyc3QsIHplcm8gdHJhY2tpbmcsIHplcm8gZGF0YSBjb2xsZWN0aW9uKS4KCiMjIExpY2Vuc2UKCltNSVRdKExJQ0VOU0UpCg==
+<div align="center">
+
+<img src="logo.svg" width="90" alt="DoIT logo">
+
+# DoIT
+
+**Local-first notes and tasks, arranged as an organic bento grid.**
+
+No cloud. No accounts. No tracking. Your notes are plain Markdown files on your own machine.
+
+[![Latest release](https://img.shields.io/github/v/release/Yasliu/DoIT)](https://github.com/Yasliu/DoIT/releases)
+[![Microsoft Store](https://img.shields.io/badge/download-Microsoft%20Store-0078D4)](https://apps.microsoft.com/detail/9PMXDXXKJDFG?hl=en-us&gl=US&ocid=pdpshare)
+[![License](https://img.shields.io/github/license/Yasliu/DoIT)](LICENSE)
+[![Platform](https://img.shields.io/badge/platform-Windows-blue)]()
+[![Built with](https://img.shields.io/badge/built%20with-Tauri%20%2B%20Rust-2494EA)](https://v2.tauri.app/)
+
+<img src="docs/shot-dashboard.jpg" width="800" alt="The DoIT bento grid: every note as a card">
+
+</div>
+
+---
+
+## Why DoIT
+
+Most note apps want an account before they want your thoughts. DoIT doesn't. Every note is a plain Markdown file in a folder you choose — openable in any editor, portable anywhere, yours forever.
+
+- **Plain files, not a database.** Notes save as standard human-readable `.md` files inside a directory you control. Back them up with anything, sync them with anything, open them with anything.
+- **Open external files in place.** Point DoIT at any `.md` or `.txt` and edit it where it lives. Externally opened files save with an explicit Save; DoIT's own notes always autosave.
+- **A canvas, not a list.** An asymmetric bento grid that grows each card to match its content density — paragraph, table, checklist, or code.
+- **Tray-native.** Folds into the Windows system tray and comes back instantly.
+- **Light.** Native Rust via Tauri v2, flat idle footprint under 20 MB RAM.
+- **Zero cloud, zero accounts, zero tracking.** No remote auth, no telemetry, MIT-licensed source.
+
+<p align="center">
+  <img src="docs/shot-editor.jpg" width="800" alt="The note editor in MD mode and text mode side by side">
+</p>
+
+<p align="center">
+  <img src="docs/demo.gif" width="800" alt="DoIT bento grid in motion">
+</p>
+
+### The tray companion
+
+DoIT lives in the system tray as a floating companion — one click expands it into a mini note surface, wherever you are on any monitor.
+
+<p align="center">
+  <img src="docs/tray.gif" width="480" alt="The DoIT tray companion expanding over the desktop">
+</p>
+
+## Getting started
+
+1. Install from the [Microsoft Store](https://apps.microsoft.com/detail/9PMXDXXKJDFG?hl=en-us&gl=US&ocid=pdpshare), or grab the standalone installer from the [Releases](https://github.com/Yasliu/DoIT/releases) page.
+2. Run the setup wizard and pick your install directory.
+3. On first launch, set your note repository folder in Settings — every note you create lands there as a Markdown file.
+
+> **Windows SmartScreen notice (standalone installer only):** DoIT is an independent open-source build, so SmartScreen may show a blue warning. Click **More info → Run anyway**. Installing from the Microsoft Store never triggers this.
+
+File handling stays sandboxed: imports are capped at 30 MB and path operations are isolated from administrative elevation.
+
+## External files: open, edit, sync
+
+DoIT doubles as your external Markdown editor. Right-click any `.md` or `.txt` in Explorer, choose **Open with → DoIT**, and the file opens in place — it is not copied into your DoIT shelf. Edit in MD mode or text mode, then hit **Save** to write it back to the same file. DoIT's own notes autosave as always.
+
+<p align="center">
+  <img src="docs/shot-openwith.jpg" width="480" alt="Opening a file with DoIT from the Windows context menu">
+</p>
+
+Drop any `.md` or `.txt` files into your note repository folder, hit **Sync Repository** in Settings, and they re-index into your grid instantly.
+
+<p align="center">
+  <img src="docs/shot-save.jpg" width="700" alt="The Save button for externally opened files">
+</p>
+
+## What's new in v1.1.7
+
+- Maximized notes now take the full screen and close with a flush slide-out, no dashboard flash underneath
+- Code blocks land properly: typing three backticks creates one instantly, pasted fences convert automatically, and inline code gets real monospace styling
+- The sidebar stopped twitching: stationary track when toggling, tidy vertical stacking when collapsed, and the bento grid holds its layout instead of reshuffling
+- Dock and multi-monitor fixes: the tray companion respects the taskbar and work area on every monitor, and normal screens no longer misfire vertical mode
+- Category icons are here and they persist across restarts, managed in one unified editor with instant search
+- Store-ready packaging: dual NSIS/MSI installers with offline WebView2, plus the official privacy policy linked at the bottom
+
+The full history lives in the release log below.
+
+<details>
+<summary><strong>Release log</strong> (click to expand)</summary>
+
+<details>
+<summary><strong>v1.1.7</strong> — November 5, 2026</summary>
+
+- Notes maximize to 100% of the screen; the flexbox bug that capped them at half width is gone
+- Closing a maximized note slides flush off the edge instead of revealing the dashboard mid-animation
+- Maximized mode gets a 36px title, taller line height and wider toolbar buttons
+- Typing three backticks, with or without a language tag, creates a styled code block; pasted fence pairs convert too
+- Shift+Enter or a fresh fence line exits a code block cleanly; a code button sits in the toolbar; inline backticks render monospace
+- Typing --- or *** on its own line draws a horizontal rule instantly
+- The heading/text style dropdown floats above all layers so nothing ever clips it
+- The sidebar track stays stationary while toggling; collapsed + New Note / Import / Scan buttons stack vertically, pixel-centered
+- Category counts and hover actions get comfortable padding from the highlight border
+- Category icons persist through restarts via native settings storage, with rename and icon editing merged into one searchable dialog
+- The bento grid no longer rearranges when the sidebar opens or closes
+- Orientation detection fixed for standard horizontal monitors; the tray dock clamps to the taskbar and work area across multi-monitor setups
+- Heavy background blurs removed from sliding panels for smooth 60-120 FPS animation
+- Dual NSIS/MSI packaging backed by offline WebView2, plus PRIVACY_POLICY.md linked in the README
+
+</details>
+
+<details>
+<summary><strong>v1.1.6</strong> — November 1, 2026</summary>
+
+- Deleting a note now asks you to confirm first, so nothing disappears by accident
+- The delete confirmation dialog wraps its text and resizes to fit, instead of overflowing at small or odd window sizes
+- Scrolling works in dock mode again: mouse wheel and a thin, draggable scrollbar handle long notes while the toolbar stays fixed
+
+</details>
+
+<details>
+<summary><strong>v1.1.5</strong> — November 1, 2026</summary>
+
+- The tray companion figures out which part of the screen it's docked to before expanding, so the panel always grows toward your open space instead of off the edge
+- The expand animation now moves in sync with the window, removing the small jumps and snaps you could catch when the pill turned into a panel
+
+</details>
+
+<details>
+<summary><strong>v1.1.4</strong> — November 1, 2026</summary>
+
+- Font pickers in the tray companion and note editor no longer clip past the window edge on short windows
+- Sidebar import buttons show their full labels instead of truncating
+- The update notification now shows exactly once per version and stays dismissed across restarts
+
+</details>
+
+</details>
+
+## Building from source
+
+**Stack:** Rust + Tauri v2 · TypeScript · Tailwind CSS
+
+**Prerequisites:** C++ build tools, Rust (Cargo), Node.js (npm)
+
+```bash
+git clone https://github.com/Yasliu/DoIT.git
+cd DoIT
+npm install
+npm run tauri dev
+```
+
+## Feedback
+
+Found a bug or want a feature? [Open an issue](https://github.com/Yasliu/DoIT/issues), mail [yasin@yasliu.com](mailto:yasin@yasliu.com), or DM [@YisoIA](https://x.com/YisoIA).
+
+## Privacy policy
+
+Read our plain-language [Privacy Policy](PRIVACY_POLICY.md) (100% local-first, zero tracking, zero data collection).
+
+## License
+
+[MIT](LICENSE)
