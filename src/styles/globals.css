@@ -877,6 +877,9 @@ html[data-theme="monochrome"] .lightscape {
   margin: 4px 0;
   border-radius: 10px;
   border: 1px solid rgba(255, 255, 255, 0.1);
+  image-rendering: auto;
+  image-rendering: -webkit-optimize-contrast;
+  image-rendering: high-quality;
 }
 /* ---- Interactive task blocks (`- [ ]` / `- [x]`) rendered mid-document ---- */
 .md-task { position: relative; display: block; padding-left: 25px; min-height: 1.6em; }
