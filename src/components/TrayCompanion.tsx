@@ -24,6 +24,8 @@ import {
   Trash,
   Type,
   X,
+  ZoomIn,
+  ZoomOut,
 } from "lucide-react";
 import {
   ContentItem,
@@ -172,6 +174,35 @@ export function TrayCompanion() {
   const rawMode = activeNote?.format === "txt";
   const [tableMenu, setTableMenu] = useState<{ x: number; y: number; cell: HTMLElement } | null>(null);
 
+  // Dock mode note zoom level (60% - 200%)
+  const [dockZoom, setDockZoom] = useState<number>(() => {
+    try {
+      const saved = localStorage.getItem("doit:dock-zoom");
+      if (saved) {
+        const val = parseInt(saved, 10);
+        if (!isNaN(val) && val >= 60 && val <= 200) return val;
+      }
+    } catch {}
+    return 100;
+  });
+
+  const adjustDockZoom = useCallback((delta: number) => {
+    setDockZoom((prev) => {
+      const next = Math.max(60, Math.min(200, Math.round((prev + delta) / 10) * 10));
+      try {
+        localStorage.setItem("doit:dock-zoom", next.toString());
+      } catch {}
+      return next;
+    });
+  }, []);
+
+  const resetDockZoom = useCallback(() => {
+    setDockZoom(100);
+    try {
+      localStorage.setItem("doit:dock-zoom", "100");
+    } catch {}
+  }, []);
+
   // ONE tray frame for both shapes. Fade the panel out, resize the native frame while nothing is drawn
   // (blank transparent content), then fade the floating bar in - and the reverse on expand.
   const wait = (ms: number) => new Promise<void>((resolve) => window.setTimeout(resolve, ms));
@@ -297,6 +328,28 @@ export function TrayCompanion() {
   // Global key navigation (Escape to toggle-minimize/step-back, Cmd/Ctrl+J to toggle)
   useEffect(() => {
     const handleKeyDown = (e: KeyboardEvent) => {
+      const meta = e.ctrlKey || e.metaKey;
+      if (meta && activeNoteId && !e.altKey) {
+        if (e.key === "=" || e.key === "+" || e.code === "NumpadAdd" || e.code === "Equal") {
+          e.preventDefault();
+          e.stopPropagation();
+          adjustDockZoom(10);
+          return;
+        }
+        if (e.key === "-" || e.key === "_" || e.code === "NumpadSubtract" || e.code === "Minus") {
+          e.preventDefault();
+          e.stopPropagation();
+          adjustDockZoom(-10);
+          return;
+        }
+        if (e.key === "0" || e.code === "Numpad0" || e.code === "Digit0") {
+          e.preventDefault();
+          e.stopPropagation();
+          resetDockZoom();
+          return;
+        }
+      }
+
       if (e.key === "Escape") {
         e.preventDefault();
         if (previewImage) {
@@ -307,7 +360,6 @@ export function TrayCompanion() {
           toggleMinimize();
         }
       }
-      const meta = e.ctrlKey || e.metaKey;
       if (meta && e.key.toLowerCase() === "j" && !isTransitioning.current) {
         e.preventDefault();
         toggleMinimize();
@@ -316,7 +368,7 @@ export function TrayCompanion() {
 
     window.addEventListener("keydown", handleKeyDown);
     return () => window.removeEventListener("keydown", handleKeyDown);
-  }, [activeNoteId, previewImage, toggleMinimize]);
+  }, [activeNoteId, previewImage, toggleMinimize, adjustDockZoom, resetDockZoom]);
 
 
 
@@ -933,6 +985,46 @@ export function TrayCompanion() {
                 hasMedia={Boolean((activeNote.media_urls && activeNote.media_urls.length > 0) || activeNote.media_url)}
                 compact
               />
+
+              <span className="mx-0.5 h-3 w-px bg-white/10" />
+
+              {/* Compact Dock Zoom Stepper */}
+              <div
+                className="flex items-center rounded-md bg-white/[0.04] border border-white/10 shrink-0 h-6 gap-0.5 px-0.5 select-none"
+                title="Dock note zoom: Ctrl+ to zoom in, Ctrl- to zoom out, Ctrl 0 to reset"
+              >
+                <button
+                  type="button"
+                  onMouseDown={(e) => e.preventDefault()}
+                  onClick={() => adjustDockZoom(-10)}
+                  aria-label="Zoom out"
+                  title="Zoom out (Ctrl -)"
+                  className="size-4.5 grid place-items-center rounded text-ink-4 hover:text-white hover:bg-white/10 transition-colors cursor-pointer"
+                >
+                  <ZoomOut size={9.5} strokeWidth={2} />
+                </button>
+                <button
+                  type="button"
+                  onMouseDown={(e) => e.preventDefault()}
+                  onClick={resetDockZoom}
+                  aria-label="Reset zoom"
+                  title="Reset zoom to 100% (Ctrl 0)"
+                  className="font-mono tabular-nums text-[9px] text-ink-3 hover:text-white px-0.5 transition-colors cursor-pointer"
+                >
+                  {dockZoom}%
+                </button>
+                <button
+                  type="button"
+                  onMouseDown={(e) => e.preventDefault()}
+                  onClick={() => adjustDockZoom(10)}
+                  aria-label="Zoom in"
+                  title="Zoom in (Ctrl +)"
+                  className="size-4.5 grid place-items-center rounded text-ink-4 hover:text-white hover:bg-white/10 transition-colors cursor-pointer"
+                >
+                  <ZoomIn size={9.5} strokeWidth={2} />
+                </button>
+              </div>
+
               <span className="mx-0.5 h-3 w-px bg-white/10" />
               </>
               )}
@@ -979,15 +1071,27 @@ export function TrayCompanion() {
           </div>
 
           {/* Scrollable Note Document: ModeToggle, Title, Images, Body */}
-          <div className="flex-1 min-h-0 overflow-y-auto overflow-x-hidden scrollbar-thin pr-1.5 pt-2 pb-6 space-y-2 select-text">
-            <div className="flex shrink-0">
-              <ModeToggle
-                compact
-                rawMode={rawMode}
-                onChange={(raw) => editActive({ format: raw ? "txt" : "md" })}
-              />
-            </div>
-            {/* Title Input */}
+          <div
+            onWheel={(e) => {
+              if (e.ctrlKey || e.metaKey) {
+                e.preventDefault();
+                adjustDockZoom(e.deltaY < 0 ? 10 : -10);
+              }
+            }}
+            className="flex-1 min-h-0 overflow-y-auto overflow-x-hidden scrollbar-thin pr-1.5 pt-2 pb-6 space-y-2 select-text"
+          >
+            <div
+              style={{ zoom: `${dockZoom}%` }}
+              className="w-full space-y-2 transition-[zoom] duration-150 origin-top"
+            >
+              <div className="flex shrink-0">
+                <ModeToggle
+                  compact
+                  rawMode={rawMode}
+                  onChange={(raw) => editActive({ format: raw ? "txt" : "md" })}
+                />
+              </div>
+              {/* Title Input */}
             <input
               ref={titleRef}
               type="text"
@@ -1146,6 +1250,7 @@ export function TrayCompanion() {
                 }}
               />
               )}
+            </div>
             </div>
           </div>
         </div>
