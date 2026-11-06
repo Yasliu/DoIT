@@ -196,6 +196,7 @@ export function TrayCompanion() {
     src: string;
     refKey?: string;
   } | null>(null);
+  const imgClickTimerRef = useRef<number | null>(null);
 
   const updateActiveFormatting = () => {
     setIsBoldActive(isRichBoldActive());
@@ -1161,10 +1162,10 @@ export function TrayCompanion() {
                 adjustDockZoom(e.deltaY < 0 ? 10 : -10);
               }
             }}
-            className="flex-1 min-h-0 overflow-y-auto overflow-x-hidden scrollbar-thin pr-1.5 pt-2 pb-6 space-y-2 select-text"
+            className="flex-1 min-h-0 overflow-y-auto overflow-x-auto scrollbar-thin scrollbar-thumb-white/10 scrollbar-track-transparent pr-1.5 pt-2 pb-6 space-y-2 select-text"
           >
             <div
-              style={{ zoom: `${dockZoom}%` }}
+              style={dockZoom !== 100 ? { zoom: `${dockZoom}%` } : undefined}
               className="w-full space-y-2 transition-[zoom] duration-150 origin-top"
             >
               <div className="flex shrink-0">
@@ -1302,11 +1303,40 @@ export function TrayCompanion() {
                 onMouseDown={(e) => {
                   if ((e.target as HTMLElement).closest(".md-cb")) e.preventDefault();
                 }}
+                onDoubleClick={(e) => {
+                  const img = (e.target as HTMLElement).closest("img.md-img") as HTMLImageElement | null;
+                  if (img) {
+                    e.preventDefault();
+                    e.stopPropagation();
+                    if (imgClickTimerRef.current) {
+                      window.clearTimeout(imgClickTimerRef.current);
+                      imgClickTimerRef.current = null;
+                    }
+                    const isExp = img.getAttribute("data-expanded") === "true";
+                    img.setAttribute("data-expanded", isExp ? "false" : "true");
+                    return;
+                  }
+                }}
                 onClick={(e) => {
                   const img = (e.target as HTMLElement).closest("img.md-img") as HTMLImageElement | null;
                   if (img) {
                     e.preventDefault();
-                    setPreviewImage(img.src);
+                    if (e.shiftKey || e.altKey) {
+                      const isExp = img.getAttribute("data-expanded") === "true";
+                      img.setAttribute("data-expanded", isExp ? "false" : "true");
+                      return;
+                    }
+                    if (imgClickTimerRef.current) {
+                      window.clearTimeout(imgClickTimerRef.current);
+                      imgClickTimerRef.current = null;
+                      const isExp = img.getAttribute("data-expanded") === "true";
+                      img.setAttribute("data-expanded", isExp ? "false" : "true");
+                      return;
+                    }
+                    imgClickTimerRef.current = window.setTimeout(() => {
+                      imgClickTimerRef.current = null;
+                      setPreviewImage(img.src);
+                    }, 220);
                     return;
                   }
                   const link = (e.target as HTMLElement).closest("a.md-link") as HTMLAnchorElement | null;
@@ -1589,6 +1619,11 @@ export function TrayCompanion() {
             setPreviewImage(contextMenuImg.element.src);
             setContextMenuImg(null);
           }}
+          onToggleExpand={() => {
+            const isExp = contextMenuImg.element.getAttribute("data-expanded") === "true";
+            contextMenuImg.element.setAttribute("data-expanded", isExp ? "false" : "true");
+            setContextMenuImg(null);
+          }}
           onEdit={() => {
             setEditImgModal({
               element: contextMenuImg.element,
@@ -1606,26 +1641,25 @@ export function TrayCompanion() {
         />
       )}
 
-      {editImgModal && (
-        <EditImageModal
-          isOpen={Boolean(editImgModal)}
-          onClose={() => setEditImgModal(null)}
-          alt={editImgModal.alt}
-          src={editImgModal.src}
-          refKey={editImgModal.refKey}
-          onSave={(newAlt) => {
-            editImgModal.element.alt = newAlt;
-            const ref = editImgModal.element.getAttribute("data-ref");
-            if (ref) {
-              editImgModal.element.setAttribute("data-md", `![${newAlt}][${ref}]`);
-            } else {
-              editImgModal.element.setAttribute("data-md", `![${newAlt}](${editImgModal.element.src})`);
-            }
-            handleEditorInput();
-            setEditImgModal(null);
-          }}
-        />
-      )}
+      <EditImageModal
+        isOpen={Boolean(editImgModal)}
+        onClose={() => setEditImgModal(null)}
+        alt={editImgModal?.alt ?? ""}
+        src={editImgModal?.src ?? ""}
+        refKey={editImgModal?.refKey}
+        onSave={(newAlt) => {
+          if (!editImgModal) return;
+          editImgModal.element.alt = newAlt;
+          const ref = editImgModal.element.getAttribute("data-ref");
+          if (ref) {
+            editImgModal.element.setAttribute("data-md", `![${newAlt}][${ref}]`);
+          } else {
+            editImgModal.element.setAttribute("data-md", `![${newAlt}](${editImgModal.element.src})`);
+          }
+          handleEditorInput();
+          setEditImgModal(null);
+        }}
+      />
 
       {tableMenu && (
         <TableMenu

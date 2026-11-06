@@ -781,9 +781,7 @@ html[data-theme="monochrome"] .lightscape {
 .md-link:hover { color: #93c5fd; }
 .md-sub {
   font-size: 0.82em;
-  vertical-align: baseline;
-  position: relative;
-  bottom: -0.22em;
+  vertical-align: -0.22em;
   line-height: 1;
   color: rgba(255, 255, 255, 0.96);
   font-weight: 500;
@@ -791,9 +789,7 @@ html[data-theme="monochrome"] .lightscape {
 }
 .md-sup {
   font-size: 0.82em;
-  vertical-align: baseline;
-  position: relative;
-  top: -0.26em;
+  vertical-align: 0.32em;
   line-height: 1;
   color: rgba(255, 255, 255, 0.96);
   font-weight: 500;
@@ -801,9 +797,7 @@ html[data-theme="monochrome"] .lightscape {
 }
 .md-footnote-ref {
   font-size: 0.75em;
-  vertical-align: baseline;
-  position: relative;
-  top: -0.26em;
+  vertical-align: 0.32em;
   line-height: 1;
   display: inline-block;
   color: #a5b4fc;
@@ -874,12 +868,26 @@ html[data-theme="monochrome"] .lightscape {
   max-width: 100%;
   height: auto;
   vertical-align: middle;
-  margin: 4px 0;
+  margin: 6px 0;
   border-radius: 10px;
-  border: 1px solid rgba(255, 255, 255, 0.1);
-  image-rendering: auto;
+  border: 1px solid rgba(255, 255, 255, 0.12);
   image-rendering: -webkit-optimize-contrast;
-  image-rendering: high-quality;
+  image-rendering: crisp-edges;
+  transform: translateZ(0);
+  backface-visibility: hidden;
+  transition: max-width 0.22s cubic-bezier(0.16, 1, 0.3, 1), box-shadow 0.2s ease;
+  cursor: pointer;
+}
+.md-img:hover {
+  border-color: rgba(255, 255, 255, 0.35);
+}
+.md-img[data-expanded="true"] {
+  max-width: none !important;
+  width: auto !important;
+  display: block;
+  margin: 10px 0;
+  box-shadow: 0 12px 35px rgba(0, 0, 0, 0.65);
+  cursor: zoom-out;
 }
 /* ---- Interactive task blocks (`- [ ]` / `- [x]`) rendered mid-document ---- */
 .md-task { position: relative; display: block; padding-left: 25px; min-height: 1.6em; }
@@ -920,7 +928,8 @@ html[data-theme="monochrome"] .lightscape {
   user-select: none;
   cursor: inherit;
   word-break: break-word;
-  padding-top: 5px;
+  padding-top: 6px;
+  padding-bottom: 4px;
   margin-top: -3px;
   -webkit-font-smoothing: antialiased;
   text-rendering: optimizeLegibility;
@@ -929,21 +938,24 @@ html[data-theme="monochrome"] .lightscape {
   font-size: 0.84em;
   font-weight: 600;
   color: #ffffff;
-  bottom: -0.2em;
+  vertical-align: -0.2em;
+  line-height: 1;
   display: inline-block;
 }
 .md-preview .md-sup {
   font-size: 0.84em;
   font-weight: 600;
   color: #ffffff;
-  top: -0.24em;
+  vertical-align: 0.3em;
+  line-height: 1;
   display: inline-block;
 }
 .md-preview .md-footnote-ref {
   font-size: 0.8em;
   font-weight: 600;
   color: #a5b4fc;
-  top: -0.24em;
+  vertical-align: 0.3em;
+  line-height: 1;
   display: inline-block;
 }
 .md-preview > div { min-height: 1.2em; }
