@@ -5,7 +5,7 @@ import { Maximize2 } from "lucide-react";
 import type { NoteItem } from "../api/tauriBridge";
 import { fontStack } from "../api/tauriBridge";
 import { accentFor, cleanText, cx, densityOf, edgeOpacity, relativeShort, stripDate } from "../lib/text";
-import { contentToMarkdown, previewMarkup } from "../lib/format";
+import { contentToMarkdown, previewMarkup, openExternalUrl } from "../lib/format";
 
 interface NoteTileProps {
   note: NoteItem;
@@ -252,6 +252,14 @@ function NoteTileComponent({
               if ((event.target as HTMLElement).closest(".md-cb")) event.stopPropagation();
             }}
             onClick={(event) => {
+              const link = (event.target as HTMLElement).closest("a.md-link") as HTMLAnchorElement | null;
+              if (link) {
+                event.stopPropagation();
+                event.preventDefault();
+                const href = link.getAttribute("href");
+                if (href) openExternalUrl(href);
+                return;
+              }
               const cb = (event.target as HTMLElement).closest(".md-cb");
               if (!cb) return;
               event.stopPropagation();

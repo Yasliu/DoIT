@@ -55,6 +55,7 @@ import {
   isCaretAtEditorStart,
   placeCaretAtEditorStart,
   fixCheckboxCaret,
+  openExternalUrl,
 } from "../lib/format";
 import { accentFor, cleanText, cx, fullStamp, uid } from "../lib/text";
 
@@ -1293,6 +1294,13 @@ export function NoteSheet({
                     if ((e.target as HTMLElement).closest(".md-cb")) e.preventDefault();
                   }}
                   onClick={(e) => {
+                    const link = (e.target as HTMLElement).closest("a.md-link") as HTMLAnchorElement | null;
+                    if (link && (e.ctrlKey || e.metaKey)) {
+                      e.preventDefault();
+                      const href = link.getAttribute("href");
+                      if (href) openExternalUrl(href);
+                      return;
+                    }
                     if (handleCheckboxClick(e, editorRef.current)) handleEditorInput();
                     if (editorRef.current) fixCheckboxCaret(editorRef.current);
                   }}

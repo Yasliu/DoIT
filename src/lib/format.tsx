@@ -60,6 +60,13 @@ function resolveImageSrc(raw: string): string | null {
   return null;
 }
 
+export function openExternalUrl(url: string): void {
+  if (!url) return;
+  void import("@tauri-apps/plugin-opener")
+    .then((m) => m.openUrl(url))
+    .catch(() => window.open(url, "_blank", "noopener,noreferrer"));
+}
+
 export function inlineMarkdownToHtml(line: string): string {
   // Pull images out first so their paths are never touched by other rules
   const images: string[] = [];
@@ -76,7 +83,7 @@ export function inlineMarkdownToHtml(line: string): string {
   const links: string[] = [];
   work = work.replace(/\[([^\]\n]+)\]\(([^)\n\s]+)\)/g, (_m: string, title: string, url: string) => {
     links.push(
-      `<a class="md-link" href="${escapeAttr(url)}" target="_blank" rel="noopener noreferrer" contenteditable="false" title="${escapeAttr(url)}">${escapeHtml(title)}</a>`,
+      `<a class="md-link" href="${escapeAttr(url)}" target="_blank" rel="noopener noreferrer" title="Ctrl+Click to open: ${escapeAttr(url)}">${escapeHtml(title)}</a>`,
     );
     return `\u0003${links.length - 1}\u0004`;
   });
@@ -432,7 +439,216 @@ function ensureCheckbox(block: HTMLElement, placeCaret: boolean): void {
  * lines (marker moves into data-p, never shown) and turns a typed "| a | b |" + "|---|---|" pair into a table.
  */
 export function normalizeEditor(editor: HTMLElement): void {
+
+function convertInlineInTextNodes(container: HTMLElement): void {
+  const sel = window.getSelection();
+  const anchorNode = sel?.anchorNode;
+  const anchorOffset = sel?.anchorOffset ?? 0;
+
+  const walker = document.createTreeWalker(container, NodeFilter.SHOW_TEXT);
+  const textNodes: Text[] = [];
+  let n = walker.nextNode();
+  while (n) {
+    const parent = n.parentElement;
+    if (
+      parent &&
+      !parent.closest("pre") &&
+      !parent.closest("code.md-code") &&
+      !parent.closest("a.md-link") &&
+      !parent.classList.contains("md-cb") &&
+      !parent.classList.contains("md-fn-badge") &&
+      !parent.classList.contains("md-footnote-ref")
+    ) {
+      textNodes.push(n as Text);
+    }
+    n = walker.nextNode();
+  }
+
+  for (const node of textNodes) {
+    const val = node.data;
+    if (!val) continue;
+
+    // 1. Emoji :name:
+    const emojiMatch = val.match(/:([a-z0-9_+-]+):/);
+    if (emojiMatch && EMOJI_MAP[emojiMatch[1]]) {
+      const emojiChar = EMOJI_MAP[emojiMatch[1]];
+      const startIdx = emojiMatch.index!;
+      const endIdx = startIdx + emojiMatch[0].length;
+      const isCaretHere = anchorNode === node && anchorOffset >= endIdx;
+      const before = val.slice(0, startIdx);
+      const after = val.slice(endIdx);
+      node.data = before + emojiChar + after;
+      if (isCaretHere && sel) {
+        const r = document.createRange();
+        r.setStart(node, startIdx + emojiChar.length);
+        r.collapse(true);
+        sel.removeAllRanges();
+        sel.addRange(r);
+      }
+      return;
+    }
+
+    // 2. Inline Code `code`
+    const codeMatch = val.match(/(?<!`)([`])([^`\n]+)\1(?!`)/);
+    if (codeMatch && codeMatch.index !== undefined) {
+      const startIdx = codeMatch.index;
+      const fullLen = codeMatch[0].length;
+      const innerText = codeMatch[2];
+      const isCaretAtEnd = anchorNode === node && anchorOffset >= startIdx + fullLen;
+
+      const beforeText = val.slice(0, startIdx);
+      const afterText = val.slice(startIdx + fullLen);
+
+      const codeEl = document.createElement("code");
+      codeEl.className = "md-code";
+      codeEl.textContent = innerText;
+
+      const afterNode = document.createTextNode(afterText || "\u200B");
+      node.data = beforeText;
+      node.after(codeEl);
+      codeEl.after(afterNode);
+
+      if (isCaretAtEnd && sel) {
+        const r = document.createRange();
+        r.setStart(afterNode, afterText ? 0 : 1);
+        r.collapse(true);
+        sel.removeAllRanges();
+        sel.addRange(r);
+      }
+      return;
+    }
+
+    // 3. Strikethrough ~~text~~
+    const delMatch = val.match(/~~([^~\n]+)~~/);
+    if (delMatch && delMatch.index !== undefined) {
+      const startIdx = delMatch.index;
+      const fullLen = delMatch[0].length;
+      const innerText = delMatch[1];
+      const isCaretAtEnd = anchorNode === node && anchorOffset >= startIdx + fullLen;
+
+      const beforeText = val.slice(0, startIdx);
+      const afterText = val.slice(startIdx + fullLen);
+
+      const delEl = document.createElement("del");
+      delEl.className = "md-del";
+      delEl.textContent = innerText;
+
+      const afterNode = document.createTextNode(afterText || "\u200B");
+      node.data = beforeText;
+      node.after(delEl);
+      delEl.after(afterNode);
+
+      if (isCaretAtEnd && sel) {
+        const r = document.createRange();
+        r.setStart(afterNode, afterText ? 0 : 1);
+        r.collapse(true);
+        sel.removeAllRanges();
+        sel.addRange(r);
+      }
+      return;
+    }
+
+    // 4. Highlight ==text== or ===text===
+    const markMatch = val.match(/(?:===|==)([^=\n]+?)(?:===|==)/);
+    if (markMatch && markMatch.index !== undefined) {
+      const startIdx = markMatch.index;
+      const fullLen = markMatch[0].length;
+      const innerText = markMatch[1];
+      const isCaretAtEnd = anchorNode === node && anchorOffset >= startIdx + fullLen;
+
+      const beforeText = val.slice(0, startIdx);
+      const afterText = val.slice(startIdx + fullLen);
+
+      const markEl = document.createElement("mark");
+      markEl.className = "md-mark";
+      markEl.textContent = innerText;
+
+      const afterNode = document.createTextNode(afterText || "\u200B");
+      node.data = beforeText;
+      node.after(markEl);
+      markEl.after(afterNode);
+
+      if (isCaretAtEnd && sel) {
+        const r = document.createRange();
+        r.setStart(afterNode, afterText ? 0 : 1);
+        r.collapse(true);
+        sel.removeAllRanges();
+        sel.addRange(r);
+      }
+      return;
+    }
+
+    // 5. Link [title](url)
+    const linkMatch = val.match(/\[([^\]\n]+)\]\((https?:\/\/[^\s)]+)\)/);
+    if (linkMatch && linkMatch.index !== undefined) {
+      const startIdx = linkMatch.index;
+      const fullLen = linkMatch[0].length;
+      const title = linkMatch[1];
+      const href = linkMatch[2];
+      const isCaretAtEnd = anchorNode === node && anchorOffset >= startIdx + fullLen;
+
+      const beforeText = val.slice(0, startIdx);
+      const afterText = val.slice(startIdx + fullLen);
+
+      const aEl = document.createElement("a");
+      aEl.className = "md-link";
+      aEl.href = href;
+      aEl.target = "_blank";
+      aEl.rel = "noopener noreferrer";
+      aEl.title = `Ctrl+Click to open: ${href}`;
+      aEl.textContent = title;
+
+      const afterNode = document.createTextNode(afterText || "\u200B");
+      node.data = beforeText;
+      node.after(aEl);
+      aEl.after(afterNode);
+
+      if (isCaretAtEnd && sel) {
+        const r = document.createRange();
+        r.setStart(afterNode, afterText ? 0 : 1);
+        r.collapse(true);
+        sel.removeAllRanges();
+        sel.addRange(r);
+      }
+      return;
+    }
+
+    // 6. Footnote ref [^1]
+    const fnMatch = val.match(/\[\^(\d+)\](?!:)/);
+    if (fnMatch && fnMatch.index !== undefined) {
+      const startIdx = fnMatch.index;
+      const fullLen = fnMatch[0].length;
+      const fnNum = fnMatch[1];
+      const isCaretAtEnd = anchorNode === node && anchorOffset >= startIdx + fullLen;
+
+      const beforeText = val.slice(0, startIdx);
+      const afterText = val.slice(startIdx + fullLen);
+
+      const supEl = document.createElement("sup");
+      supEl.className = "md-footnote-ref";
+      supEl.setAttribute("data-fn", fnNum);
+      supEl.setAttribute("contenteditable", "false");
+      supEl.textContent = `[${fnNum}]`;
+
+      const afterNode = document.createTextNode(afterText || "\u200B");
+      node.data = beforeText;
+      node.after(supEl);
+      supEl.after(afterNode);
+
+      if (isCaretAtEnd && sel) {
+        const r = document.createRange();
+        r.setStart(afterNode, afterText ? 0 : 1);
+        r.collapse(true);
+        sel.removeAllRanges();
+        sel.addRange(r);
+      }
+      return;
+    }
+  }
+}
+
   wrapStrayNodes(editor);
+  convertInlineInTextNodes(editor);
   const caretBlock = currentBlock(editor);
 
   // Fenced code block detection: merge consecutive divs bounded by ``` ... ``` or ~~~ ... ~~~
@@ -591,7 +807,7 @@ export function htmlToMarkdown(container: HTMLElement): string {
   const walk = (node: Node): void => {
     if (node.nodeType === Node.TEXT_NODE) {
       // Editors are white-space: pre-wrap, so a pasted "\n" inside a text node is a real line break
-      const parts = (node.textContent || "").replace(/\u00a0/g, " ").split(/\r\n|\r|\n/);
+      const parts = (node.textContent || "").replace(/\u200B/g, "").replace(/\u00a0/g, " ").split(/\r\n|\r|\n/);
       parts.forEach((part, i) => {
         if (i > 0) flush();
         cur += part;
@@ -607,19 +823,19 @@ export function htmlToMarkdown(container: HTMLElement): string {
 
     if (tag === "A") {
       const href = el.getAttribute("href") || "";
-      const text = el.textContent || "";
+      const text = (el.textContent || "").replace(/\u200B/g, "");
       cur += `[${text}](${href})`;
       return;
     }
 
     if (tag === "CODE" || el.classList.contains("md-code")) {
-      const codeText = el.textContent || "";
+      const codeText = (el.textContent || "").replace(/\u200B/g, "");
       cur += `\`${codeText}\``;
       return;
     }
 
     if (el.classList.contains("md-footnote-ref") || (tag === "SUP" && el.hasAttribute("data-fn"))) {
-      const fnId = el.getAttribute("data-fn") || (el.textContent || "").replace(/[\[\]]/g, "") || "1";
+      const fnId = el.getAttribute("data-fn") || (el.textContent || "").replace(/[\[\]\u200B]/g, "") || "1";
       cur += `[^${fnId}]`;
       return;
     }
@@ -1461,7 +1677,8 @@ export function deleteTableColumn(cell: HTMLElement): boolean {
 /**
  * Wraps the current selection with prefix and suffix, or inserts a placeholder.
  */
-export function applyInlineWrapper(editor: HTMLElement, prefix: string, suffix: string, defaultPlaceholder = "text"): void {
+function applyInlineTag(editor: HTMLElement, tag: string, className: string): void {
+  wrapStrayNodes(editor);
   const sel = window.getSelection();
   if (!sel || sel.rangeCount === 0 || !editor.contains(sel.anchorNode)) editor.focus();
   const currentSel = window.getSelection();
@@ -1469,104 +1686,212 @@ export function applyInlineWrapper(editor: HTMLElement, prefix: string, suffix: 
   const range = currentSel.getRangeAt(0);
 
   if (range.collapsed) {
-    const textNode = document.createTextNode(`${prefix}${defaultPlaceholder}${suffix}`);
-    range.insertNode(textNode);
-    const newRange = document.createRange();
-    newRange.setStart(textNode, prefix.length);
-    newRange.setEnd(textNode, prefix.length + defaultPlaceholder.length);
+    const el = document.createElement(tag);
+    el.className = className;
+    const zw = document.createTextNode("\u200B");
+    el.appendChild(zw);
+    range.insertNode(el);
+
+    const afterNode = document.createTextNode("\u200B");
+    el.after(afterNode);
+
+    const r = document.createRange();
+    r.setStart(zw, 0);
+    r.collapse(true);
     currentSel.removeAllRanges();
-    currentSel.addRange(newRange);
+    currentSel.addRange(r);
   } else {
     const selectedText = range.toString();
-    const textNode = document.createTextNode(`${prefix}${selectedText}${suffix}`);
+    const el = document.createElement(tag);
+    el.className = className;
+    el.textContent = selectedText;
     range.deleteContents();
-    range.insertNode(textNode);
-    const newRange = document.createRange();
-    newRange.setStart(textNode, prefix.length);
-    newRange.setEnd(textNode, prefix.length + selectedText.length);
+    range.insertNode(el);
+
+    const afterNode = document.createTextNode("\u200B");
+    el.after(afterNode);
+    const r = document.createRange();
+    r.setStart(afterNode, 1);
+    r.collapse(true);
     currentSel.removeAllRanges();
-    currentSel.addRange(newRange);
+    currentSel.addRange(r);
   }
 }
 
 export function applyInlineCode(editor: HTMLElement): void {
-  applyInlineWrapper(editor, "`", "`", "code");
+  wrapStrayNodes(editor);
+  const sel = window.getSelection();
+  if (!sel || sel.rangeCount === 0 || !editor.contains(sel.anchorNode)) editor.focus();
+  const currentSel = window.getSelection();
+  if (!currentSel || currentSel.rangeCount === 0) return;
+  const range = currentSel.getRangeAt(0);
+
+  const existingCode = (
+    range.startContainer.nodeType === Node.ELEMENT_NODE
+      ? (range.startContainer as HTMLElement)
+      : range.startContainer.parentElement
+  )?.closest("code.md-code") as HTMLElement | null;
+
+  if (existingCode && editor.contains(existingCode)) {
+    let after = existingCode.nextSibling;
+    if (!after) {
+      after = document.createTextNode("\u200B");
+      existingCode.after(after);
+    }
+    const r = document.createRange();
+    r.setStart(after, after.nodeType === Node.TEXT_NODE ? Math.min(1, (after as Text).length) : 0);
+    r.collapse(true);
+    currentSel.removeAllRanges();
+    currentSel.addRange(r);
+    return;
+  }
+
+  if (range.collapsed) {
+    const codeEl = document.createElement("code");
+    codeEl.className = "md-code";
+    const zw = document.createTextNode("\u200B");
+    codeEl.appendChild(zw);
+    range.insertNode(codeEl);
+
+    const afterNode = document.createTextNode("\u200B");
+    codeEl.after(afterNode);
+
+    const r = document.createRange();
+    r.setStart(zw, 0);
+    r.collapse(true);
+    currentSel.removeAllRanges();
+    currentSel.addRange(r);
+  } else {
+    const selectedText = range.toString();
+    const codeEl = document.createElement("code");
+    codeEl.className = "md-code";
+    codeEl.textContent = selectedText;
+    range.deleteContents();
+    range.insertNode(codeEl);
+
+    const afterNode = document.createTextNode("\u200B");
+    codeEl.after(afterNode);
+    const r = document.createRange();
+    r.setStart(afterNode, 1);
+    r.collapse(true);
+    currentSel.removeAllRanges();
+    currentSel.addRange(r);
+  }
 }
 
 export function applyStrikethrough(editor: HTMLElement): void {
-  applyInlineWrapper(editor, "~~", "~~", "strikethrough");
+  applyInlineTag(editor, "del", "md-del");
 }
 
 export function applyHighlight(editor: HTMLElement): void {
-  applyInlineWrapper(editor, "==", "==", "highlight");
+  applyInlineTag(editor, "mark", "md-mark");
 }
 
 export function applySubscript(editor: HTMLElement): void {
-  applyInlineWrapper(editor, "~", "~", "subscript");
+  applyInlineTag(editor, "sub", "md-sub");
 }
 
 export function applySuperscript(editor: HTMLElement): void {
-  applyInlineWrapper(editor, "^", "^", "superscript");
+  applyInlineTag(editor, "sup", "md-sup");
 }
 
 export function applyLink(editor: HTMLElement, customUrl?: string): void {
+  wrapStrayNodes(editor);
   const sel = window.getSelection();
   if (!sel || sel.rangeCount === 0 || !editor.contains(sel.anchorNode)) editor.focus();
   const currentSel = window.getSelection();
   if (!currentSel || currentSel.rangeCount === 0) return;
   const range = currentSel.getRangeAt(0);
 
-  const selectedText = range.collapsed ? "Link title" : range.toString();
-  const url = customUrl || "https://";
-  const linkText = `[${selectedText}](${url})`;
-  const textNode = document.createTextNode(linkText);
-  range.deleteContents();
-  range.insertNode(textNode);
+  const selectedText = range.collapsed ? "" : range.toString();
+  const urlPrompt = customUrl ?? window.prompt("Enter link URL:", "https://");
+  if (urlPrompt === null) return;
+  const url = urlPrompt.trim() || "https://";
 
-  const newRange = document.createRange();
-  const urlStart = 1 + selectedText.length + 2;
-  newRange.setStart(textNode, urlStart);
-  newRange.setEnd(textNode, urlStart + url.length);
+  let title = selectedText;
+  if (!title) {
+    const titlePrompt = window.prompt("Enter link text:", url);
+    if (titlePrompt === null) return;
+    title = titlePrompt.trim() || url;
+  }
+
+  const a = document.createElement("a");
+  a.className = "md-link";
+  a.href = url;
+  a.target = "_blank";
+  a.rel = "noopener noreferrer";
+  a.title = `Ctrl+Click to open: ${url}`;
+  a.textContent = title;
+
+  range.deleteContents();
+  range.insertNode(a);
+
+  const afterNode = document.createTextNode("\u200B");
+  a.after(afterNode);
+  const r = document.createRange();
+  r.setStart(afterNode, 1);
+  r.collapse(true);
   currentSel.removeAllRanges();
-  currentSel.addRange(newRange);
+  currentSel.addRange(r);
 }
 
 export function applyFootnote(editor: HTMLElement): void {
+  wrapStrayNodes(editor);
   const sel = window.getSelection();
   if (!sel || sel.rangeCount === 0 || !editor.contains(sel.anchorNode)) editor.focus();
   const currentSel = window.getSelection();
   if (!currentSel || currentSel.rangeCount === 0) return;
   const range = currentSel.getRangeAt(0);
 
-  const allText = editor.textContent || "";
-  const matches = allText.match(/\[\^(\d+)\]/g);
+  const existingRefs = Array.from(editor.querySelectorAll(".md-footnote-ref, .md-footnote-def"));
   let nextIdx = 1;
-  if (matches) {
-    const nums = matches.map((m) => parseInt(m.slice(2, -1), 10)).filter((n) => !isNaN(n));
-    if (nums.length > 0) nextIdx = Math.max(...nums) + 1;
-  }
+  const nums: number[] = [];
+  existingRefs.forEach((el) => {
+    const fnAttr = el.getAttribute("data-fn");
+    if (fnAttr) {
+      const n = parseInt(fnAttr, 10);
+      if (!isNaN(n)) nums.push(n);
+    }
+    const pAttr = el.getAttribute("data-p");
+    if (pAttr) {
+      const m = pAttr.match(/\[\^(\d+)\]/);
+      if (m) nums.push(parseInt(m[1], 10));
+    }
+  });
+  if (nums.length > 0) nextIdx = Math.max(...nums) + 1;
 
-  const fnRef = `[^${nextIdx}]`;
-  const textNode = document.createTextNode(fnRef);
+  // Insert footnote ref tag at caret
+  const sup = document.createElement("sup");
+  sup.className = "md-footnote-ref";
+  sup.setAttribute("data-fn", String(nextIdx));
+  sup.setAttribute("contenteditable", "false");
+  sup.textContent = `[${nextIdx}]`;
   range.deleteContents();
-  range.insertNode(textNode);
+  range.insertNode(sup);
 
-  const fnDefLine = document.createElement("div");
-  fnDefLine.setAttribute("data-p", `[^${nextIdx}]: `);
-  fnDefLine.className = "md-footnote-def";
+  const afterSup = document.createTextNode("\u200B");
+  sup.after(afterSup);
+
+  // Append footnote definition line at bottom
+  const defLine = document.createElement("div");
+  defLine.setAttribute("data-p", `[^${nextIdx}]: `);
+  defLine.className = "md-footnote-def";
+
   const badge = document.createElement("span");
   badge.className = "md-fn-badge";
   badge.setAttribute("contenteditable", "false");
   badge.textContent = `[^${nextIdx}]: `;
-  fnDefLine.appendChild(badge);
-  fnDefLine.appendChild(document.createTextNode("Footnote explanation"));
-  editor.appendChild(fnDefLine);
+  defLine.appendChild(badge);
 
-  const newRange = document.createRange();
-  newRange.setStartAfter(textNode);
-  newRange.collapse(true);
+  const textNode = document.createTextNode("Footnote explanation");
+  defLine.appendChild(textNode);
+  editor.appendChild(defLine);
+
+  // Focus and select the explanation text
+  const r = document.createRange();
+  r.selectNodeContents(textNode);
   currentSel.removeAllRanges();
-  currentSel.addRange(newRange);
+  currentSel.addRange(r);
 }
 
 export function applyOrderedList(editor: HTMLElement): void {
