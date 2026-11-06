@@ -17,6 +17,8 @@ import {
   Trash,
   Type,
   X,
+  ZoomIn,
+  ZoomOut,
 } from "lucide-react";
 import type { NoteItem } from "../api/tauriBridge";
 import { NOTE_FONTS, fontStack, tauriApi } from "../api/tauriBridge";
@@ -125,6 +127,35 @@ export function NoteSheet({
   const titleRef = useRef<HTMLInputElement | null>(null);
   const closeRef = useRef<() => void>(() => {});
   const closeCancel = useRef<() => void>(() => {});
+
+  // Note zoom level (scoped strictly to note view: 60% - 200%)
+  const [zoom, setZoom] = useState<number>(() => {
+    try {
+      const saved = localStorage.getItem("doit:note-zoom");
+      if (saved) {
+        const val = parseInt(saved, 10);
+        if (!isNaN(val) && val >= 60 && val <= 200) return val;
+      }
+    } catch {}
+    return 100;
+  });
+
+  const adjustZoom = useCallback((delta: number) => {
+    setZoom((prev) => {
+      const next = Math.max(60, Math.min(200, Math.round((prev + delta) / 10) * 10));
+      try {
+        localStorage.setItem("doit:note-zoom", next.toString());
+      } catch {}
+      return next;
+    });
+  }, []);
+
+  const resetZoom = useCallback(() => {
+    setZoom(100);
+    try {
+      localStorage.setItem("doit:note-zoom", "100");
+    } catch {}
+  }, []);
 
   // Load system fonts deferred to not block initial slide-in
   useEffect(() => {
@@ -469,6 +500,27 @@ export function NoteSheet({
 
   useEffect(() => {
     const onKey = (event: KeyboardEvent) => {
+      if ((event.ctrlKey || event.metaKey) && !event.altKey) {
+        if (event.key === "=" || event.key === "+" || event.code === "NumpadAdd" || event.code === "Equal") {
+          event.preventDefault();
+          event.stopPropagation();
+          adjustZoom(10);
+          return;
+        }
+        if (event.key === "-" || event.key === "_" || event.code === "NumpadSubtract" || event.code === "Minus") {
+          event.preventDefault();
+          event.stopPropagation();
+          adjustZoom(-10);
+          return;
+        }
+        if (event.key === "0" || event.code === "Numpad0" || event.code === "Digit0") {
+          event.preventDefault();
+          event.stopPropagation();
+          resetZoom();
+          return;
+        }
+      }
+
       if (event.key === "Escape") {
         event.preventDefault();
         if (fontOpen || shelfOpen) {
@@ -481,7 +533,7 @@ export function NoteSheet({
     };
     document.addEventListener("keydown", onKey);
     return () => document.removeEventListener("keydown", onKey);
-  }, [fontOpen, shelfOpen]);
+  }, [fontOpen, shelfOpen, adjustZoom, resetZoom]);
 
   // The backend asks for a final flush right before it blanks the canvas (tray mode)
   useEffect(() => {
@@ -1043,12 +1095,74 @@ export function NoteSheet({
               <ImageIcon size={isMaximized ? 15 : 12.5} strokeWidth={1.7} />
             </button>
 
+            <span className="mx-0.5 h-4 w-px bg-white/[0.08]" />
+            <div
+              className={cx(
+                "flex items-center rounded-lg bg-white/[0.04] border border-white/10 px-1 shrink-0 transition-all duration-200 select-none",
+                isMaximized ? "h-8.5 gap-1" : "h-7 gap-0.5",
+              )}
+              title="Note zoom: Ctrl+ to zoom in, Ctrl- to zoom out, Ctrl 0 to reset"
+            >
+              <button
+                type="button"
+                onMouseDown={(e) => e.preventDefault()}
+                onClick={() => adjustZoom(-10)}
+                aria-label="Zoom out"
+                title="Zoom out (Ctrl -)"
+                className={cx(
+                  "grid place-items-center rounded text-ink-4 hover:text-white hover:bg-white/10 transition-colors cursor-pointer",
+                  isMaximized ? "size-6.5" : "size-5",
+                )}
+              >
+                <ZoomOut size={isMaximized ? 13 : 11} strokeWidth={2} />
+              </button>
+              <button
+                type="button"
+                onMouseDown={(e) => e.preventDefault()}
+                onClick={resetZoom}
+                aria-label="Reset zoom"
+                title="Reset zoom to 100% (Ctrl 0)"
+                className={cx(
+                  "font-mono tabular-nums text-ink-3 hover:text-white px-1 transition-colors cursor-pointer",
+                  isMaximized ? "text-[11.5px]" : "text-[10px]",
+                )}
+              >
+                {zoom}%
+              </button>
+              <button
+                type="button"
+                onMouseDown={(e) => e.preventDefault()}
+                onClick={() => adjustZoom(10)}
+                aria-label="Zoom in"
+                title="Zoom in (Ctrl +)"
+                className={cx(
+                  "grid place-items-center rounded text-ink-4 hover:text-white hover:bg-white/10 transition-colors cursor-pointer",
+                  isMaximized ? "size-6.5" : "size-5",
+                )}
+              >
+                <ZoomIn size={isMaximized ? 13 : 11} strokeWidth={2} />
+              </button>
+            </div>
+
             </div>
           )}
         </div>
 
-        <div className={cx("scroll min-h-0 flex-1 overflow-y-auto", isMaximized ? "px-8 md:px-12" : "px-6")}>
-          <div className={cx("mx-auto w-full pb-8 pt-2", isMaximized ? "max-w-[960px] pt-4" : "max-w-[760px]")}>
+        <div
+          onWheel={(e) => {
+            if (e.ctrlKey || e.metaKey) {
+              e.preventDefault();
+              adjustZoom(e.deltaY < 0 ? 10 : -10);
+            }
+          }}
+          className={cx("scroll min-h-0 flex-1 overflow-y-auto", isMaximized ? "px-8 md:px-12" : "px-6")}
+        >
+          <div
+            className={cx("mx-auto w-full pb-8 pt-2 transition-[zoom] duration-150 origin-top", isMaximized ? "max-w-[960px] pt-4" : "max-w-[760px]")}
+            style={{
+              zoom: `${zoom}%`,
+            }}
+          >
             <input
               ref={titleRef}
               value={draft.title ?? ""}
@@ -1222,7 +1336,20 @@ export function NoteSheet({
           <span className="truncate font-mono text-[9px] uppercase tracking-[0.1em] text-ink-4">
             Last edited {fullStamp(draft.last_edited)}
           </span>
-          <span className="flex shrink-0 items-center gap-1.5 font-mono text-[9px] uppercase tracking-[0.1em] text-ink-4">
+          <div className="flex shrink-0 items-center gap-2 font-mono text-[9px] uppercase tracking-[0.1em] text-ink-4">
+            {zoom !== 100 && (
+              <>
+                <button
+                  type="button"
+                  onClick={resetZoom}
+                  className="hover:text-white transition-colors cursor-pointer text-ink-3"
+                  title="Click to reset zoom (Ctrl 0)"
+                >
+                  Zoom: {zoom}%
+                </button>
+                <span className="h-3 w-px bg-white/10" />
+              </>
+            )}
             <span>
               {body.filter((item) => item.is_todo).filter((item) => item.completed).length}/
               {body.filter((item) => item.is_todo).length} closed
@@ -1230,7 +1357,7 @@ export function NoteSheet({
             <span className="mx-1 h-3 w-px bg-white/10" />
             <CornerDownLeft size={10} strokeWidth={1.8} />
             new line | esc
-          </span>
+          </div>
         </div>
       </div>
 

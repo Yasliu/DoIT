@@ -1,5 +1,32 @@
 # DoIT Developer Architecture & Engineering Changelog
 
+## [2026-11-06] - Version 1.1.8: Note Zoom Engine, Scroll-Proof Bento Drag & Drop, Restored Blurred Glass Mode & Community Bug Reporting
+
+### 19. Note Zoom Controls, Bento Drag Coordinate Portaling, Glass Mode Texture Restoration & Issue Tracker Tile (`src/components/NoteSheet.tsx`, `src/components/BentoCanvas.tsx`, `src/styles/globals.css`, `src/components/SettingsPanel.tsx`, `src/components/CategoryMenu.tsx`, `src/components/Sidebar.tsx`)
+- **Note-Scoped Editor Zoom Engine (`NoteSheet.tsx`)**:
+  - Implemented interactive note zooming (`60%` - `200%`, default `100%`) with persistent `localStorage` memory across sessions.
+  - Added native keyboard hotkeys: `Ctrl +` / `Ctrl =` (zoom in +10%), `Ctrl -` (zoom out -10%), and `Ctrl 0` (reset to 100%).
+  - Added `Ctrl + MouseWheel` dynamic zoom support over the note canvas.
+  - Intercepted browser-level key events to prevent global application window scaling, ensuring zoom is strictly scoped to the active note.
+  - Integrated an interactive zoom stepper (`ZoomOut`, percentage badge, `ZoomIn`) into the editor formatting toolbar and a quick-reset indicator in the bottom status bar.
+  - Used proportional CSS zoom rendering so font sizes, headings, task checkboxes, code blocks, images, line heights, and margins scale together harmoniously without clipping.
+- **Scroll-Proof Bento Drag-and-Drop Portaling (`BentoCanvas.tsx`)**:
+  - Portaled the drag ghost element directly to `document.body` via React's `createPortal`, isolating it from parent container boundaries.
+  - Eliminated the bug where parent CSS `contain: "layout paint"` and canvas `scrollTop` trapped `position: fixed` elements and displaced the dragged note upwards or scrolled it out of view.
+  - Ensured the dragged tile tracks the cursor with mathematical coordinate precision across arbitrary canvas scroll depths.
+- **Restored Blurred Glass Mode (`globals.css`)**:
+  - Fixed the regression in "Blurred Glass Mode" where blur variables were set to `none` and translucent values replaced with opaque hexes.
+  - Restored rich backdrop filters across the interface: `--theme-chassis-blur: blur(36px) saturate(110%)`, `--theme-glass-blur: blur(30px) saturate(112%)`, `--theme-sheet-blur: blur(44px) saturate(118%)`, and `--theme-card-blur: blur(18px) saturate(108%)`.
+  - Added `-webkit-backdrop-filter` and `backdrop-filter` to `.card` for frosted translucency on note tiles.
+  - Maintained solid, 100% opaque matte styling in Monochrome Mode for users preferring zero blur.
+- **Settings Bug Report Tile (`SettingsPanel.tsx`)**:
+  - Added a dedicated card in Settings: *"Spotted a bug? Report Here"*, featuring an issue tracker description and direct launch button to `https://github.com/Yasliu/DoIT/issues/`.
+  - Integrated with `@tauri-apps/plugin-opener` with fallback to `window.open`.
+- **Category Menu Streamlining (`CategoryMenu.tsx`)**:
+  - Removed the redundant separate "Choose icon" button from the category dropdown menu, consolidating category management under "Rename & icon" and "Delete category".
+- **Sidebar Count Margin Polish (`Sidebar.tsx`)**:
+  - Increased right padding (`pr-3.5`) and spacing for shelf count numerals (`12`, `4`, `3`, `5`), providing comfortable breathing room from the curved highlight border.
+
 ## [2026-11-04] - Version 1.1.7: Full Note Maximization, Peak Arrow Navigation, Bullet Exit Mechanics & Taskbar Clamping
 
 ### 18. Floating Text Style Portal, Monospaced Code Block Engine & Category Margin Breathing Room (`src/components/HeadingSelect.tsx`, `src/lib/format.tsx`, `src/components/NoteSheet.tsx`, `src/components/Sidebar.tsx`, `src/styles/globals.css`)

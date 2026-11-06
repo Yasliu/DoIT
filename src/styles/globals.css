@@ -23,23 +23,43 @@
     --ease-out: cubic-bezier(0.22, 1, 0.36, 1);
     color-scheme: dark;
 
-    /* Theme Texture Variables (Glass Mode Default - High-Performance Zero-Lag Compositing) */
-    --theme-chassis-bg: #090a0e;
-    --theme-chassis-blur: none;
-    --theme-glass-bg: #15161d;
-    --theme-glass-blur: none;
-    --theme-sheet-bg: #121318;
-    --theme-sheet-blur: none;
-    --theme-card-bg: #14151a;
-    --theme-card-blur: none;
-    --theme-card-hover-bg: #191a21;
+    /* Theme Texture Variables (Glass Mode Default - Frosted Glass & Backdrop Blur) */
+    --theme-chassis-bg: rgba(9, 10, 14, 0.82);
+    --theme-chassis-blur: blur(36px) saturate(110%);
+    --theme-glass-bg: rgba(23, 24, 30, 0.62);
+    --theme-glass-blur: blur(30px) saturate(112%);
+    --theme-sheet-bg: rgba(18, 19, 24, 0.86);
+    --theme-sheet-blur: blur(44px) saturate(118%);
+    --theme-card-bg: rgba(255, 255, 255, 0.052);
+    --theme-card-blur: blur(18px) saturate(108%);
+    --theme-card-hover-bg: rgba(255, 255, 255, 0.075);
     --theme-border: rgba(255, 255, 255, 0.09);
     --theme-card-inner: rgba(255, 255, 255, 0.035);
 
-    --theme-tray-bg: #0b0c10;
-    --theme-tray-blur: none;
-    --theme-pill-bg: #0e0f13;
-    --theme-pill-blur: none;
+    --theme-tray-bg: rgba(11, 12, 16, 0.88);
+    --theme-tray-blur: blur(40px) saturate(120%);
+    --theme-pill-bg: rgba(14, 15, 19, 0.90);
+    --theme-pill-blur: blur(32px) saturate(120%);
+  }
+
+  [data-theme="glass"],
+  html[data-theme="glass"] {
+    --theme-chassis-bg: rgba(9, 10, 14, 0.82);
+    --theme-chassis-blur: blur(36px) saturate(110%);
+    --theme-glass-bg: rgba(23, 24, 30, 0.62);
+    --theme-glass-blur: blur(30px) saturate(112%);
+    --theme-sheet-bg: rgba(18, 19, 24, 0.86);
+    --theme-sheet-blur: blur(44px) saturate(118%);
+    --theme-card-bg: rgba(255, 255, 255, 0.052);
+    --theme-card-blur: blur(18px) saturate(108%);
+    --theme-card-hover-bg: rgba(255, 255, 255, 0.075);
+    --theme-border: rgba(255, 255, 255, 0.09);
+    --theme-card-inner: rgba(255, 255, 255, 0.035);
+
+    --theme-tray-bg: rgba(11, 12, 16, 0.88);
+    --theme-tray-blur: blur(40px) saturate(120%);
+    --theme-pill-bg: rgba(14, 15, 19, 0.90);
+    --theme-pill-blur: blur(32px) saturate(120%);
   }
 
   /* Universal scrollbar eradication */
@@ -248,6 +268,8 @@
     position: relative;
     border-radius: 20px;
     background-color: var(--theme-card-bg);
+    backdrop-filter: var(--theme-card-blur);
+    -webkit-backdrop-filter: var(--theme-card-blur);
     box-shadow:
       inset 0 0 0 1px var(--theme-border),
       inset 0 1px 0 rgba(255, 255, 255, 0.08),

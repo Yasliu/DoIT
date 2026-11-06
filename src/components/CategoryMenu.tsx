@@ -1,5 +1,5 @@
 import { useEffect, useRef, useState } from "react";
-import { Palette, Pencil, Trash2, X } from "lucide-react";
+import { Pencil, Trash2, X } from "lucide-react";
 import { cleanText } from "../lib/text";
 import {
   CATEGORY_ICON_NAMES,
@@ -112,21 +112,6 @@ export function CategoryMenu({ x, y, shelf, onClose, onRename, onDelete, onOpenI
           >
             <Pencil size={12.5} strokeWidth={1.8} className="shrink-0 text-white/70" />
             Rename & icon
-          </button>
-          <button
-            type="button"
-            onClick={() => {
-              if (onOpenIconPicker) {
-                onClose();
-                onOpenIconPicker(shelf);
-              } else {
-                setMode("icon");
-              }
-            }}
-            className="flex h-8 w-full items-center gap-2 rounded-[8px] px-2 text-[12px] text-ink-2 transition-colors hover:bg-white/[0.08] hover:text-white cursor-pointer"
-          >
-            <Palette size={12.5} strokeWidth={1.8} className="shrink-0 text-white/70" />
-            Choose icon
           </button>
           <button
             type="button"

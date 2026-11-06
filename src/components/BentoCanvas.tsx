@@ -1,5 +1,6 @@
 import type { PointerEvent as ReactPointerEvent } from "react";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import { createPortal } from "react-dom";
 import { Check, FolderPlus, Plus, X } from "lucide-react";
 import type { NoteItem } from "../api/tauriBridge";
 import { cx, longDate, noteMatches, relativeShort } from "../lib/text";
@@ -423,24 +424,26 @@ export function BentoCanvas({
         </div>
       </div>
 
-      {drag && (
-        <div
-          className="pointer-events-none fixed z-[80]"
-          style={{ left: drag.x - drag.dx, top: drag.y - drag.dy, width: drag.w }}
-        >
+      {drag &&
+        createPortal(
           <div
-            className="glass rounded-[18px] px-4 py-3.5"
-            style={{ transform: "rotate(1.4deg) scale(1.015)", opacity: 0.94 }}
+            className="pointer-events-none fixed z-[9999]"
+            style={{ left: drag.x - drag.dx, top: drag.y - drag.dy, width: drag.w }}
           >
-            <div className="truncate text-[14px] font-medium tracking-[-0.01em] text-ink-1">
-              {drag.note.title || "Untitled"}
+            <div
+              className="glass rounded-[18px] px-4 py-3.5 border border-white/20 shadow-[0_25px_60px_rgba(0,0,0,0.95)]"
+              style={{ transform: "rotate(1.4deg) scale(1.02)", opacity: 0.96 }}
+            >
+              <div className="truncate text-[14px] font-medium tracking-[-0.01em] text-ink-1">
+                {drag.note.title || "Untitled"}
+              </div>
+              <div className="mt-1.5 font-mono text-[9px] uppercase tracking-[0.12em] text-ink-4">
+                {drag.note.category} → {over ?? "…"}
+              </div>
             </div>
-            <div className="mt-1.5 font-mono text-[9px] uppercase tracking-[0.12em] text-ink-4">
-              {drag.note.category} → {over ?? "…"}
-            </div>
-          </div>
-        </div>
-      )}
+          </div>,
+          document.body,
+        )}
     </div>
   );
 }
