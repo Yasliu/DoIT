@@ -1539,19 +1539,13 @@ export function NoteSheet({
           alt={editImgModal.alt}
           src={editImgModal.src}
           refKey={editImgModal.refKey}
-          onSave={(newAlt, newSrc) => {
+          onSave={(newAlt) => {
             editImgModal.element.alt = newAlt;
-            if (newSrc && newSrc !== editImgModal.src) {
-              editImgModal.element.src = newSrc;
-              editImgModal.element.removeAttribute("data-ref");
-              editImgModal.element.setAttribute("data-md", `![${newAlt}](${newSrc})`);
+            const ref = editImgModal.element.getAttribute("data-ref");
+            if (ref) {
+              editImgModal.element.setAttribute("data-md", `![${newAlt}][${ref}]`);
             } else {
-              const ref = editImgModal.element.getAttribute("data-ref");
-              if (ref) {
-                editImgModal.element.setAttribute("data-md", `![${newAlt}][${ref}]`);
-              } else {
-                editImgModal.element.setAttribute("data-md", `![${newAlt}](${newSrc})`);
-              }
+              editImgModal.element.setAttribute("data-md", `![${newAlt}](${editImgModal.element.src})`);
             }
             handleEditorInput();
             setEditImgModal(null);

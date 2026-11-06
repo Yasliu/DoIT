@@ -129,23 +129,46 @@ export function insertInlineImageAtCaret(editor: HTMLElement, base64OrUrl: strin
   img.setAttribute("data-ref", nextId);
   img.setAttribute("data-md", `![${alt}][${nextId}]`);
 
+  const nextLine = document.createElement("div");
+  const br = document.createElement("br");
+  nextLine.appendChild(br);
+
   const sel = window.getSelection();
   if (sel && sel.rangeCount > 0 && editor.contains(sel.getRangeAt(0).startContainer)) {
     const range = sel.getRangeAt(0);
     range.deleteContents();
-    range.insertNode(img);
 
-    const space = document.createTextNode(" ");
-    img.after(space);
+    let block: Node | null = range.startContainer;
+    while (block && block.parentNode !== editor && block !== editor) {
+      block = block.parentNode;
+    }
+
+    if (block && block !== editor && block.parentNode === editor) {
+      range.insertNode(img);
+      block.parentNode.insertBefore(nextLine, block.nextSibling);
+    } else {
+      range.insertNode(img);
+      img.after(nextLine);
+    }
+
     const newRange = document.createRange();
-    newRange.setStartAfter(space);
+    newRange.setStart(nextLine, 0);
     newRange.collapse(true);
     sel.removeAllRanges();
     sel.addRange(newRange);
   } else {
-    const div = document.createElement("div");
-    div.appendChild(img);
-    editor.appendChild(div);
+    const imgDiv = document.createElement("div");
+    imgDiv.appendChild(img);
+    editor.appendChild(imgDiv);
+    editor.appendChild(nextLine);
+
+    if (sel) {
+      const newRange = document.createRange();
+      newRange.setStart(nextLine, 0);
+      newRange.collapse(true);
+      sel.removeAllRanges();
+      sel.addRange(newRange);
+    }
   }
 }
 
@@ -165,13 +188,16 @@ export function insertInlineImageInMarkdown(
 
   const before = md.slice(0, caretPos);
   const after = md.slice(caretPos);
-  const newTagInserted = `${before}${tag}${after}`;
+
+  const prefix = before.length > 0 && !before.endsWith("\n") ? "\n" : "";
+  const insertedSegment = `${prefix}${tag}\n`;
+  const newTagInserted = `${before}${insertedSegment}${after}`;
   const newDef = `[${nextId}]: ${base64OrUrl}`;
   const finalMd = `${newTagInserted.trimEnd()}\n\n${newDef}`;
 
   return {
     text: finalMd,
-    newCaret: caretPos + tag.length,
+    newCaret: caretPos + insertedSegment.length,
   };
 }
 

@@ -108,7 +108,7 @@ export function ImageContextMenu({
         className="flex w-full items-center gap-2.5 rounded-lg px-2.5 py-1.5 text-left text-[12px] font-medium text-white/80 hover:bg-white/10 hover:text-white transition-colors cursor-pointer"
       >
         <Edit3 size={13} className="text-white/60 shrink-0" />
-        <span>Edit Alt / Source</span>
+        <span>Edit Alt Text</span>
       </button>
 
       <div className="my-1 h-px bg-white/10" />
