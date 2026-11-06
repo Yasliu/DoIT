@@ -1,6 +1,6 @@
 import { useEffect, useRef, useState } from "react";
 import { createPortal } from "react-dom";
-import { Copy, Edit3, Maximize2, Trash2, Check, Expand, Shrink } from "lucide-react";
+import { Copy, Edit3, Maximize2, Trash2, Check } from "lucide-react";
 import { copyImageToClipboard } from "../lib/format";
 
 interface ImageContextMenuProps {
@@ -11,7 +11,6 @@ interface ImageContextMenuProps {
   onClose: () => void;
   onEdit: () => void;
   onZoom: () => void;
-  onToggleExpand: () => void;
   onDelete: () => void;
 }
 
@@ -23,7 +22,6 @@ export function ImageContextMenu({
   onClose,
   onEdit,
   onZoom,
-  onToggleExpand,
   onDelete,
 }: ImageContextMenuProps) {
   const menuRef = useRef<HTMLDivElement>(null);
@@ -62,11 +60,9 @@ export function ImageContextMenu({
     }
   };
 
-  const isExpanded = imgElement.getAttribute("data-expanded") === "true";
-
   // Keep menu on screen
-  const menuWidth = 200;
-  const menuHeight = 200;
+  const menuWidth = 190;
+  const menuHeight = 160;
   const clampedX = Math.max(10, Math.min(x, window.innerWidth - menuWidth - 10));
   const clampedY = Math.max(10, Math.min(y, window.innerHeight - menuHeight - 10));
 
@@ -74,26 +70,10 @@ export function ImageContextMenu({
     <div
       ref={menuRef}
       style={{ left: clampedX, top: clampedY }}
-      className="fixed z-[99999] w-[196px] rounded-xl border border-white/15 bg-[#14151a]/95 p-1 shadow-[0_20px_50px_rgba(0,0,0,0.9)] backdrop-blur-xl text-white select-none animate-in fade-in-0 zoom-in-95 duration-100"
+      className="fixed z-[99999] w-[184px] rounded-xl border border-white/15 bg-[#14151a]/95 p-1 shadow-[0_20px_50px_rgba(0,0,0,0.9)] backdrop-blur-xl text-white select-none animate-in fade-in-0 zoom-in-95 duration-100"
       onClick={(e) => e.stopPropagation()}
       onPointerDown={(e) => e.stopPropagation()}
     >
-      <button
-        type="button"
-        onClick={() => {
-          onClose();
-          onToggleExpand();
-        }}
-        className="flex w-full items-center gap-2.5 rounded-lg px-2.5 py-1.5 text-left text-[12px] font-medium text-white/80 hover:bg-white/10 hover:text-white transition-colors cursor-pointer"
-      >
-        {isExpanded ? (
-          <Shrink size={13} className="text-white/60 shrink-0" />
-        ) : (
-          <Expand size={13} className="text-white/60 shrink-0" />
-        )}
-        <span>{isExpanded ? "Fit Image to Column" : "1:1 Full Resolution"}</span>
-      </button>
-
       <button
         type="button"
         onClick={handleCopy}
@@ -116,7 +96,7 @@ export function ImageContextMenu({
         className="flex w-full items-center gap-2.5 rounded-lg px-2.5 py-1.5 text-left text-[12px] font-medium text-white/80 hover:bg-white/10 hover:text-white transition-colors cursor-pointer"
       >
         <Maximize2 size={13} className="text-white/60 shrink-0" />
-        <span>Zoom in Lightbox</span>
+        <span>Zoom Image</span>
       </button>
 
       <button

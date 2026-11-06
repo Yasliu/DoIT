@@ -138,7 +138,6 @@ export function NoteSheet({
   const [showDeleteConfirm, setShowDeleteConfirm] = useState(false);
   const [shelfOpen, setShelfOpen] = useState(false);
   const [previewImage, setPreviewImage] = useState<string | null>(null);
-  const imgClickTimerRef = useRef<number | null>(null);
   const fileInputRef = useRef<HTMLInputElement | null>(null);
   const [newShelf, setNewShelf] = useState("");
   const titleRef = useRef<HTMLInputElement | null>(null);
@@ -1382,40 +1381,11 @@ export function NoteSheet({
                   onMouseDown={(e) => {
                     if ((e.target as HTMLElement).closest(".md-cb")) e.preventDefault();
                   }}
-                  onDoubleClick={(e) => {
-                    const img = (e.target as HTMLElement).closest("img.md-img") as HTMLImageElement | null;
-                    if (img) {
-                      e.preventDefault();
-                      e.stopPropagation();
-                      if (imgClickTimerRef.current) {
-                        window.clearTimeout(imgClickTimerRef.current);
-                        imgClickTimerRef.current = null;
-                      }
-                      const isExp = img.getAttribute("data-expanded") === "true";
-                      img.setAttribute("data-expanded", isExp ? "false" : "true");
-                      return;
-                    }
-                  }}
                   onClick={(e) => {
                     const img = (e.target as HTMLElement).closest("img.md-img") as HTMLImageElement | null;
                     if (img) {
                       e.preventDefault();
-                      if (e.shiftKey || e.altKey) {
-                        const isExp = img.getAttribute("data-expanded") === "true";
-                        img.setAttribute("data-expanded", isExp ? "false" : "true");
-                        return;
-                      }
-                      if (imgClickTimerRef.current) {
-                        window.clearTimeout(imgClickTimerRef.current);
-                        imgClickTimerRef.current = null;
-                        const isExp = img.getAttribute("data-expanded") === "true";
-                        img.setAttribute("data-expanded", isExp ? "false" : "true");
-                        return;
-                      }
-                      imgClickTimerRef.current = window.setTimeout(() => {
-                        imgClickTimerRef.current = null;
-                        setPreviewImage(img.src);
-                      }, 220);
+                      setPreviewImage(img.src);
                       return;
                     }
                     const link = (e.target as HTMLElement).closest("a.md-link") as HTMLAnchorElement | null;
@@ -1541,11 +1511,6 @@ export function NoteSheet({
           onClose={() => setContextMenuImg(null)}
           onZoom={() => {
             setPreviewImage(contextMenuImg.element.src);
-            setContextMenuImg(null);
-          }}
-          onToggleExpand={() => {
-            const isExp = contextMenuImg.element.getAttribute("data-expanded") === "true";
-            contextMenuImg.element.setAttribute("data-expanded", isExp ? "false" : "true");
             setContextMenuImg(null);
           }}
           onEdit={() => {

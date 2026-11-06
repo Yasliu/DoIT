@@ -196,7 +196,6 @@ export function TrayCompanion() {
     src: string;
     refKey?: string;
   } | null>(null);
-  const imgClickTimerRef = useRef<number | null>(null);
 
   const updateActiveFormatting = () => {
     setIsBoldActive(isRichBoldActive());
@@ -1303,40 +1302,11 @@ export function TrayCompanion() {
                 onMouseDown={(e) => {
                   if ((e.target as HTMLElement).closest(".md-cb")) e.preventDefault();
                 }}
-                onDoubleClick={(e) => {
-                  const img = (e.target as HTMLElement).closest("img.md-img") as HTMLImageElement | null;
-                  if (img) {
-                    e.preventDefault();
-                    e.stopPropagation();
-                    if (imgClickTimerRef.current) {
-                      window.clearTimeout(imgClickTimerRef.current);
-                      imgClickTimerRef.current = null;
-                    }
-                    const isExp = img.getAttribute("data-expanded") === "true";
-                    img.setAttribute("data-expanded", isExp ? "false" : "true");
-                    return;
-                  }
-                }}
                 onClick={(e) => {
                   const img = (e.target as HTMLElement).closest("img.md-img") as HTMLImageElement | null;
                   if (img) {
                     e.preventDefault();
-                    if (e.shiftKey || e.altKey) {
-                      const isExp = img.getAttribute("data-expanded") === "true";
-                      img.setAttribute("data-expanded", isExp ? "false" : "true");
-                      return;
-                    }
-                    if (imgClickTimerRef.current) {
-                      window.clearTimeout(imgClickTimerRef.current);
-                      imgClickTimerRef.current = null;
-                      const isExp = img.getAttribute("data-expanded") === "true";
-                      img.setAttribute("data-expanded", isExp ? "false" : "true");
-                      return;
-                    }
-                    imgClickTimerRef.current = window.setTimeout(() => {
-                      imgClickTimerRef.current = null;
-                      setPreviewImage(img.src);
-                    }, 220);
+                    setPreviewImage(img.src);
                     return;
                   }
                   const link = (e.target as HTMLElement).closest("a.md-link") as HTMLAnchorElement | null;
@@ -1617,11 +1587,6 @@ export function TrayCompanion() {
           onClose={() => setContextMenuImg(null)}
           onZoom={() => {
             setPreviewImage(contextMenuImg.element.src);
-            setContextMenuImg(null);
-          }}
-          onToggleExpand={() => {
-            const isExp = contextMenuImg.element.getAttribute("data-expanded") === "true";
-            contextMenuImg.element.setAttribute("data-expanded", isExp ? "false" : "true");
             setContextMenuImg(null);
           }}
           onEdit={() => {
