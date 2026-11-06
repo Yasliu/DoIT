@@ -11,7 +11,6 @@ import {
   ListOrdered,
   Menu,
   Quote,
-  Smile,
   Strikethrough,
   Subscript,
   Superscript,
@@ -19,7 +18,6 @@ import {
   Terminal,
 } from "lucide-react";
 import { cx } from "../lib/text";
-import { QUICK_EMOJIS } from "../lib/emoji";
 
 interface InsertMenuProps {
   editorRef?: React.RefObject<HTMLElement | null>;
@@ -37,7 +35,6 @@ interface InsertMenuProps {
   onInsertHighlight: () => void;
   onInsertSubscript: () => void;
   onInsertSuperscript: () => void;
-  onInsertEmoji: (emoji: string) => void;
   hasMedia?: boolean;
   large?: boolean;
   compact?: boolean;
@@ -59,7 +56,6 @@ export function InsertMenu({
   onInsertHighlight,
   onInsertSubscript,
   onInsertSuperscript,
-  onInsertEmoji,
   hasMedia = false,
   large = false,
   compact = false,
@@ -398,29 +394,6 @@ export function InsertMenu({
                   [^1]
                 </kbd>
               </button>
-
-              <div className="h-px bg-white/[0.08] my-1" />
-
-              {/* SECTION: Quick Emojis */}
-              <div className="px-2 pt-1 pb-1">
-                <div className="flex items-center gap-1 mb-1 font-mono text-[9px] uppercase tracking-[0.12em] text-white/40">
-                  <Smile size={11} strokeWidth={1.8} />
-                  <span>Quick Emojis (:name:)</span>
-                </div>
-                <div className="grid grid-cols-8 gap-1 pt-0.5">
-                  {QUICK_EMOJIS.map((emoji) => (
-                    <button
-                      key={emoji}
-                      type="button"
-                      onClick={() => handleAction(() => onInsertEmoji(emoji))}
-                      className="size-6 grid place-items-center rounded text-[13px] hover:bg-white/[0.12] hover:scale-115 transition-transform cursor-pointer"
-                      title={emoji}
-                    >
-                      {emoji}
-                    </button>
-                  ))}
-                </div>
-              </div>
             </div>
           </>,
           document.body,

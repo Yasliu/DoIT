@@ -43,6 +43,137 @@ export function renderFormattedText(text: string): React.ReactNode {
  * Converts Markdown text (with **bold** and *italic*) into HTML for a contenteditable rich editor.
  */
 const IMAGE_MD = /!\[([^\]\n]*)\]\(([^)\n]+)\)/g;
+const IMAGE_REF_MD = /!\[([^\]\n]*)\]\[([^\]\n]+)\]/g;
+
+export async function copyImageToClipboard(src: string): Promise<boolean> {
+  if (!src) return false;
+  try {
+    let blob: Blob | null = null;
+    if (src.startsWith("data:image/png;base64,")) {
+      const b64 = src.slice("data:image/png;base64,".length);
+      const binary = atob(b64);
+      const len = binary.length;
+      const bytes = new Uint8Array(len);
+      for (let i = 0; i < len; i++) {
+        bytes[i] = binary.charCodeAt(i);
+      }
+      blob = new Blob([bytes], { type: "image/png" });
+    } else if (src.startsWith("data:")) {
+      blob = await new Promise<Blob | null>((resolve) => {
+        const img = new Image();
+        img.onload = () => {
+          const cvs = document.createElement("canvas");
+          cvs.width = img.naturalWidth || img.width;
+          cvs.height = img.naturalHeight || img.height;
+          const ctx = cvs.getContext("2d");
+          if (!ctx) return resolve(null);
+          ctx.drawImage(img, 0, 0);
+          cvs.toBlob((b) => resolve(b), "image/png");
+        };
+        img.onerror = () => resolve(null);
+        img.src = src;
+      });
+    } else {
+      try {
+        const resp = await fetch(src);
+        const fetchedBlob = await resp.blob();
+        if (fetchedBlob.type === "image/png") {
+          blob = fetchedBlob;
+        } else {
+          const bitmap = await createImageBitmap(fetchedBlob);
+          const cvs = document.createElement("canvas");
+          cvs.width = bitmap.width;
+          cvs.height = bitmap.height;
+          const ctx = cvs.getContext("2d");
+          ctx?.drawImage(bitmap, 0, 0);
+          blob = await new Promise<Blob | null>((resolve) => {
+            cvs.toBlob((b) => resolve(b), "image/png");
+          });
+        }
+      } catch {
+        blob = null;
+      }
+    }
+
+    if (!blob) return false;
+    await navigator.clipboard.write([
+      new ClipboardItem({ "image/png": blob }),
+    ]);
+    return true;
+  } catch (err) {
+    console.error("Failed to copy image to clipboard:", err);
+    return false;
+  }
+}
+
+export function insertInlineImageAtCaret(editor: HTMLElement, base64OrUrl: string, alt = "Pasted Image"): void {
+  let maxN = 0;
+  const imgs = Array.from(editor.querySelectorAll("img[data-ref]"));
+  imgs.forEach((img) => {
+    const m = (img.getAttribute("data-ref") || "").match(/^img-(\d+)$/);
+    if (m) maxN = Math.max(maxN, parseInt(m[1], 10));
+  });
+  const text = editor.innerText || editor.textContent || "";
+  const matches = text.matchAll(/\[img-(\d+)\]/g);
+  for (const m of matches) {
+    maxN = Math.max(maxN, parseInt(m[1], 10));
+  }
+  const nextId = `img-${maxN + 1}`;
+
+  const img = document.createElement("img");
+  img.className = "md-img";
+  img.contentEditable = "false";
+  img.draggable = false;
+  img.alt = alt;
+  img.src = base64OrUrl;
+  img.setAttribute("data-ref", nextId);
+  img.setAttribute("data-md", `![${alt}][${nextId}]`);
+
+  const sel = window.getSelection();
+  if (sel && sel.rangeCount > 0 && editor.contains(sel.getRangeAt(0).startContainer)) {
+    const range = sel.getRangeAt(0);
+    range.deleteContents();
+    range.insertNode(img);
+
+    const space = document.createTextNode(" ");
+    img.after(space);
+    const newRange = document.createRange();
+    newRange.setStartAfter(space);
+    newRange.collapse(true);
+    sel.removeAllRanges();
+    sel.addRange(newRange);
+  } else {
+    const div = document.createElement("div");
+    div.appendChild(img);
+    editor.appendChild(div);
+  }
+}
+
+export function insertInlineImageInMarkdown(
+  md: string,
+  base64OrUrl: string,
+  caretPos: number,
+  alt = "Pasted Image"
+): { text: string; newCaret: number } {
+  let maxN = 0;
+  const matches = md.matchAll(/\[img-(\d+)\]/g);
+  for (const m of matches) {
+    maxN = Math.max(maxN, parseInt(m[1], 10));
+  }
+  const nextId = `img-${maxN + 1}`;
+  const tag = `![${alt}][${nextId}]`;
+
+  const before = md.slice(0, caretPos);
+  const after = md.slice(caretPos);
+  const newTagInserted = `${before}${tag}${after}`;
+  const newDef = `[${nextId}]: ${base64OrUrl}`;
+  const finalMd = `${newTagInserted.trimEnd()}\n\n${newDef}`;
+
+  return {
+    text: finalMd,
+    newCaret: caretPos + tag.length,
+  };
+}
 
 const escapeHtml = (s: string) => s.replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;");
 const escapeAttr = (s: string) => escapeHtml(s).replace(/"/g, "&quot;");
@@ -67,7 +198,7 @@ export function openExternalUrl(url: string): void {
     .catch(() => window.open(url, "_blank", "noopener,noreferrer"));
 }
 
-export function inlineMarkdownToHtml(line: string): string {
+export function inlineMarkdownToHtml(line: string, refMap?: Map<string, string>): string {
   // Pull images out first so their paths are never touched by other rules
   const images: string[] = [];
   let work = line.replace(IMAGE_MD, (match: string, alt: string, src: string) => {
@@ -75,6 +206,17 @@ export function inlineMarkdownToHtml(line: string): string {
     if (!url) return match;
     images.push(
       `<img class="md-img" contenteditable="false" draggable="false" data-md="${escapeAttr(match)}" alt="${escapeAttr(alt)}" src="${escapeAttr(url)}" />`,
+    );
+    return `\u0001${images.length - 1}\u0002`;
+  });
+
+  // Reference-style images: ![alt][ref-id]
+  work = work.replace(IMAGE_REF_MD, (match: string, alt: string, refId: string) => {
+    const rawSrc = refMap?.get(refId.trim().toLowerCase());
+    const url = rawSrc ? resolveImageSrc(rawSrc) : null;
+    if (!url) return match;
+    images.push(
+      `<img class="md-img" contenteditable="false" draggable="false" data-ref="${escapeAttr(refId.trim())}" data-md="${escapeAttr(match)}" alt="${escapeAttr(alt)}" src="${escapeAttr(url)}" />`,
     );
     return `\u0001${images.length - 1}\u0002`;
   });
@@ -245,11 +387,26 @@ export function insertCodeBlockAtCaret(editor: HTMLElement, lang = ""): void {
 export function markdownToHtml(md: string): string {
   if (!md) return "<div><br></div>";
   const lines = md.split("\n");
+
+  // Pre-collect reference definitions: [img-1]: data:image/png;base64,...
+  const refMap = new Map<string, string>();
+  for (const line of lines) {
+    const m = line.match(/^\s*\[([a-zA-Z0-9_\-]+)\]:\s*(\S+)\s*$/);
+    if (m) {
+      refMap.set(m[1].toLowerCase(), m[2]);
+    }
+  }
+
   const out: string[] = [];
 
   for (let i = 0; i < lines.length; i++) {
     const line = lines[i];
     const t = line.trim();
+
+    // Skip image reference definition lines from visible block rendering
+    if (/^\s*\[([a-zA-Z0-9_\-]+)\]:\s*(\S+)\s*$/.test(line)) {
+      continue;
+    }
 
     const fence = t.match(/^(`{3,}|~{3,})\s*([^\s`]*)\s*$/);
     if (fence) {
@@ -290,12 +447,12 @@ export function markdownToHtml(md: string): string {
       const cb = info.cls.startsWith("md-task") ? CHECKBOX_HTML : "";
       const fnBadge = info.cls === "md-footnote-def" ? `<span class="md-fn-badge" contenteditable="false">${escapeHtml(info.prefix)}</span>` : "";
       out.push(
-        `<div class="${info.cls}" data-p="${escapeAttr(info.prefix)}">${cb}${fnBadge}${rest ? inlineMarkdownToHtml(rest) : "<br>"}</div>`,
+        `<div class="${info.cls}" data-p="${escapeAttr(info.prefix)}">${cb}${fnBadge}${rest ? inlineMarkdownToHtml(rest, refMap) : "<br>"}</div>`,
       );
       continue;
     }
 
-    out.push(line ? `<div>${inlineMarkdownToHtml(line)}</div>` : "<div><br></div>");
+    out.push(line ? `<div>${inlineMarkdownToHtml(line, refMap)}</div>` : "<div><br></div>");
   }
 
   return out.join("");
@@ -863,6 +1020,7 @@ export function handleMarkdownPaste(e: React.ClipboardEvent<HTMLElement>): boole
 export function htmlToMarkdown(container: HTMLElement): string {
   const BLOCK_TAGS = new Set(["DIV", "P", "LI", "UL", "OL", "H1", "H2", "H3", "H4", "H5", "H6", "BLOCKQUOTE", "PRE"]);
   const lines: string[] = [];
+  const refDefinitions = new Map<string, string>();
   let cur = "";
   const flush = () => {
     lines.push(cur);
@@ -937,7 +1095,17 @@ export function htmlToMarkdown(container: HTMLElement): string {
     }
 
     if (tag === "IMG") {
-      cur += el.getAttribute("data-md") ?? "";
+      const refId = el.getAttribute("data-ref");
+      const alt = el.getAttribute("alt") || "Image";
+      const src = el.getAttribute("src") || "";
+      if (refId) {
+        cur += `![${alt}][${refId}]`;
+        if (src) {
+          refDefinitions.set(refId, src);
+        }
+      } else {
+        cur += el.getAttribute("data-md") || `![${alt}](${src})`;
+      }
       return;
     }
 
@@ -994,7 +1162,15 @@ export function htmlToMarkdown(container: HTMLElement): string {
   for (const child of Array.from(container.childNodes)) walk(child);
   if (cur !== "") flush();
 
-  return lines.join("\n");
+  let result = lines.join("\n").replace(/\n+$/, "");
+  if (refDefinitions.size > 0) {
+    const defs = Array.from(refDefinitions.entries())
+      .map(([k, v]) => `[${k}]: ${v}`)
+      .join("\n");
+    result = `${result}\n\n${defs}`;
+  }
+
+  return result;
 }
 function tableToLines(wrap: HTMLElement): string[] {
   const table = wrap.querySelector("table");

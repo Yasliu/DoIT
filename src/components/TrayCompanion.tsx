@@ -12,6 +12,9 @@ import { TrayPill } from "./TrayPill";
 import { RawEditor } from "./RawEditor";
 import { TableMenu } from "./TableMenu";
 import { EmojiAutocomplete } from "./EmojiAutocomplete";
+import { EmojiPickerModal } from "./EmojiPickerModal";
+import { EditImageModal } from "./EditImageModal";
+import { ImageContextMenu } from "./ImageContextMenu";
 import {
   ArrowLeft,
   ArrowUpRight,
@@ -22,6 +25,7 @@ import {
   Minus,
   Plus,
   Search,
+  Smile,
   Trash,
   Type,
   X,
@@ -64,6 +68,8 @@ import {
   applySubscript,
   applySuperscript,
   insertEmojiAtCaret,
+  insertInlineImageAtCaret,
+  insertInlineImageInMarkdown,
   setMarkdownBaseDir,
   isCaretAtEditorStart,
   placeCaretAtEditorStart,
@@ -169,9 +175,27 @@ export function TrayCompanion() {
 
   // Rich text formatting state
   const editorRef = useRef<HTMLDivElement | null>(null);
+  const rawTextareaRef = useRef<HTMLTextAreaElement | null>(null);
   const [isBoldActive, setIsBoldActive] = useState<boolean>(false);
   const [isItalicActive, setIsItalicActive] = useState<boolean>(false);
   const lastActiveNoteIdRef = useRef<string | null>(null);
+
+  // Dedicated Emoji Picker Modal
+  const [showEmojiPicker, setShowEmojiPicker] = useState(false);
+  const [emojiAnchor, setEmojiAnchor] = useState<DOMRect | null>(null);
+
+  // Image context menu & edit modal
+  const [contextMenuImg, setContextMenuImg] = useState<{
+    element: HTMLImageElement;
+    x: number;
+    y: number;
+  } | null>(null);
+  const [editImgModal, setEditImgModal] = useState<{
+    element: HTMLImageElement;
+    alt: string;
+    src: string;
+    refKey?: string;
+  } | null>(null);
 
   const updateActiveFormatting = () => {
     setIsBoldActive(isRichBoldActive());
@@ -510,16 +534,29 @@ export function TrayCompanion() {
     }
     if (files.length === 0) return;
     e.preventDefault();
-    const loaded: string[] = [];
-    let pending = files.length;
     files.forEach((file) => {
       const reader = new FileReader();
       reader.onload = (loadEvt) => {
         const dataUrl = loadEvt.target?.result as string;
-        if (dataUrl) loaded.push(dataUrl);
-        pending -= 1;
-        if (pending === 0 && loaded.length > 0) {
-          appendActiveImages(loaded);
+        if (!dataUrl || !activeNote) return;
+        const altText = file.name ? file.name.replace(/\.[^.]+$/, "") : "Pasted Image";
+        if (rawMode) {
+          const ed = rawTextareaRef.current;
+          const pos = ed?.selectionStart ?? activeNote.content.length;
+          const { text, newCaret } = insertInlineImageInMarkdown(contentToMarkdown(activeNote.content), dataUrl, pos, altText);
+          editActive({ content: markdownToContent(text, activeNote.content, () => uid("line")) });
+          if (ed) {
+            requestAnimationFrame(() => {
+              ed.selectionStart = newCaret;
+              ed.selectionEnd = newCaret;
+            });
+          }
+        } else {
+          const ed = editorRef.current;
+          if (ed) {
+            insertInlineImageAtCaret(ed, dataUrl, altText);
+            handleEditorInput();
+          }
         }
       };
       reader.readAsDataURL(file);
@@ -1014,12 +1051,25 @@ export function TrayCompanion() {
                 onInsertHighlight={() => runEditorCommand((ed) => applyHighlight(ed))}
                 onInsertSubscript={() => runEditorCommand((ed) => applySubscript(ed))}
                 onInsertSuperscript={() => runEditorCommand((ed) => applySuperscript(ed))}
-                onInsertEmoji={(emoji) => runEditorCommand((ed) => insertEmojiAtCaret(ed, emoji))}
                 hasMedia={Boolean((activeNote.media_urls && activeNote.media_urls.length > 0) || activeNote.media_url)}
                 compact
               />
 
-              <span className="mx-0.5 h-3 w-px bg-white/10" />
+              <button
+                type="button"
+                onMouseDown={(e) => e.preventDefault()}
+                onClick={(e) => {
+                  const rect = e.currentTarget.getBoundingClientRect();
+                  setEmojiAnchor(rect);
+                  setShowEmojiPicker((v) => !v);
+                }}
+                className={cx("icon-btn !size-6 cursor-pointer shrink-0", showEmojiPicker && "!bg-white/20 !text-white")}
+                title="Insert Emoji (:name:)"
+              >
+                <Smile size={12} strokeWidth={2.2} />
+              </button>
+
+              <span className="mx-0.5 h-3 w-px bg-white/10 shrink-0" />
 
               {/* Compact Dock Zoom Stepper */}
               <div
@@ -1209,6 +1259,7 @@ export function TrayCompanion() {
               {rawMode ? (
                 <RawEditor
                   content={activeNote.content}
+                  textareaRef={rawTextareaRef}
                   minHeight={180}
                   className="text-[11.5px]"
                   onChange={(content) => editActive({ content })}
@@ -1230,6 +1281,17 @@ export function TrayCompanion() {
                 suppressContentEditableWarning
                 onInput={handleEditorInput}
                 onContextMenu={(e) => {
+                  const img = (e.target as HTMLElement).closest("img.md-img") as HTMLImageElement | null;
+                  if (img) {
+                    e.preventDefault();
+                    e.stopPropagation();
+                    setContextMenuImg({
+                      element: img,
+                      x: e.clientX,
+                      y: e.clientY,
+                    });
+                    return;
+                  }
                   const cell = (e.target as HTMLElement).closest("td,th") as HTMLElement | null;
                   if (cell && editorRef.current?.contains(cell)) {
                     e.preventDefault();
@@ -1241,6 +1303,12 @@ export function TrayCompanion() {
                   if ((e.target as HTMLElement).closest(".md-cb")) e.preventDefault();
                 }}
                 onClick={(e) => {
+                  const img = (e.target as HTMLElement).closest("img.md-img") as HTMLImageElement | null;
+                  if (img) {
+                    e.preventDefault();
+                    setPreviewImage(img.src);
+                    return;
+                  }
                   const link = (e.target as HTMLElement).closest("a.md-link") as HTMLAnchorElement | null;
                   if (link && (e.ctrlKey || e.metaKey)) {
                     e.preventDefault();
@@ -1483,6 +1551,87 @@ export function TrayCompanion() {
       </div>
 
       <EmojiAutocomplete editorRef={editorRef} onEmojiInserted={handleEditorInput} />
+
+      <EmojiPickerModal
+        isOpen={showEmojiPicker}
+        onClose={() => setShowEmojiPicker(false)}
+        anchorRect={emojiAnchor}
+        onSelect={(emoji) => {
+          if (rawMode && activeNote) {
+            const ed = rawTextareaRef.current;
+            if (ed) {
+              const start = ed.selectionStart;
+              const end = ed.selectionEnd;
+              const val = ed.value;
+              const next = val.slice(0, start) + emoji + val.slice(end);
+              editActive({ content: markdownToContent(next, activeNote.content, () => uid("line")) });
+              requestAnimationFrame(() => {
+                ed.selectionStart = start + emoji.length;
+                ed.selectionEnd = start + emoji.length;
+                ed.focus();
+              });
+            }
+          } else {
+            runEditorCommand((ed) => insertEmojiAtCaret(ed, emoji));
+            handleEditorInput();
+          }
+        }}
+      />
+
+      {contextMenuImg && (
+        <ImageContextMenu
+          isOpen={Boolean(contextMenuImg)}
+          x={contextMenuImg.x}
+          y={contextMenuImg.y}
+          imgElement={contextMenuImg.element}
+          onClose={() => setContextMenuImg(null)}
+          onZoom={() => {
+            setPreviewImage(contextMenuImg.element.src);
+            setContextMenuImg(null);
+          }}
+          onEdit={() => {
+            setEditImgModal({
+              element: contextMenuImg.element,
+              alt: contextMenuImg.element.alt || "Image",
+              src: contextMenuImg.element.src,
+              refKey: contextMenuImg.element.getAttribute("data-ref") || undefined,
+            });
+            setContextMenuImg(null);
+          }}
+          onDelete={() => {
+            contextMenuImg.element.remove();
+            handleEditorInput();
+            setContextMenuImg(null);
+          }}
+        />
+      )}
+
+      {editImgModal && (
+        <EditImageModal
+          isOpen={Boolean(editImgModal)}
+          onClose={() => setEditImgModal(null)}
+          alt={editImgModal.alt}
+          src={editImgModal.src}
+          refKey={editImgModal.refKey}
+          onSave={(newAlt, newSrc) => {
+            editImgModal.element.alt = newAlt;
+            if (newSrc && newSrc !== editImgModal.src) {
+              editImgModal.element.src = newSrc;
+              editImgModal.element.removeAttribute("data-ref");
+              editImgModal.element.setAttribute("data-md", `![${newAlt}](${newSrc})`);
+            } else {
+              const ref = editImgModal.element.getAttribute("data-ref");
+              if (ref) {
+                editImgModal.element.setAttribute("data-md", `![${newAlt}][${ref}]`);
+              } else {
+                editImgModal.element.setAttribute("data-md", `![${newAlt}](${newSrc})`);
+              }
+            }
+            handleEditorInput();
+            setEditImgModal(null);
+          }}
+        />
+      )}
 
       {tableMenu && (
         <TableMenu

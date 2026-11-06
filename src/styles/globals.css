@@ -783,24 +783,29 @@ html[data-theme="monochrome"] .lightscape {
   font-size: 0.82em;
   vertical-align: baseline;
   position: relative;
-  bottom: -0.28em;
+  bottom: -0.22em;
   line-height: 1;
   color: rgba(255, 255, 255, 0.96);
   font-weight: 500;
+  display: inline-block;
 }
 .md-sup {
   font-size: 0.82em;
   vertical-align: baseline;
   position: relative;
-  top: -0.38em;
+  top: -0.26em;
   line-height: 1;
   color: rgba(255, 255, 255, 0.96);
   font-weight: 500;
+  display: inline-block;
 }
 .md-footnote-ref {
   font-size: 0.75em;
-  vertical-align: super;
-  line-height: 0;
+  vertical-align: baseline;
+  position: relative;
+  top: -0.26em;
+  line-height: 1;
+  display: inline-block;
   color: #a5b4fc;
   font-family: "JetBrains Mono", ui-monospace, SFMono-Regular, Consolas, monospace;
   font-weight: 600;
@@ -906,12 +911,14 @@ html[data-theme="monochrome"] .lightscape {
 /* ---- Card previews: same rendering as the opened note, read-only and clamped ---- */
 .md-preview {
   font-size: 13.5px;
-  line-height: 1.55;
+  line-height: 1.6;
   color: rgba(240, 243, 246, 0.94);
   overflow: hidden;
   user-select: none;
   cursor: inherit;
   word-break: break-word;
+  padding-top: 5px;
+  margin-top: -3px;
   -webkit-font-smoothing: antialiased;
   text-rendering: optimizeLegibility;
 }
@@ -919,13 +926,22 @@ html[data-theme="monochrome"] .lightscape {
   font-size: 0.84em;
   font-weight: 600;
   color: #ffffff;
-  bottom: -0.25em;
+  bottom: -0.2em;
+  display: inline-block;
 }
 .md-preview .md-sup {
   font-size: 0.84em;
   font-weight: 600;
   color: #ffffff;
-  top: -0.35em;
+  top: -0.24em;
+  display: inline-block;
+}
+.md-preview .md-footnote-ref {
+  font-size: 0.8em;
+  font-weight: 600;
+  color: #a5b4fc;
+  top: -0.24em;
+  display: inline-block;
 }
 .md-preview > div { min-height: 1.2em; }
 .md-preview .md-tablewrap { overflow: hidden; margin: 0.35em 0; }

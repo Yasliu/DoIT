@@ -1,5 +1,6 @@
-import { useCallback, useEffect, useRef } from "react";
-import { X } from "lucide-react";
+import { useCallback, useEffect, useRef, useState } from "react";
+import { Check, Copy, X } from "lucide-react";
+import { copyImageToClipboard } from "../lib/format";
 
 const MIN_ZOOM = 0.5;
 const MAX_ZOOM = 6;
@@ -19,6 +20,15 @@ export function ImageLightbox({ src, onClose }: ImageLightboxProps) {
   const imgRef = useRef<HTMLImageElement | null>(null);
   const labelRef = useRef<HTMLSpanElement | null>(null);
   const s = useRef({ zoom: 1, x: 0, y: 0, dragging: false, moved: false, sx: 0, sy: 0, px: 0, py: 0, raf: 0 });
+  const [copied, setCopied] = useState(false);
+
+  const handleCopy = async () => {
+    const ok = await copyImageToClipboard(src);
+    if (ok) {
+      setCopied(true);
+      setTimeout(() => setCopied(false), 1800);
+    }
+  };
 
   const paint = useCallback((animate: boolean) => {
     const img = imgRef.current;
@@ -168,6 +178,15 @@ export function ImageLightbox({ src, onClose }: ImageLightboxProps) {
           className="ml-1 cursor-pointer rounded bg-white/10 px-1.5 py-0.5 font-mono text-[9.5px] uppercase text-white/90 hover:bg-white/20"
         >
           1:1
+        </button>
+        <button
+          type="button"
+          onClick={handleCopy}
+          title="Copy image to clipboard"
+          className="flex items-center gap-1 cursor-pointer rounded bg-white/10 px-2 py-0.5 font-mono text-[9.5px] uppercase text-white/90 hover:bg-white/20 transition-colors"
+        >
+          {copied ? <Check size={11} className="text-emerald-400" /> : <Copy size={11} />}
+          <span>{copied ? "Copied" : "Copy"}</span>
         </button>
         <span className="mx-0.5 h-3 w-px bg-white/20" />
         <button type="button" className={btn} title="Close preview" onClick={onClose}>

@@ -1,11 +1,11 @@
 import type { PointerEvent as ReactPointerEvent } from "react";
 import React, { useMemo, useRef, useState } from "react";
 import { motion } from "motion/react";
-import { Maximize2 } from "lucide-react";
+import { Check, Maximize2 } from "lucide-react";
 import type { NoteItem } from "../api/tauriBridge";
 import { fontStack } from "../api/tauriBridge";
 import { accentFor, cleanText, cx, densityOf, edgeOpacity, relativeShort, stripDate } from "../lib/text";
-import { contentToMarkdown, previewMarkup, openExternalUrl } from "../lib/format";
+import { contentToMarkdown, previewMarkup, openExternalUrl, copyImageToClipboard } from "../lib/format";
 
 interface NoteTileProps {
   note: NoteItem;
@@ -33,6 +33,7 @@ function NoteTileComponent({
   onContextMenu,
 }: NoteTileProps) {
   const [hovered, setHovered] = useState(false);
+  const [copiedImg, setCopiedImg] = useState(false);
   const density = densityOf(note);
   const accent = accentFor(note.category, shelves);
 
@@ -249,9 +250,21 @@ function NoteTileComponent({
             className="md-preview mt-2.5 overflow-hidden"
             style={{ maxHeight: previewMax, fontFamily: fontStack(note.font_family) }}
             onPointerDown={(event) => {
-              if ((event.target as HTMLElement).closest(".md-cb")) event.stopPropagation();
+              if ((event.target as HTMLElement).closest(".md-cb, img.md-img")) event.stopPropagation();
             }}
             onClick={(event) => {
+              const img = (event.target as HTMLElement).closest("img.md-img") as HTMLImageElement | null;
+              if (img) {
+                event.stopPropagation();
+                event.preventDefault();
+                void copyImageToClipboard(img.src).then((ok) => {
+                  if (ok) {
+                    setCopiedImg(true);
+                    setTimeout(() => setCopiedImg(false), 1600);
+                  }
+                });
+                return;
+              }
               const link = (event.target as HTMLElement).closest("a.md-link") as HTMLAnchorElement | null;
               if (link) {
                 event.stopPropagation();
@@ -269,6 +282,12 @@ function NoteTileComponent({
             }}
             dangerouslySetInnerHTML={{ __html: preview?.html ?? "" }}
           />
+        )}
+        {copiedImg && (
+          <div className="absolute top-3 right-3 z-30 flex items-center gap-1.5 rounded-full bg-white/20 border border-white/30 px-2.5 py-1 text-[11px] font-medium text-white shadow-lg backdrop-blur-md animate-in fade-in-0 zoom-in-95 duration-100">
+            <Check size={12} className="text-emerald-400" />
+            <span>Image copied!</span>
+          </div>
         )}
         <div className="mt-auto flex items-center justify-between gap-3 pt-3.5">
           <span className="font-mono text-[9.5px] uppercase tracking-[0.1em] text-ink-4">
