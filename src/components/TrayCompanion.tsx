@@ -6,6 +6,7 @@ import { Mark } from "./Mark";
 import { initCategoryIcons } from "../lib/categoryIcons";
 import { HeadingSelect } from "./HeadingSelect";
 import { ImageLightbox } from "./ImageLightbox";
+import { InsertMenu } from "./InsertMenu";
 import { ModeToggle } from "./ModeToggle";
 import { TrayPill } from "./TrayPill";
 import { RawEditor } from "./RawEditor";
@@ -16,9 +17,6 @@ import {
   Bold,
   Check,
   ChevronDown,
-  ListChecks,
-  Table as TableIcon,
-  Image as ImageIcon,
   Italic,
   Minus,
   Plus,
@@ -51,6 +49,7 @@ import {
   normalizeEditor,
   applyHeading,
   insertTableAtCaret,
+  insertCodeBlockAtCaret,
   setMarkdownBaseDir,
   isCaretAtEditorStart,
   placeCaretAtEditorStart,
@@ -924,24 +923,16 @@ export function TrayCompanion() {
                 compact
                 onSelect={(level) => runEditorCommand((ed) => applyHeading(ed, level))}
               />
-              <button
-                type="button"
-                onMouseDown={(e) => e.preventDefault()}
-                onClick={() => runEditorCommand((ed) => insertTableAtCaret(ed))}
-                className="icon-btn !size-6 cursor-pointer"
-                title="Insert table (Ctrl+T)"
-              >
-                <TableIcon size={12} strokeWidth={1.9} />
-              </button>
-              <button
-                type="button"
-                onMouseDown={(e) => e.preventDefault()}
-                onClick={() => runEditorCommand((ed) => applyTask(ed))}
-                className="icon-btn !size-6 cursor-pointer"
-                title="Task checkbox (- [ ])"
-              >
-                <ListChecks size={12.5} strokeWidth={1.9} />
-              </button>
+
+              <InsertMenu
+                editorRef={editorRef}
+                onInsertTable={() => runEditorCommand((ed) => insertTableAtCaret(ed))}
+                onInsertTask={() => runEditorCommand((ed) => applyTask(ed))}
+                onInsertCode={() => runEditorCommand((ed) => insertCodeBlockAtCaret(ed))}
+                onAttachImage={() => fileInputRef.current?.click()}
+                hasMedia={Boolean((activeNote.media_urls && activeNote.media_urls.length > 0) || activeNote.media_url)}
+                compact
+              />
               <span className="mx-0.5 h-3 w-px bg-white/10" />
               </>
               )}
@@ -973,15 +964,6 @@ export function TrayCompanion() {
                   e.target.value = "";
                 }}
               />
-              <button
-                type="button"
-                onClick={() => fileInputRef.current?.click()}
-                className="icon-btn !size-6"
-                data-active={(activeNote.media_urls && activeNote.media_urls.length > 0) || !!activeNote.media_url || undefined}
-                title="Attach Image (or Ctrl+V paste)"
-              >
-                <ImageIcon size={11.5} />
-              </button>
 
               <span className="mx-0.5 h-3 w-px bg-white/10" />
 

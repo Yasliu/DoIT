@@ -4,11 +4,7 @@ import {
   Bold,
   Check,
   ChevronDown,
-  Code,
-  ListChecks,
-  Table as TableIcon,
   CornerDownLeft,
-  Image as ImageIcon,
   Italic,
   Maximize2,
   Minimize2,
@@ -25,6 +21,7 @@ import { NOTE_FONTS, fontStack, tauriApi } from "../api/tauriBridge";
 import { useUndoStack } from "../hooks/useUndoStack";
 import { HeadingSelect } from "./HeadingSelect";
 import { ImageLightbox } from "./ImageLightbox";
+import { InsertMenu } from "./InsertMenu";
 import { ModeToggle } from "./ModeToggle";
 import { RawEditor } from "./RawEditor";
 import { TableMenu } from "./TableMenu";
@@ -1047,46 +1044,18 @@ export function NoteSheet({
               editorRef={editorRef}
               onSelect={(level) => runEditorCommand((ed) => applyHeading(ed, level))}
             />
-            <button
-              type="button"
-              onMouseDown={(e) => e.preventDefault()}
-              onClick={() => runEditorCommand((ed) => insertTableAtCaret(ed))}
-              aria-label="Insert table"
-              title="Insert table (Ctrl+T)"
-              className={cx(
-                "icon-btn cursor-pointer shrink-0 transition-all duration-150 ease-out",
-                isMaximized ? "!size-8.5" : (isVeryTight ? "!size-6.5" : "!size-7"),
-              )}
-            >
-              <TableIcon size={isMaximized ? 15 : (isVeryTight ? 12 : 13)} strokeWidth={1.8} />
-            </button>
-            <button
-              type="button"
-              onMouseDown={(e) => e.preventDefault()}
-              onClick={() => runEditorCommand((ed) => applyTask(ed))}
-              aria-label="Task checkbox"
-              title="Task checkbox (- [ ])"
-              className={cx(
-                "icon-btn cursor-pointer shrink-0 transition-all duration-150 ease-out",
-                isMaximized ? "!size-8.5" : (isVeryTight ? "!size-6.5" : "!size-7"),
-              )}
-            >
-              <ListChecks size={isMaximized ? 15.5 : (isVeryTight ? 12.5 : 13.5)} strokeWidth={1.8} />
-            </button>
-            <button
-              type="button"
-              onMouseDown={(e) => e.preventDefault()}
-              onClick={() => runEditorCommand((ed) => insertCodeBlockAtCaret(ed))}
-              aria-label="Insert code block"
-              title="Code block (```)"
-              className={cx(
-                "icon-btn cursor-pointer shrink-0 transition-all duration-150 ease-out",
-                isMaximized ? "!size-8.5" : (isVeryTight ? "!size-6.5" : "!size-7"),
-              )}
-            >
-              <Code size={isMaximized ? 15 : (isVeryTight ? 12 : 13)} strokeWidth={1.8} />
-            </button>
-            <span className={cx("h-3.5 w-px bg-white/[0.08] shrink-0", isVeryTight ? "mx-0" : "mx-0.5")} />
+
+            <InsertMenu
+              editorRef={editorRef}
+              onInsertTable={() => runEditorCommand((ed) => insertTableAtCaret(ed))}
+              onInsertTask={() => runEditorCommand((ed) => applyTask(ed))}
+              onInsertCode={() => runEditorCommand((ed) => insertCodeBlockAtCaret(ed))}
+              onAttachImage={() => fileInputRef.current?.click()}
+              hasMedia={Boolean((draft.media_urls && draft.media_urls.length > 0) || draft.media_url)}
+              large={isMaximized}
+              compact={isVeryTight}
+            />
+
             <input
               ref={fileInputRef}
               type="file"
@@ -1114,19 +1083,6 @@ export function NoteSheet({
                 e.target.value = "";
               }}
             />
-            <button
-              type="button"
-              onClick={() => fileInputRef.current?.click()}
-              aria-label="Attach media"
-              title="Attach image (or paste screenshot directly with Ctrl+V)"
-              data-active={(draft.media_urls && draft.media_urls.length > 0) || !!draft.media_url || undefined}
-              className={cx(
-                "icon-btn cursor-pointer shrink-0 transition-all duration-150 ease-out",
-                isMaximized ? "!size-8.5" : (isVeryTight ? "!size-6.5" : "!size-7"),
-              )}
-            >
-              <ImageIcon size={isMaximized ? 15 : (isVeryTight ? 11.5 : 12.5)} strokeWidth={1.7} />
-            </button>
 
             <span className={cx("h-3.5 w-px bg-white/[0.08] shrink-0", isVeryTight ? "mx-0" : "mx-0.5")} />
             <div
