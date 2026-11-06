@@ -71,19 +71,30 @@ Drop any `.md` or `.txt` files into your note repository folder, hit **Sync Repo
   <img src="docs/shot-save.jpg" width="700" alt="The Save button for externally opened files">
 </p>
 
-## What's new in v1.1.7
+## What's new in v1.1.8
 
-- Maximized notes now take the full screen and close with a flush slide-out, no dashboard flash underneath
-- Code blocks land properly: typing three backticks creates one instantly, pasted fences convert automatically, and inline code gets real monospace styling
-- The sidebar stopped twitching: stationary track when toggling, tidy vertical stacking when collapsed, and the bento grid holds its layout instead of reshuffling
-- Dock and multi-monitor fixes: the tray companion respects the taskbar and work area on every monitor, and normal screens no longer misfire vertical mode
-- Category icons are here and they persist across restarts, managed in one unified editor with instant search
-- Store-ready packaging: dual NSIS/MSI installers with offline WebView2, plus the official privacy policy linked at the bottom
-
+- Card dragging stays centered right under your cursor, even when grabbing long notes or after scrolling down
+- The table, checklist, code block and image toolbar buttons are grouped into one tidy popup menu, so nothing gets squeezed or cut off when you narrow the note panel
+- Zoom in notes: Ctrl + +, Ctrl + - or Ctrl + scroll wheel makes note text bigger or smaller, in the main editor and Dock Mode
+- A simpler category menu: redundant buttons are gone, so you get one unified "Rename & icon" option
+- The blurred glass theme in Settings now activates and looks crisp as intended
+- A "Spotted a bug? Report Here" link lives in Settings
 The full history lives in the release log below.
 
 <details>
 <summary><strong>Release log</strong> (click to expand)</summary>
+
+<details>
+<summary><strong>v1.1.8</strong> — November 6, 2026</summary>
+
+- Card dragging stays with your mouse: moving notes on your board now stays centered right under your cursor, even when grabbing long notes or scrolling down
+- Neat tool dropdown: grouped the table, checklist, code block, and image buttons into a clean popup menu so toolbar buttons don't get squeezed or cut off when you narrow the note panel
+- Zoom in notes & dock mode: Ctrl + +, Ctrl + - or Ctrl + scroll wheel makes note text bigger or smaller in both the main editor and Dock Mode
+- Simplified category menu: removed redundant buttons so you only see one unified "Rename & icon" option
+- Blurred glass fixed: the blurred glass theme in Settings now activates and looks crisp as intended
+- Bug report button: added a direct "Spotted a bug? Report Here" link in Settings
+
+</details>
 
 <details>
 <summary><strong>v1.1.7</strong> — November 5, 2026</summary>
