@@ -28,7 +28,7 @@ Most note apps want an account before they want your thoughts. DoIT doesn't. Eve
 - **Open external files in place.** Point DoIT at any `.md` or `.txt` and edit it where it lives. Externally opened files save with an explicit Save; DoIT's own notes always autosave.
 - **A canvas, not a list.** An asymmetric bento grid that grows each card to match its content density — paragraph, table, checklist, or code.
 - **Tray-native.** Folds into the Windows system tray and comes back instantly.
-- **Light.** Native Rust via Tauri v2, flat idle footprint under 20 MB RAM.
+- **Light.** Native Rust via Tauri v2. Idles under 20 MB RAM. The built-in web view adds around 180 MB while you're actively editing.
 - **Zero cloud, zero accounts, zero tracking.** No remote auth, no telemetry, MIT-licensed source.
 
 <p align="center">
