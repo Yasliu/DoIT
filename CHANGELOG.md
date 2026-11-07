@@ -1,5 +1,23 @@
 # DoIT Developer Architecture & Engineering Changelog
 
+## [2026-11-08] - Version 1.2.0: Linux Distribution, Modern UI Redesign, Dock Topmost Architecture & Interaction Refinements
+
+### 21. Linux Desktop Packaging, Modern Redesign Option, Dock Topmost Enforcement, & Mutual Menu Dismissal (`src-tauri/src/platform/`, `.github/workflows/`, `src/components/EmojiPickerModal.tsx`, `src/components/InsertMenu.tsx`)
+- **Official Linux Distribution (`.github/workflows/release-linux.yml`, `docs/install-linux.md`, `src-tauri/linux/doit.desktop`, `src-tauri/tauri.linux.conf.json`)**:
+  - Fedora RPM (`.rpm`) package target with automatic in-app updates via Tauri updater.
+  - Universal Linux AppImage (`.AppImage`) target running on Ubuntu 22.04+, Debian 12+, Arch Linux, and Fedora.
+  - Native Linux desktop integration with system menu entries, categories, and CLI mode switches (`--canvas`, `--dock`, `--toggle`, `--quit`).
+  - Automated GitHub Actions build chaining linking Windows release to Linux package publication in a unified release asset manifest (`latest.json`).
+- **Modern UI Redesign (`src/platform/modern/`)**:
+  - Full modern design option featuring 7 bespoke color themes, optional blurred Glass transparency, Boxy squared geometry, and Spotlight-style keyboard search (`Ctrl+K`).
+- **Cross-Platform Dock Topmost Architecture (`src-tauri/src/platform/`, `commands/window.rs`, `TrayCompanion.tsx`, `TrayPill.tsx`)**:
+  - Hardened dock window topmost persistence across drags, monitor switches, and window focus changes.
+  - Implemented Win32 `SetWindowPos` topmost affirmation and GTK `set_keep_above(true)` on XWayland.
+  - Wired IPC `ensure_dock_topmost` across dock lifecycle events (dock drag finish, window focus, pointer events).
+- **Toolbar & Outside-Click Refinements (`EmojiPickerModal.tsx`, `InsertMenu.tsx`, `NoteSheet.tsx`, `TrayCompanion.tsx`)**:
+  - Implemented capture-phase DOM outside-click detection on the emoji picker modal, preventing mutual toggle collisions with the formatting burger menu.
+  - Added `onOpenChange` notification on `InsertMenu` to cleanly dismiss the emoji picker when opening the burger menu.
+
 ## [2026-11-06] - Version 1.1.9: Comprehensive Markdown Engine Expansion, Persistent Uncategorized Anchor, & Extended Insert Menu
 
 ### 20. Extended Markdown Grammar, Bottom-Pinned Uncategorized Shelf, & Multi-Tool Formatting Burger Dropdown (`src/lib/format.tsx`, `src/lib/shortcuts.ts`, `src/components/InsertMenu.tsx`, `src/components/NoteSheet.tsx`, `src/components/TrayCompanion.tsx`, `src/components/SettingsPanel.tsx`, `src/hooks/useWorkspace.ts`)

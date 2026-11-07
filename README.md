@@ -80,18 +80,28 @@ Drop any `.md` or `.txt` files into your note repository folder, hit **Sync Repo
   <img src="docs/shot-save.jpg" width="700" alt="The Save button for externally opened files">
 </p>
 
-## What's new in v1.1.9
+## What's new in v1.2.0
 
-- Uncategorized is now pinned at the bottom of the sidebar and dashboard
-- Markdown support expanded: numbered lists, inline code, web links, footnotes, definition lists, strikethrough, text highlights, sub/superscript and emoji shortcodes
-- Paste images inline anywhere in a note; a slide-in drawer edits alt text, and one click copies any rendered image
-- A dedicated emoji picker in the toolbar
-- Keyboard shortcuts in Settings reorganized into collapsible categories
-- Card previews no longer clip footnotes or superscripts; text and images stay sharp at every zoom level and display scale
+- Official Linux release: native `.rpm` for Fedora with in-app updater, and universal `.AppImage` for other distributions
+- Modern UI redesign: 7 customizable themes, Glass transparency mode, Boxy squared geometry, and Spotlight-style search (`Ctrl+K`)
+- Dock mode always-on-top retention fix: docking pill reliably stays above other windows across drags, monitor changes, and focus shifts
+- Outside-click mutual dismissal between toolbar popups (emoji picker vs. formatting menu)
+- Ordered list sequential numbering continuity fix
 The full history lives in the release log below.
 
 <details>
 <summary><strong>Release log</strong> (click to expand)</summary>
+
+<details>
+<summary><strong>v1.2.0</strong> — November 8, 2026</summary>
+
+- Linux packaging and distribution: Fedora RPM with in-app updater and universal AppImage
+- Modern UI redesign option with 7 themes, Glass transparency, Boxy geometry, and Spotlight search (Ctrl+K)
+- Dock topmost architecture: dock pill reliably maintains topmost z-order across window drags, monitor changes, and workspace focus
+- Outside-click mutual dismissal between toolbar popups (emoji picker vs. burger menu)
+- Ordered list sequential numbering continuity fix
+
+</details>
 
 <details>
 <summary><strong>v1.1.9</strong> — November 7, 2026</summary>

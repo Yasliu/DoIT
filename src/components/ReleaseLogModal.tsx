@@ -38,38 +38,34 @@ export function ReleaseLogModal({ onClose }: ReleaseLogModalProps) {
             <Sparkles size={14} />
           </div>
           <span className="font-mono text-[10px] uppercase tracking-[0.14em] text-ink-4">
-            Version 1.1.9 Update
+            Version 1.2.0 Update
           </span>
         </div>
 
         <h2 className="text-[17px] font-semibold text-white tracking-tight mb-3">
-          What&apos;s New in v1.1.9
+          What&apos;s New in v1.2.0
         </h2>
 
         <ul className="space-y-2 mb-5 text-[12px] text-ink-2 leading-relaxed">
           <li className="flex items-start gap-2">
             <span className="size-1.5 rounded-full bg-white/60 mt-2 shrink-0" />
-            <span>Expanded Markdown Engine: added inline code, links, footnotes &amp; definitions, definition lists, strikethrough, highlights (===word===), subscripts, superscripts, and emoji shortcodes.</span>
+            <span>Official Linux Support: Native packages for Fedora (.rpm with in-app updater) and universal Linux (.AppImage) with desktop &amp; dock integration.</span>
           </li>
           <li className="flex items-start gap-2">
             <span className="size-1.5 rounded-full bg-white/60 mt-2 shrink-0" />
-            <span>Inline Reference Images: pasting images automatically folds large base64 data into compact footer references with mid-text tags.</span>
+            <span>Modern Redesign Option: Modern bento UI with 7 customizable color themes, Glass &amp; Boxy styling modes, and Ctrl+K Spotlight search.</span>
           </li>
           <li className="flex items-start gap-2">
             <span className="size-1.5 rounded-full bg-white/60 mt-2 shrink-0" />
-            <span>Smooth Alt-Text Drawer: hardware-accelerated slider drawer on bottom right with spring animations for editing image descriptions.</span>
+            <span>Dock Topmost Persistence: Docking pill reliably retains its always-on-top level across drags, monitor changes, and window focus shifts.</span>
           </li>
           <li className="flex items-start gap-2">
             <span className="size-1.5 rounded-full bg-white/60 mt-2 shrink-0" />
-            <span>Bottom-Pinned Uncategorized Shelf: Uncategorized category is now permanently anchored to the bottom in both sidebar and dashboard.</span>
+            <span>Toolbar &amp; Outside-Click Improvements: Smooth mutual dismissal between the emoji picker and formatting menu when clicking outside.</span>
           </li>
           <li className="flex items-start gap-2">
             <span className="size-1.5 rounded-full bg-white/60 mt-2 shrink-0" />
-            <span>Dedicated Emoji Picker: icon-only picker with rich emoji list accessible anytime from the toolbar.</span>
-          </li>
-          <li className="flex items-start gap-2">
-            <span className="size-1.5 rounded-full bg-white/60 mt-2 shrink-0" />
-            <span>Accordion Shortcut Settings: shortcuts organized into smoothly animated collapsible category tiles.</span>
+            <span>Markdown Engine &amp; List Refinements: Numbered list auto-incrementing and comprehensive inline formatting tools.</span>
           </li>
         </ul>
 
