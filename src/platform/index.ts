@@ -1,14 +1,23 @@
 /**
- * The frontend's one platform seam. Windows keeps DoIT's original look; Linux gets its own
- * presentation layer (`./linux/`): themes, typography and copy. Components never sniff the OS
- * themselves: they use `isLinux`, `pick` or `text` from here, and Linux styles hang off the
- * `data-platform="linux"` attribute that `markPlatform` puts on <html>.
+ * The frontend's one platform seam. It answers two questions, and components ask it rather than
+ * sniffing anything themselves:
+ *
+ * - Which OS (`platform`, `isLinux`): only for real OS behaviour, such as GNOME wording, the window
+ *   frame Linux draws itself and WebKitGTK workarounds.
+ * - Which design (`design`, `isModern`, `pick`, `text`): "classic" is DoIT's original look;
+ *   "modern" is the layer in `./modern/`. Linux always uses modern; Windows uses it only when the
+ *   experimental `design` setting says so.
+ *
+ * `markPlatform` writes both on <html> as `data-platform` and `data-design` before React renders.
+ * Modern styles hang off `html[data-design="modern"]`, so the classic design never matches them.
  */
 
+import { listen } from "@tauri-apps/api/event";
 import { trackWindowFrame } from "./modern/frame";
 import { applyModernTheme, restoreModernTheme, themeFromSettings, type ThemeSettings } from "./modern/theme";
 
 export type Platform = "windows" | "linux" | "macos" | "other";
+export type Design = "classic" | "modern";
 
 function detect(): Platform {
   if (typeof navigator === "undefined") return "other";
@@ -19,28 +28,76 @@ function detect(): Platform {
   return "other";
 }
 
-export const platform: Platform = detect();
+function readStorage(key: string): string | null {
+  try {
+    return localStorage.getItem(key);
+  } catch {
+    return null;
+  }
+}
+
+/** Dev builds only: `localStorage["doit.dev-platform"] = "windows"` previews another OS's UI. */
+const devPlatform = import.meta.env.DEV ? (readStorage("doit.dev-platform") as Platform | null) : null;
+
+export const platform: Platform = devPlatform ?? detect();
 export const isLinux = platform === "linux";
 
-/** The Windows value everywhere except on Linux. */
-export function pick<T>(original: T, linux: T): T {
-  return isLinux ? linux : original;
+/** Linux only has the modern design; elsewhere it is opt-in. */
+export const designIsOptional = !isLinux;
+
+export function designFor(os: Platform, setting: string | null | undefined): Design {
+  return os === "linux" || setting === "modern" ? "modern" : "classic";
+}
+
+/** The saved `design` setting, cached so the first paint knows it before settings load. */
+export const DESIGN_CACHE_KEY = "doit.design";
+export const DESIGN_CHANGED_EVENT = "doit://design-changed";
+
+export const design: Design = designFor(platform, readStorage(DESIGN_CACHE_KEY));
+export const isModern = design === "modern";
+
+/** The classic value, or the modern one when this window uses the modern design. */
+export function pick<T>(classic: T, modern: T): T {
+  return isModern ? modern : classic;
 }
 
 /** Runs before React renders, so the first paint already has the right styles and theme. */
 export function markPlatform(): void {
-  document.documentElement.dataset.platform = platform;
-  if (!isLinux) return;
+  const root = document.documentElement;
+  root.dataset.platform = platform;
+  root.dataset.design = design;
+  // The canvas and the dock are separate windows; a design switch in one reloads both.
+  if ("__TAURI_INTERNALS__" in window) void listen(DESIGN_CHANGED_EVENT, () => window.location.reload());
+  if (!isModern) return;
   restoreModernTheme();
-  if (!window.location.search.includes("window=tray")) trackWindowFrame();
+  if (isLinux && !window.location.search.includes("window=tray")) trackWindowFrame();
 }
 
-/** Applies the saved theme. Windows themes itself through `theme_mode`; Linux ignores that field. */
-export function applyThemeSettings(settings: ThemeSettings): void {
-  if (isLinux) applyModernTheme(themeFromSettings(settings));
+/**
+ * Applies the saved look once settings load. The classic design themes itself through
+ * `theme_mode`; the modern one through `palette`, `appearance`, `glass` and `boxy`.
+ * If the cached design disagrees with the saved one (a cleared WebView profile), the cache is
+ * corrected and the window reloads once.
+ */
+export function applyThemeSettings(settings: ThemeSettings & { design?: string | null }): void {
+  if (designIsOptional) {
+    const saved = settings.design === "modern" ? "modern" : "classic";
+    if (readStorage(DESIGN_CACHE_KEY) !== saved) {
+      try {
+        localStorage.setItem(DESIGN_CACHE_KEY, saved);
+      } catch {
+        /* without storage the cache cannot settle, so never reload over it */
+      }
+      if (readStorage(DESIGN_CACHE_KEY) === saved && designFor(platform, saved) !== design) {
+        window.location.reload();
+        return;
+      }
+    }
+  }
+  if (isModern) applyModernTheme(themeFromSettings(settings));
 }
 
-/** UI copy that Linux words differently. */
+/** UI copy that the modern design words differently. */
 export const text = {
   newCategory: pick("New category", "New shelf"),
   categoryPlaceholder: pick("Category name...", "Shelf name"),

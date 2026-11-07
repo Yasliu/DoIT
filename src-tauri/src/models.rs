@@ -115,18 +115,21 @@ pub struct AppSettings {
     pub last_seen_version: Option<String>,
     #[serde(default)]
     pub category_icons: Option<HashMap<String, String>>,
-    /// Linux colour theme ("neutral", "grove", ...). Windows themes through `theme_mode`.
+    /// Modern design colour theme ("neutral", "grove", ...). The classic design uses `theme_mode`.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub palette: Option<String>,
-    /// Linux light/dark choice: "system", "light" or "dark".
+    /// Modern design light/dark choice: "system", "light" or "dark".
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub appearance: Option<String>,
-    /// Linux: translucent, grainy window on top of the palette.
+    /// Modern design: translucent, grainy window on top of the palette.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub glass: Option<bool>,
-    /// Linux: near-square corners and hairline edges instead of soft shadows.
+    /// Modern design: near-square corners and hairline edges instead of soft shadows.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub boxy: Option<bool>,
+    /// "modern" opts Windows into the new design; Linux always uses it.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub design: Option<String>,
     /// Shelves in the order the user dragged them into (others follow alphabetically).
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub shelf_order: Option<Vec<String>>,
@@ -213,6 +216,7 @@ impl Default for AppSettings {
             appearance: None,
             glass: None,
             boxy: None,
+            design: None,
             shelf_order: None,
         }
     }
@@ -784,14 +788,14 @@ This is content.
     fn look_settings_stay_out_of_settings_files_until_chosen() {
         let classic = AppSettings { theme_mode: "monochrome".to_string(), ..Default::default() };
         let written = serde_json::to_value(&classic).unwrap();
-        for key in ["palette", "appearance", "glass", "boxy"] {
+        for key in ["palette", "appearance", "glass", "boxy", "design"] {
             assert!(written.get(key).is_none(), "{key} written before it was chosen");
         }
         let settings: AppSettings = serde_json::from_value(written).unwrap();
         assert_eq!(settings.theme_mode, "monochrome");
 
-        let chosen = AppSettings { boxy: Some(true), glass: Some(false), ..settings };
+        let chosen = AppSettings { boxy: Some(true), design: Some("modern".to_string()), ..settings };
         let back: AppSettings = serde_json::from_value(serde_json::to_value(&chosen).unwrap()).unwrap();
-        assert_eq!((back.boxy, back.glass), (Some(true), Some(false)));
+        assert_eq!((back.boxy, back.design.as_deref()), (Some(true), Some("modern")));
     }
 }

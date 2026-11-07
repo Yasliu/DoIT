@@ -100,7 +100,7 @@ export const CATEGORY_ICONS: Record<
   Hash,
 };
 
-/** Icons Linux adds to the picker. Windows can draw them (a shelf named on Linux) but does not offer them. */
+/** Icons the modern design adds to the picker. The classic design draws them (a shelf named in the modern one) but does not offer them. */
 const MODERN_EXTRA_ICONS = {
   ChefHat,
   Plane,

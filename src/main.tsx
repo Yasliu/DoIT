@@ -24,7 +24,7 @@ const isTrayWindow = window.location.search.includes("window=tray");
 
 ReactDOM.createRoot(document.getElementById("root") as HTMLElement).render(
   <React.StrictMode>
-    {/* Linux honours the system's reduced-motion setting for spring animations too. */}
+    {/* The modern design honours the system's reduced-motion setting for spring animations too. */}
     <MotionConfig reducedMotion={pick("never", "user")}>
       {isTrayWindow ? <TrayCompanion /> : <App />}
     </MotionConfig>

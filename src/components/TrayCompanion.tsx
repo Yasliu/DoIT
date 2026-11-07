@@ -77,7 +77,7 @@ import {
   fixCheckboxCaret,
   openExternalUrl,
 } from "../lib/format";
-import { applyThemeSettings, isLinux, pick } from "../platform";
+import { applyThemeSettings, isModern, pick } from "../platform";
 import { ModernDockHome } from "../platform/modern/ModernDockHome";
 import { accentFor, cleanText, cx, relativeShort, uid } from "../lib/text";
 
@@ -798,12 +798,12 @@ export function TrayCompanion() {
             onPointerDown={(e) => e.stopPropagation()}
             onClick={(e) => e.stopPropagation()}
           >
-            {isLinux && !activeNote && (
+            {isModern && !activeNote && (
               <button type="button" onClick={handleCreate} className="ui-icon-button size-7!" title="New note" aria-label="New note">
                 <SquarePen size={15} />
               </button>
             )}
-            {isLinux && (
+            {isModern && (
               <button type="button" onClick={() => toggleMinimize()} className="ui-icon-button size-7!" title="Minimize to the pill" aria-label="Minimize">
                 <Minus size={15} />
               </button>
@@ -1384,7 +1384,7 @@ export function TrayCompanion() {
             </div>
           </div>
         </div>
-      ) : isLinux ? (
+      ) : isModern ? (
         <ModernDockHome
           notes={filteredNotes}
           shelves={shelves}

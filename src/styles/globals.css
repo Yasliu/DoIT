@@ -92,31 +92,31 @@
     background: transparent !important;
     background-color: transparent !important;
   }
-  /* Linux draws its own focus rings and shadows (src/platform/modern/modern.css). */
-  html:not([data-platform="linux"]) *,
-  html:not([data-platform="linux"]) *::before,
-  html:not([data-platform="linux"]) *::after {
+  /* The modern design draws its own focus rings and shadows (src/platform/modern/modern.css). */
+  html:not([data-design="modern"]) *,
+  html:not([data-design="modern"]) *::before,
+  html:not([data-design="modern"]) *::after {
     -webkit-tap-highlight-color: transparent !important;
     outline: none !important;
     box-shadow: none !important;
     scrollbar-width: none;
     -ms-overflow-style: none;
   }
-  html:not([data-platform="linux"]) *:hover,
-  html:not([data-platform="linux"]) *:focus,
-  html:not([data-platform="linux"]) *:focus-visible,
-  html:not([data-platform="linux"]) *:focus-within,
-  html:not([data-platform="linux"]) *:active {
+  html:not([data-design="modern"]) *:hover,
+  html:not([data-design="modern"]) *:focus,
+  html:not([data-design="modern"]) *:focus-visible,
+  html:not([data-design="modern"]) *:focus-within,
+  html:not([data-design="modern"]) *:active {
     outline: none !important;
     box-shadow: none !important;
     ring: 0 !important;
     -webkit-focus-ring-color: transparent !important;
   }
-  html:not([data-platform="linux"]) button,
-  html:not([data-platform="linux"]) input,
-  html:not([data-platform="linux"]) textarea,
-  html:not([data-platform="linux"]) select,
-  html:not([data-platform="linux"]) a {
+  html:not([data-design="modern"]) button,
+  html:not([data-design="modern"]) input,
+  html:not([data-design="modern"]) textarea,
+  html:not([data-design="modern"]) select,
+  html:not([data-design="modern"]) a {
     outline: none !important;
     -webkit-tap-highlight-color: transparent !important;
   }

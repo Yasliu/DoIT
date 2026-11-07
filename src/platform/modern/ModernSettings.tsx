@@ -6,7 +6,8 @@ import { BLOCKS_STRUCTURE_SHORTCUT_ROWS, TEXT_MARKS_SHORTCUT_ROWS } from "../../
 import { ShortcutField } from "../../components/ShortcutField";
 import { applyShortcutSettings } from "../../lib/shortcuts";
 import { cx } from "../../lib/text";
-import { applyThemeSettings } from "..";
+import { applyThemeSettings, designIsOptional, isLinux } from "..";
+import { setDesign } from "../DesignSwitch";
 import {
   APPEARANCES,
   type Appearance,
@@ -225,7 +226,7 @@ export function ModernSettings({ onBack, onStoragePathChanged }: ModernSettingsP
               />
             ))}
           </div>
-          <Row label="Mode" hint={appearance === "system" ? "Follows the light or dark style set in GNOME." : undefined}>
+          <Row label="Mode" hint={appearance === "system" ? (isLinux ? "Follows the light or dark style set in GNOME." : "Follows the light or dark mode set in Windows.") : undefined}>
             <div role="radiogroup" aria-label="Mode" className="flex rounded-[var(--r-md)] border border-[var(--l-border)] bg-[var(--l-canvas)] p-0.5">
               {APPEARANCES.map((value) => {
                 const Icon = APPEARANCE_ICONS[value];
@@ -386,6 +387,14 @@ export function ModernSettings({ onBack, onStoragePathChanged }: ModernSettingsP
             </div>
           </div>
         </Section>
+
+        {designIsOptional && (
+          <Section title="Experimental">
+            <Row label="New design" hint="Turn off to go back to the classic look. DoIT reloads to switch.">
+              <Switch label="New design" on onChange={() => void setDesign("classic")} />
+            </Row>
+          </Section>
+        )}
 
         <Section title="About">
           <Row label={`DoIT ${version}`} hint="Updates are checked in the background.">

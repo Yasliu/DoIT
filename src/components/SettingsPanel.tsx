@@ -26,6 +26,7 @@ import { AppSettings, DEFAULT_SETTINGS, tauriApi } from "../api/tauriBridge";
 import { applyShortcutSettings, DEFAULT_MD_SHORTCUTS } from "../lib/shortcuts";
 import { ShortcutField } from "./ShortcutField";
 import { cx } from "../lib/text";
+import { NewDesignOptIn } from "../platform/DesignSwitch";
 
 interface SettingsPanelProps {
   onBack: () => void;
@@ -415,6 +416,8 @@ export function SettingsPanel({ onBack, onStoragePathChanged, onThemeChanged }: 
             </button>
           </div>
         </section>
+
+        <NewDesignOptIn />
 
         {/* SECTION 2: Local Markdown Repository */}
         <section className="glass rounded-[20px] p-5 shadow-[0_20px_50px_-20px_rgba(0,0,0,0.8)] border border-white/10">

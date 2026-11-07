@@ -95,12 +95,14 @@ export interface AppSettings {
   dock_on_close?: boolean;
   last_seen_version?: string;
   category_icons?: Record<string, string>;
-  /** Linux only: colour theme and light/dark choice (see src/platform/modern/theme.ts). */
+  /** Modern design only: colour theme and light/dark choice (see src/platform/modern/theme.ts). */
   palette?: string;
   appearance?: string;
   glass?: boolean;
-  /** Linux only: near-square corners and hairline edges. */
+  /** Modern design only: near-square corners and hairline edges. */
   boxy?: boolean;
+  /** Windows: "modern" opts into the new design (Linux always has it). */
+  design?: "classic" | "modern";
   /** Shelves in the order the user dragged them into; others follow alphabetically. */
   shelf_order?: string[];
 }

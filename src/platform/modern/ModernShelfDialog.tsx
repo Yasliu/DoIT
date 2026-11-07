@@ -12,7 +12,7 @@ interface ModernShelfDialogProps {
   onDelete: (shelf: string) => void;
 }
 
-/** Rename a shelf and pick its icon. Linux's take on the Edit Category dialog. */
+/** Rename a shelf and pick its icon. The modern take on the Edit Category dialog. */
 export function ModernShelfDialog({ shelf, onClose, onRename, onDelete }: ModernShelfDialogProps) {
   const frame = useDialogPlacement(372);
   const [name, setName] = useState(cleanText(shelf));

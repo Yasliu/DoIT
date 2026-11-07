@@ -18,7 +18,7 @@ import { UpdateInfo, UpdateModal } from "./components/UpdateModal";
 import { ReleaseLogModal } from "./components/ReleaseLogModal";
 import { useWorkspace } from "./hooks/useWorkspace";
 import { accentFor, cleanText, cx } from "./lib/text";
-import { applyThemeSettings, isLinux } from "./platform";
+import { applyThemeSettings, isLinux, isModern } from "./platform";
 import { ModernSettings } from "./platform/modern/ModernSettings";
 import { ModernShelfDialog } from "./platform/modern/ModernShelfDialog";
 import { ModernSidebar } from "./platform/modern/ModernSidebar";
@@ -94,9 +94,9 @@ export default function App() {
   const canvasRef = useRef<HTMLElement | null>(null);
   const deletedRef = useRef<NoteItem[]>([]);
   const [query, setQuery] = useState("");
-  /** Linux's Spotlight and create dialogs; only one is open at a time. */
+  /** The modern design's Spotlight and create dialogs; only one is open at a time. */
   const [modernDialog, setModernDialog] = useState<null | "search" | "new-note" | "new-shelf">(null);
-  /** Linux: a note on its way to another shelf, by Move to… or Copy to…. */
+  /** Modern design: a note on its way to another shelf, by Move to… or Copy to…. */
   const [shelfAction, setShelfAction] = useState<{ kind: "move" | "copy"; note: NoteItem } | null>(null);
   const [active, setActive] = useState<string | null>(null);
   const [openNote, setOpenNote] = useState<OpenNote | null>(null);
@@ -402,11 +402,11 @@ export default function App() {
     [active, create, shelves, originFromCanvas],
   );
 
-  /** Linux asks which shelf a new note goes on; a given shelf, or Windows, creates it directly. */
+  /** The modern design asks which shelf a new note goes on; a given shelf, or the classic design, creates it directly. */
   const requestNewNote = useCallback(
     (shelf?: string) => {
       setIsSettings(false);
-      if (!shelf && isLinux) setModernDialog("new-note");
+      if (!shelf && isModern) setModernDialog("new-note");
       else newNote(shelf);
     },
     [newNote],
@@ -513,7 +513,7 @@ export default function App() {
         if (isSettings) setIsSettings(false);
         if (!openNote) requestNewNote();
       }
-      if (isLinux && meta && event.key.toLowerCase() === "k") {
+      if (isModern && meta && event.key.toLowerCase() === "k") {
         event.preventDefault();
         setModernDialog((d) => (d === "search" ? null : "search"));
       }
@@ -534,7 +534,7 @@ export default function App() {
     return () => window.removeEventListener("keydown", onKey);
   }, [requestNewNote, openNote, toggleMini, isSettings, handleImportNote]);
 
-  /** Linux: import one file onto `shelf` (made first when `created`), then open it. */
+  /** Modern design: import one file onto `shelf` (made first when `created`), then open it. */
   const importFileInto = useCallback(
     async (shelf: string, created: boolean) => {
       setModernDialog(null);
@@ -554,7 +554,7 @@ export default function App() {
     [workspace, createCategory, moveCategory, notify, originFromCanvas],
   );
 
-  /** Linux: import a folder as a shelf, named `name` or after the folder. */
+  /** Modern design: import a folder as a shelf, named `name` or after the folder. */
   const importFolderShelf = useCallback(
     async (name: string, icon: string | null) => {
       setModernDialog(null);
@@ -579,7 +579,7 @@ export default function App() {
 
   return (
     <div data-theme={themeMode} className="chassis flex h-full w-full overflow-hidden">
-      {!mini && isLinux && (
+      {!mini && isModern && (
         <ModernSidebar
           shelves={shelves}
           counts={counts}
@@ -601,7 +601,7 @@ export default function App() {
           }}
         />
       )}
-      {!mini && !isLinux && (
+      {!mini && !isModern && (
         <Sidebar
           shelves={shelves}
           counts={counts}
@@ -667,7 +667,7 @@ export default function App() {
                 <div className="relative z-10 h-full">
                 {isSettings ? (
                   <div className="scroll relative h-full overflow-y-scroll" style={{ scrollbarGutter: "stable" }}>
-                    {isLinux ? (
+                    {isModern ? (
                       <ModernSettings onBack={() => setIsSettings(false)} onStoragePathChanged={() => void workspace.reload()} />
                     ) : (
                       <SettingsPanel
@@ -692,7 +692,7 @@ export default function App() {
                     notes={notes}
                     shelves={shelves}
                     active={active}
-                    query={isLinux ? "" : query}
+                    query={isModern ? "" : query}
                     loading={state === "loading"}
                     locked={false}
                     collapsed={collapsed}
@@ -706,7 +706,7 @@ export default function App() {
                     onToggleItem={toggleItem}
                     onMoveCategory={(id, shelf) => void moveCategory(id, shelf)}
                     onCopyToShelf={
-                      isLinux
+                      isModern
                         ? (note, shelf) => {
                             workspace.copyNote(note, shelf);
                             notify(`Copied to ${shelf}.`);
@@ -791,7 +791,7 @@ export default function App() {
         })()}
       </div>
 
-      {contextMenu && isLinux && (
+      {contextMenu && isModern && (
         <ModernNoteMenu
           x={contextMenu.x}
           y={contextMenu.y}
@@ -807,7 +807,7 @@ export default function App() {
           }}
         />
       )}
-      {isLinux && shelfAction && (
+      {isModern && shelfAction && (
         <ModernShelfPicker
           label={shelfAction.kind === "move" ? "Move note" : "Copy note"}
           placeholder={`${shelfAction.kind === "move" ? "Move" : "Copy"} “${cleanText(shelfAction.note.title) || "Untitled"}” to…`}
@@ -833,7 +833,7 @@ export default function App() {
           }}
         />
       )}
-      {contextMenu && !isLinux && (
+      {contextMenu && !isModern && (
         <ContextMenu
           x={contextMenu.x}
           y={contextMenu.y}
@@ -882,7 +882,7 @@ export default function App() {
         />
       )}
 
-      {iconPickerShelf && isLinux && (
+      {iconPickerShelf && isModern && (
         <ModernShelfDialog
           shelf={iconPickerShelf}
           onClose={() => setIconPickerShelf(null)}
@@ -897,7 +897,7 @@ export default function App() {
           }}
         />
       )}
-      {iconPickerShelf && !isLinux && (
+      {iconPickerShelf && !isModern && (
         <IconPickerModal
           shelf={iconPickerShelf}
           accent={accentFor(iconPickerShelf, shelves)}
@@ -951,7 +951,7 @@ export default function App() {
         </div>
       )}
 
-      {isLinux && modernDialog === "search" && (
+      {isModern && modernDialog === "search" && (
         <ModernSpotlight
           notes={notes}
           shelves={shelves}
@@ -970,7 +970,7 @@ export default function App() {
           onDock={toggleMini}
         />
       )}
-      {isLinux && modernDialog === "new-note" && (
+      {isModern && modernDialog === "new-note" && (
         <ModernNewNoteDialog
           shelves={shelves}
           current={active}
@@ -985,7 +985,7 @@ export default function App() {
           onImportFile={(shelf, created) => void importFileInto(shelf, created)}
         />
       )}
-      {isLinux && modernDialog === "new-shelf" && (
+      {isModern && modernDialog === "new-shelf" && (
         <ModernNewShelfDialog
           shelves={shelves}
           onClose={() => setModernDialog(null)}

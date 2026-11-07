@@ -1,5 +1,5 @@
 /**
- * Linux colour themes: seven palettes, each with a light and a dark variant, applied as `--l-*`
+ * The modern design's colour themes: seven palettes, each with a light and a dark variant, applied as `--l-*`
  * custom properties on <html>. `modern.css` maps DoIT's own colour tokens onto them.
  *
  * Six palettes come from T3 Code (MIT, see THIRD_PARTY_NOTICES.md); Monochrome is DoIT's own look.
@@ -490,7 +490,7 @@ export function themeFromSettings(s: ThemeSettings): ModernTheme {
   };
 }
 
-const CACHE_KEY = "doit.linux-theme";
+const CACHE_KEY = "doit.theme";
 const darkQuery = typeof window !== "undefined" ? window.matchMedia("(prefers-color-scheme: dark)") : null;
 let current: ModernTheme | null = null;
 
@@ -540,7 +540,7 @@ export function restoreModernTheme(): void {
   }
   current = themeFromSettings(cached);
   paint(current);
-  // "System" follows GNOME's light/dark style live.
+  // "System" follows the OS light/dark setting live.
   darkQuery?.addEventListener("change", () => {
     if (current?.appearance === "system") paint(current);
   });

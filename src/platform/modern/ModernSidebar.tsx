@@ -24,7 +24,7 @@ interface ModernSidebarProps {
 
 const isUncategorized = (shelf: string) => shelf.toLowerCase() === "uncategorized";
 
-/** Linux's sidebar, laid out like T3 Code's: create on top, the shelves, then Settings. */
+/** The modern sidebar, laid out like T3 Code's: create on top, the shelves, then Settings. */
 export function ModernSidebar(props: ModernSidebarProps) {
   const { shelves, counts, total, active, isSettings, open } = props;
   const [, setIconsVersion] = useState(0);

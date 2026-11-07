@@ -14,7 +14,7 @@ interface ModernDockHomeProps {
   onOpen: (id: string) => void;
 }
 
-/** The dock panel's note list on Linux: search, an optional shelf filter, and the notes. */
+/** The dock panel's note list in the modern design: search, an optional shelf filter, and the notes. */
 export function ModernDockHome(props: ModernDockHomeProps) {
   const { notes, shelves, filter, shelf } = props;
   return (

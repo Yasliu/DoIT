@@ -1,7 +1,7 @@
 import { Minus, PanelLeft, Search, Settings, Square, X } from "lucide-react";
 import { Seek } from "./Seek";
 import { tauriApi } from "../api/tauriBridge";
-import { isLinux } from "../platform";
+import { isModern } from "../platform";
 
 interface TitleBarProps {
   view?: string;
@@ -11,7 +11,7 @@ interface TitleBarProps {
   onToggleMini: () => void;
   onOpenSettings?: () => void;
   isSettings?: boolean;
-  /** Linux only: the sidebar toggle and the search field that opens Spotlight. */
+  /** Modern design only: the sidebar toggle and the search field that opens Spotlight. */
   sidebarOpen?: boolean;
   onToggleSidebar?: () => void;
   onOpenSearch?: () => void;
@@ -35,7 +35,7 @@ export function TitleBar({
       onDoubleClick={() => void tauriApi.toggleMaximize()}
       className="relative z-40 flex h-12 shrink-0 select-none items-center px-3.5"
     >
-      {isLinux && (
+      {isModern && (
         <>
           <button
             type="button"
@@ -56,8 +56,8 @@ export function TitleBar({
       <div className="flex-1" data-tauri-drag-region />
 
       <div className="flex shrink-0 items-center gap-2">
-        {/* Linux searches from the sidebar. */}
-        {!isLinux && (
+        {/* The modern design searches from Spotlight. */}
+        {!isModern && (
           <div className="hidden sm:block">
             <Seek value={query} onChange={onQuery} />
           </div>

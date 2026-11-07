@@ -64,7 +64,7 @@ import {
   fixCheckboxCaret,
   openExternalUrl,
 } from "../lib/format";
-import { isLinux } from "../platform";
+import { isModern } from "../platform";
 import { ModernConfirm } from "../platform/modern/ModernConfirm";
 import { accentFor, cleanText, cx, fullStamp, uid } from "../lib/text";
 
@@ -1489,7 +1489,7 @@ export function NoteSheet({
                 <span className="h-3 w-px bg-white/10" />
               </>
             )}
-            {isLinux ? (
+            {isModern ? (
               tasks.total > 0 && <span>{tasks.done} of {tasks.total} done</span>
             ) : (
               <>
@@ -1594,7 +1594,7 @@ export function NoteSheet({
       {previewImage && <ImageLightbox src={previewImage} onClose={() => setPreviewImage(null)} />}
 
       {/* Theme-matched destructive action confirmation modal */}
-      {showDeleteConfirm && isLinux && (
+      {showDeleteConfirm && isModern && (
         <ModernConfirm
           title={`Delete “${cleanText(draft.title) || "Untitled"}”?`}
           body="This removes its file from your notes folder. You can undo right after."
@@ -1607,7 +1607,7 @@ export function NoteSheet({
           }}
         />
       )}
-      {showDeleteConfirm && !isLinux && (
+      {showDeleteConfirm && !isModern && (
         <div
           className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 backdrop-blur-sm p-4 animate-in fade-in duration-150"
           onPointerDown={(e) => e.stopPropagation()}
