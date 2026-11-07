@@ -71,18 +71,31 @@ Drop any `.md` or `.txt` files into your note repository folder, hit **Sync Repo
   <img src="docs/shot-save.jpg" width="700" alt="The Save button for externally opened files">
 </p>
 
-## What's new in v1.1.8
+## What's new in v1.1.9
 
-- Card dragging stays centered right under your cursor, even when grabbing long notes or after scrolling down
-- The table, checklist, code block and image toolbar buttons are grouped into one tidy popup menu, so nothing gets squeezed or cut off when you narrow the note panel
-- Zoom in notes: Ctrl + +, Ctrl + - or Ctrl + scroll wheel makes note text bigger or smaller, in the main editor and Dock Mode
-- A simpler category menu: redundant buttons are gone, so you get one unified "Rename & icon" option
-- The blurred glass theme in Settings now activates and looks crisp as intended
-- A "Spotted a bug? Report Here" link lives in Settings
+- Uncategorized is now pinned at the bottom of the sidebar and dashboard
+- Markdown support expanded: numbered lists, inline code, web links, footnotes, definition lists, strikethrough, text highlights, sub/superscript and emoji shortcodes
+- Paste images inline anywhere in a note; a slide-in drawer edits alt text, and one click copies any rendered image
+- A dedicated emoji picker in the toolbar
+- Keyboard shortcuts in Settings reorganized into collapsible categories
+- Card previews no longer clip footnotes or superscripts; text and images stay sharp at every zoom level and display scale
 The full history lives in the release log below.
 
 <details>
 <summary><strong>Release log</strong> (click to expand)</summary>
+
+<details>
+<summary><strong>v1.1.9</strong> — November 7, 2026</summary>
+
+- Uncategorized is now permanently locked to the bottom of the sidebar and dashboard
+- Markdown formatting expanded: numbered lists, inline code, web links, footnotes, definition lists, strikethrough, radiant text highlights, subscript and superscript, emoji shortcodes
+- Inline image pasting inserts images anywhere in a note while keeping the raw markdown clean and compact
+- A smooth slide-in drawer edits image alt text and labels
+- Dedicated emoji picker button in the toolbar; click any rendered image to copy it to your clipboard
+- Keyboard shortcut settings reorganized into collapsible accordion tiles sorted by category
+- Card preview fixes: footnotes and superscripts render cleanly without cut-off text; display scaling fixed so text and images stay sharp at all zoom levels and monitor densities
+
+</details>
 
 <details>
 <summary><strong>v1.1.8</strong> — November 6, 2026</summary>
