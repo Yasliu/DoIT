@@ -60,12 +60,59 @@ html[data-platform="linux"] [data-theme] {
   --press: color-mix(in oklab, var(--l-text) 10%, transparent);
   --line-strong: color-mix(in oklab, var(--l-text) 18%, var(--l-border));
   --shadow-xs: 0 1px 2px rgb(0 0 0 / 0.05);
+  --shadow-raise: 0 6px 16px -10px rgb(0 0 0 / 0.25);
   --shadow-pop: 0 12px 32px -12px rgb(0 0 0 / 0.28), 0 2px 6px -2px rgb(0 0 0 / 0.08);
+  --shadow-pill: 0 2px 6px -1px rgb(0 0 0 / 0.18);
+  --shadow-knob: 0 1px 2px rgb(0 0 0 / 0.2);
+  /* The edge of anything that floats over the page: menus, dialogs, the open note. */
+  --edge-float: var(--l-border);
+}
+
+/* Corner radii. Every rounded corner in this layer and in src/platform/linux reads one of these. */
+html[data-platform="linux"] {
+  --r-xs: 4px; /* checkboxes, keys, inline code */
+  --r-sm: 6px; /* small buttons, menu items */
+  --r-md: 8px; /* buttons, inputs, sidebar rows */
+  --r-lg: 10px; /* menus, dock pill, dock search */
+  --r-xl: 12px; /* window frame, cards, settings groups */
+  --r-2xl: 14px; /* dialogs, Spotlight, open note, dock panel */
+  --r-full: 999px; /* chips, switches, window buttons */
 }
 
 html[data-platform="linux"][data-appearance="dark"] {
   --shadow-xs: 0 1px 2px rgb(0 0 0 / 0.4);
   --shadow-pop: 0 16px 40px -12px rgb(0 0 0 / 0.7), 0 0 0 1px rgb(255 255 255 / 0.02);
+}
+
+/* Boxy: near-square corners and hairline edges instead of soft shadows, over any theme. Shadows
+   become an invisible shadow rather than `none`, which would void the lists they appear in. */
+html[data-platform="linux"][data-shape="boxy"] {
+  --r-xs: 1px;
+  --r-sm: 2px;
+  --r-md: 2px;
+  --r-lg: 2px;
+  --r-xl: 2px;
+  --r-2xl: 2px;
+  --r-full: 2px;
+  /* Tailwind's scale, which the shared components' rounded-* utilities read. */
+  --radius-xs: 1px;
+  --radius-sm: 2px;
+  --radius-md: 2px;
+  --radius-lg: 2px;
+  --radius-xl: 2px;
+  --radius-2xl: 2px;
+  --radius-3xl: 2px;
+  --radius-4xl: 2px;
+  --shadow-xs: 0 0 #0000;
+  --shadow-raise: 0 0 #0000;
+  --shadow-pop: 0 0 #0000;
+  --shadow-pill: 0 0 #0000;
+  --shadow-knob: 0 0 #0000;
+  --edge-float: var(--line-strong);
+}
+/* Shared components with fixed radii (`rounded`, `rounded-[10px]`) that no token reaches. */
+html[data-platform="linux"][data-shape="boxy"] :is([class~="rounded"], [class*="rounded-["]) {
+  border-radius: var(--r-md);
 }
 
 /* ---------- base ---------- */
@@ -149,12 +196,12 @@ html[data-platform="linux"] .chassis {
 /* Rounded by painting, never by clipping: overflow:hidden with a radius makes WebKit mask every
    layer under it each frame, which halved the scrolling frame rate. */
 html[data-platform="linux"]:not([data-maximized]) .chassis {
-  border-radius: 12px;
+  border-radius: var(--r-xl);
   border: 1px solid var(--line-strong);
   overflow: visible;
 }
 html[data-platform="linux"]:not([data-maximized]) .lx-sidebar {
-  border-radius: 11px 0 0 11px;
+  border-radius: calc(var(--r-xl) - 1px) 0 0 calc(var(--r-xl) - 1px);
 }
 html[data-platform="linux"]:not([data-glass]) .chassis::after,
 html[data-platform="linux"] .lightscape {
@@ -178,7 +225,7 @@ html[data-platform="linux"]
     [class~="bg-[#121318]/95"]
   ) {
   background-color: var(--l-surface-overlay);
-  border-color: var(--l-border);
+  border-color: var(--edge-float);
   box-shadow: var(--shadow-pop);
   backdrop-filter: none;
 }
@@ -190,7 +237,7 @@ html[data-platform="linux"] [data-slot="button-outline"] {
   height: 32px;
   padding: 0 12px;
   gap: 6px;
-  border-radius: 8px;
+  border-radius: var(--r-md);
   border: 1px solid var(--l-border);
   background-color: var(--l-surface);
   color: var(--l-text);
@@ -226,7 +273,7 @@ html[data-platform="linux"]
 html[data-platform="linux"] .ghost {
   height: 28px;
   padding: 0 8px;
-  border-radius: 6px;
+  border-radius: var(--r-sm);
   font-size: 13px;
   color: var(--l-text-muted);
 }
@@ -238,7 +285,7 @@ html[data-platform="linux"] .ghost:hover {
 html[data-platform="linux"] .icon-btn {
   width: 28px;
   height: 28px;
-  border-radius: 6px;
+  border-radius: var(--r-sm);
   color: var(--l-text-muted);
 }
 html[data-platform="linux"] .icon-btn:hover {
@@ -269,7 +316,7 @@ html[data-platform="linux"] kbd {
   color: var(--l-text-muted);
   background-color: var(--l-surface-raised);
   border: 1px solid var(--l-border);
-  border-radius: 4px;
+  border-radius: var(--r-xs);
   padding: 1px 5px;
 }
 
@@ -308,7 +355,7 @@ html[data-platform="linux"] [data-slot="window-control"] {
   width: 24px;
   height: 24px;
   margin-left: 6px;
-  border-radius: 999px;
+  border-radius: var(--r-full);
   color: var(--l-text);
   background-color: color-mix(in oklab, var(--l-text) 8%, transparent);
 }
@@ -342,7 +389,7 @@ html[data-platform="linux"] [data-slot="button-outline"] {
 
 html[data-platform="linux"] [data-slot="empty-state"] {
   border: 1px dashed var(--l-border);
-  border-radius: 12px;
+  border-radius: var(--r-xl);
   padding-block: 48px;
 }
 
@@ -369,7 +416,7 @@ html[data-platform="linux"] .shelf-rule {
 }
 html[data-platform="linux"] [data-slot="empty-shelf"] {
   border: 1px dashed var(--l-border);
-  border-radius: 12px;
+  border-radius: var(--r-xl);
   padding: 20px;
 }
 html[data-platform="linux"] [data-slot="empty-shelf"]:hover {
@@ -380,7 +427,7 @@ html[data-platform="linux"] [data-slot="empty-shelf"]:hover {
 /* ---------- note cards ---------- */
 
 html[data-platform="linux"] .card {
-  border-radius: 12px;
+  border-radius: var(--r-xl);
   padding: 16px;
   background-color: var(--l-surface);
   border: 1px solid var(--l-border);
@@ -395,7 +442,7 @@ html[data-platform="linux"] .card {
 html[data-platform="linux"] .card:hover {
   background-color: var(--l-surface);
   border-color: var(--line-strong);
-  box-shadow: 0 6px 16px -10px rgb(0 0 0 / 0.25);
+  box-shadow: var(--shadow-raise);
 }
 html[data-platform="linux"] .card[data-dragging="true"] {
   opacity: 0.4;
@@ -409,7 +456,7 @@ html[data-platform="linux"] .strip {
   width: 3px;
   top: 12px;
   bottom: 12px;
-  border-radius: 0 3px 3px 0;
+  border-radius: 0 calc(var(--r-xs) - 1px) calc(var(--r-xs) - 1px) 0;
 }
 html[data-platform="linux"] .strip-label {
   font-family: var(--font-sans);
@@ -429,9 +476,9 @@ html[data-platform="linux"] .done-line {
 /* ---------- note sheet ---------- */
 
 html[data-platform="linux"] [data-slot="note-sheet"] {
-  border-radius: 14px;
+  border-radius: var(--r-2xl);
   background-color: var(--l-surface);
-  border: 1px solid var(--l-border);
+  border: 1px solid var(--edge-float);
   box-shadow: var(--shadow-pop);
 }
 html[data-platform="linux"] .sheet-scrim {
@@ -453,7 +500,7 @@ html[data-platform="linux"] .line-input::placeholder {
 html[data-platform="linux"] :is(.check, .md-cb) {
   /* From the text colour, not the input colour: dark palettes put inputs almost on the surface. */
   border: 1.5px solid color-mix(in oklab, var(--l-text) 30%, transparent);
-  border-radius: 4px;
+  border-radius: var(--r-xs);
   transition:
     background-color 150ms var(--ease-out),
     border-color 150ms var(--ease-out),
@@ -521,7 +568,7 @@ html[data-platform="linux"] .md-mark {
   background-color: var(--l-search-match-background);
   color: var(--l-search-match-foreground);
   border: 0;
-  border-radius: 3px;
+  border-radius: calc(var(--r-xs) - 1px);
   padding: 0.05em 0.25em;
 }
 html[data-platform="linux"] .md-link {
@@ -541,10 +588,10 @@ html[data-platform="linux"] :is(.md-code, .md-pre) {
   border: 1px solid var(--l-border);
 }
 html[data-platform="linux"] .md-pre {
-  border-radius: 8px;
+  border-radius: var(--r-md);
 }
 html[data-platform="linux"] .md-code {
-  border-radius: 4px;
+  border-radius: var(--r-xs);
   padding: 0.1em 0.32em;
 }
 html[data-platform="linux"] :is(.md-tbl th, .md-tbl td) {
@@ -554,9 +601,12 @@ html[data-platform="linux"] .md-tbl th {
   color: var(--l-text);
   background-color: var(--l-surface-raised);
 }
+html[data-platform="linux"] .md-tablewrap {
+  border-radius: var(--r-lg);
+}
 html[data-platform="linux"] .md-img {
   border-color: var(--l-border);
-  border-radius: 8px;
+  border-radius: var(--r-md);
 }
 html[data-platform="linux"] .md-hr hr {
   border-top-color: var(--l-border);
@@ -577,10 +627,10 @@ html[data-platform="linux"] .md-preview-raw {
 
 html[data-platform="linux"] [data-slot="pill"] {
   height: 36px;
-  border-radius: 10px;
+  border-radius: var(--r-lg);
   border: 1px solid var(--line-strong);
   background-color: var(--l-surface-overlay) !important;
-  box-shadow: 0 2px 6px -1px rgb(0 0 0 / 0.18) !important;
+  box-shadow: var(--shadow-pill) !important;
   color: var(--l-text);
 }
 html[data-platform="linux"] [data-slot="pill"] span {
@@ -591,7 +641,7 @@ html[data-platform="linux"] [data-slot="pill"] span {
 }
 
 html[data-platform="linux"] [data-slot="dock-panel"] {
-  border-radius: 14px;
+  border-radius: var(--r-2xl);
   border: 1px solid var(--line-strong);
   background-color: var(--l-canvas) !important;
   box-shadow: none !important;
@@ -690,7 +740,7 @@ html[data-platform="linux"] {
   gap: 8px;
   height: 32px;
   padding: 0 6px 0 10px;
-  border-radius: 8px;
+  border-radius: var(--r-md);
   color: var(--l-sidebar-muted-foreground);
   font-size: 13.5px;
   font-weight: 500;
@@ -727,7 +777,7 @@ html[data-platform="linux"] .lx-search-hint {
   place-items: center;
   width: 28px;
   height: 28px;
-  border-radius: 8px;
+  border-radius: var(--r-md);
   color: var(--l-text-muted);
   transition:
     background-color 120ms var(--ease-out),
@@ -767,7 +817,7 @@ html[data-platform="linux"] .lx-search-hint {
   width: 100%;
   height: 32px;
   padding: 0 10px;
-  border-radius: 8px;
+  border-radius: var(--r-md);
   color: var(--l-sidebar-muted-foreground);
   font-size: 13.5px;
   font-weight: 500;
@@ -790,7 +840,7 @@ html[data-platform="linux"] .lx-search-hint {
   position: absolute;
   inset: 0;
   z-index: -1;
-  border-radius: 8px;
+  border-radius: var(--r-md);
   background-color: var(--lx-row-selected);
 }
 .lx-row-icon {
@@ -861,8 +911,8 @@ html[data-platform="linux"] .lx-search-hint {
   z-index: 50;
   min-width: 200px;
   padding: 4px;
-  border: 1px solid var(--l-border);
-  border-radius: 10px;
+  border: 1px solid var(--edge-float);
+  border-radius: var(--r-lg);
   background-color: var(--l-surface-overlay);
   box-shadow: var(--shadow-pop);
   transform-origin: bottom left;
@@ -881,7 +931,7 @@ html[data-platform="linux"] .lx-search-hint {
   width: 100%;
   height: 32px;
   padding: 0 8px;
-  border-radius: 6px;
+  border-radius: var(--r-sm);
   color: var(--l-text);
   font-size: 13.5px;
   text-align: left;
@@ -907,8 +957,8 @@ html[data-platform="linux"] .lx-search-hint {
 .lx-dialog {
   pointer-events: auto;
   padding: 20px;
-  border: 1px solid var(--l-border);
-  border-radius: 14px;
+  border: 1px solid var(--edge-float);
+  border-radius: var(--r-2xl);
   background-color: var(--l-surface-overlay);
   box-shadow: var(--shadow-pop);
   color: var(--l-text);
@@ -924,7 +974,7 @@ html[data-platform="linux"] .lx-search-hint {
   height: 36px;
   padding: 0 12px;
   border: 1px solid var(--l-border);
-  border-radius: 8px;
+  border-radius: var(--r-md);
   background-color: var(--l-canvas);
   color: var(--l-text);
   font-size: 14px;
@@ -937,7 +987,7 @@ html[data-platform="linux"] .lx-search-hint {
   display: grid;
   place-items: center;
   height: 36px;
-  border-radius: 8px;
+  border-radius: var(--r-md);
   color: var(--l-text-muted);
   transition:
     background-color 120ms var(--ease-out),
@@ -1047,7 +1097,7 @@ html[data-platform="linux"] [data-slot="dock-panel"] > div:first-of-type {
 html[data-platform="linux"] :is([data-slot="dock-canvas"], [data-slot="dock-close"]) {
   width: 28px;
   height: 28px;
-  border-radius: 8px;
+  border-radius: var(--r-md);
   color: var(--l-text-muted);
 }
 html[data-platform="linux"] :is([data-slot="dock-canvas"], [data-slot="dock-close"]):hover {
@@ -1065,7 +1115,7 @@ html[data-platform="linux"] :is([data-slot="dock-canvas"], [data-slot="dock-clos
   height: 36px;
   padding: 0 4px 0 10px;
   border: 1px solid var(--l-border);
-  border-radius: 10px;
+  border-radius: var(--r-lg);
   background-color: var(--l-surface);
   cursor: text;
   transition: border-color 120ms var(--ease-out);
@@ -1085,7 +1135,7 @@ html[data-platform="linux"] :is([data-slot="dock-canvas"], [data-slot="dock-clos
   height: 26px;
   padding: 0 10px;
   border: 1px solid var(--l-border);
-  border-radius: 999px;
+  border-radius: var(--r-full);
   color: var(--l-text-muted);
   font-size: 12.5px;
   font-weight: 500;
@@ -1109,7 +1159,7 @@ html[data-platform="linux"] :is([data-slot="dock-canvas"], [data-slot="dock-clos
   gap: 12px;
   width: 100%;
   padding: 7px 8px;
-  border-radius: 8px;
+  border-radius: var(--r-md);
   text-align: left;
   transition: background-color 120ms var(--ease-out);
 }
@@ -1173,14 +1223,14 @@ html[data-platform="linux"] [data-slot="mode-toggle"] {
   gap: 2px;
   padding: 2px;
   border: 1px solid var(--l-border);
-  border-radius: 8px;
+  border-radius: var(--r-md);
   background-color: var(--l-canvas);
 }
 html[data-platform="linux"] [data-slot="mode-toggle"] button {
   height: 24px;
   padding: 0 8px;
   gap: 5px;
-  border-radius: 6px;
+  border-radius: var(--r-sm);
   background-color: transparent;
   color: var(--l-text-muted);
   font-size: 12.5px;
@@ -1265,7 +1315,7 @@ html[data-platform="linux"] [data-slot="dock-toolbar"] {
 html[data-platform="linux"] [data-slot="dock-toolbar"] [data-slot="shelf-picker"] {
   height: 28px;
   padding-inline: 8px;
-  border-radius: 6px;
+  border-radius: var(--r-sm);
 }
 html[data-platform="linux"] [data-slot="dock-toolbar"] [data-slot="shelf-picker"] > span:nth-child(2) {
   max-width: 10rem;
@@ -1296,7 +1346,7 @@ html[data-platform="linux"] [data-slot="dock-panel"] [contenteditable="true"] {
   height: 32px;
   min-width: 0;
   border: 1px solid var(--l-border);
-  border-radius: 8px;
+  border-radius: var(--r-md);
   background-color: var(--l-surface);
   box-shadow: var(--shadow-xs);
   color: var(--l-text);
@@ -1343,7 +1393,7 @@ html[data-platform="linux"] [data-slot="dock-panel"] [contenteditable="true"] {
   height: 32px;
   padding: 0 6px 0 10px;
   border: 1px solid var(--l-border);
-  border-radius: 8px;
+  border-radius: var(--r-md);
   background-color: var(--l-surface);
   box-shadow: var(--shadow-xs);
   color: var(--l-placeholder);
@@ -1370,8 +1420,8 @@ html[data-platform="linux"] .lx-search-trigger kbd {
   width: 100%;
   max-width: 620px;
   overflow: hidden;
-  border: 1px solid var(--l-border);
-  border-radius: 14px;
+  border: 1px solid var(--edge-float);
+  border-radius: var(--r-2xl);
   background-color: var(--l-surface-overlay);
   box-shadow: var(--shadow-pop);
   transform-origin: top center;
@@ -1402,7 +1452,7 @@ html[data-platform="linux"] .lx-search-trigger kbd {
   gap: 10px;
   height: 38px;
   padding: 0 10px;
-  border-radius: 8px;
+  border-radius: var(--r-md);
   font-size: 14px;
   cursor: default;
 }
@@ -1435,7 +1485,7 @@ html[data-platform="linux"] .lx-search-trigger kbd {
   gap: 6px;
   height: 26px;
   padding: 0 8px;
-  border-radius: 6px;
+  border-radius: var(--r-sm);
   color: var(--l-text);
   font-size: 12.5px;
   font-weight: 500;
@@ -1447,7 +1497,7 @@ html[data-platform="linux"] .lx-search-trigger kbd {
   opacity: 0.5;
 }
 .lx-hl {
-  border-radius: 3px;
+  border-radius: calc(var(--r-xs) - 1px);
   background-color: var(--l-search-match-background);
   color: var(--l-search-match-foreground);
 }
@@ -1469,7 +1519,7 @@ html[data-platform="linux"] :is(.btn, .lx-create):disabled {
   width: 36px;
   height: 36px;
   border: 1px solid var(--l-border);
-  border-radius: 8px;
+  border-radius: var(--r-md);
   background-color: var(--l-canvas);
   color: var(--l-text);
   transition: border-color 120ms var(--ease-out), background-color 120ms var(--ease-out);
@@ -1485,7 +1535,7 @@ html[data-platform="linux"] :is(.btn, .lx-create):disabled {
 }
 .lx-row-wrap[data-dragging] {
   z-index: 10;
-  border-radius: 8px;
+  border-radius: var(--r-md);
   background-color: var(--l-surface-overlay);
   box-shadow: var(--shadow-pop);
   cursor: grabbing;

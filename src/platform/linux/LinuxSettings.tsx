@@ -59,7 +59,7 @@ function Section({ title, action, children }: { title: string; action?: React.Re
         <h2 className="text-[13px] font-semibold text-ink-1">{title}</h2>
         {action}
       </div>
-      <div className="overflow-hidden rounded-xl border border-[var(--l-border)] bg-[var(--l-surface)] shadow-[var(--shadow-xs)]">
+      <div className="overflow-hidden rounded-[var(--r-xl)] border border-[var(--l-border)] bg-[var(--l-surface)] shadow-[var(--shadow-xs)]">
         {children}
       </div>
     </section>
@@ -87,9 +87,9 @@ function Switch({ label, on, onChange }: { label: string; on: boolean; onChange:
       aria-label={label}
       onClick={() => onChange(!on)}
       data-on={on}
-      className="group relative h-5 w-9 shrink-0 rounded-full bg-[var(--l-input)] transition-colors duration-200 data-[on=true]:bg-[var(--l-accent)]"
+      className="group relative h-5 w-9 shrink-0 rounded-[var(--r-full)] bg-[var(--l-input)] transition-colors duration-200 data-[on=true]:bg-[var(--l-accent)]"
     >
-      <span className="absolute left-0.5 top-0.5 size-4 rounded-full bg-[var(--l-surface)] shadow-[0_1px_2px_rgb(0_0_0/0.2)] transition-transform duration-200 ease-[var(--ease-out)] group-data-[on=true]:translate-x-4" />
+      <span className="absolute left-0.5 top-0.5 size-4 rounded-[var(--r-full)] bg-[var(--l-surface)] shadow-[var(--shadow-knob)] transition-transform duration-200 ease-[var(--ease-out)] group-data-[on=true]:translate-x-4" />
     </button>
   );
 }
@@ -106,22 +106,22 @@ function ThemeCard({ id, selected, appearance, onSelect }: { id: PaletteId; sele
       onClick={onSelect}
       aria-pressed={selected}
       className={cx(
-        "group flex flex-col gap-2 rounded-[10px] p-1.5 text-left transition-colors duration-150",
+        "group flex flex-col gap-2 rounded-[var(--r-lg)] p-1.5 text-left transition-colors duration-150",
         selected ? "bg-[var(--hover)]" : "hover:bg-[var(--hover)]",
       )}
     >
       <span
         className={cx(
-          "relative flex h-16 w-full overflow-hidden rounded-lg border transition-[border-color,box-shadow] duration-150",
+          "relative flex h-16 w-full overflow-hidden rounded-[var(--r-md)] border transition-[border-color,box-shadow] duration-150",
           selected ? "border-[var(--l-accent)] shadow-[0_0_0_1px_var(--l-accent)]" : "border-[var(--l-border)]",
         )}
         style={{ backgroundColor: s.canvas }}
       >
         <span className="w-1/4" style={{ backgroundColor: s.surface }} />
         <span className="flex flex-1 flex-col gap-1.5 p-2.5">
-          <span className="h-1.5 w-3/5 rounded-full" style={{ backgroundColor: s.text, opacity: 0.85 }} />
-          <span className="h-1.5 w-2/5 rounded-full" style={{ backgroundColor: s.text, opacity: 0.35 }} />
-          <span className="mt-auto h-3 w-8 rounded" style={{ backgroundColor: s.accent }} />
+          <span className="h-1.5 w-3/5 rounded-[var(--r-full)]" style={{ backgroundColor: s.text, opacity: 0.85 }} />
+          <span className="h-1.5 w-2/5 rounded-[var(--r-full)]" style={{ backgroundColor: s.text, opacity: 0.35 }} />
+          <span className="mt-auto h-3 w-8 rounded-[var(--r-xs)]" style={{ backgroundColor: s.accent }} />
         </span>
       </span>
       <span className="flex items-center gap-1.5 px-0.5 text-[12.5px] font-medium text-ink-2">
@@ -226,7 +226,7 @@ export function LinuxSettings({ onBack, onStoragePathChanged }: LinuxSettingsPro
             ))}
           </div>
           <Row label="Mode" hint={appearance === "system" ? "Follows the light or dark style set in GNOME." : undefined}>
-            <div role="radiogroup" aria-label="Mode" className="flex rounded-lg border border-[var(--l-border)] bg-[var(--l-canvas)] p-0.5">
+            <div role="radiogroup" aria-label="Mode" className="flex rounded-[var(--r-md)] border border-[var(--l-border)] bg-[var(--l-canvas)] p-0.5">
               {APPEARANCES.map((value) => {
                 const Icon = APPEARANCE_ICONS[value];
                 const on = value === appearance;
@@ -238,14 +238,14 @@ export function LinuxSettings({ onBack, onStoragePathChanged }: LinuxSettingsPro
                     aria-checked={on}
                     onClick={() => setTheme({ appearance: value })}
                     className={cx(
-                      "relative flex h-7 items-center gap-1.5 rounded-md px-2.5 text-[12.5px] font-medium transition-colors duration-150",
+                      "relative flex h-7 items-center gap-1.5 rounded-[var(--r-sm)] px-2.5 text-[12.5px] font-medium transition-colors duration-150",
                       on ? "text-ink-1" : "text-ink-3 hover:text-ink-1",
                     )}
                   >
                     {on && (
                       <motion.span
                         layoutId="mode-thumb"
-                        className="absolute inset-0 rounded-md bg-[var(--l-surface)] shadow-[var(--shadow-xs)]"
+                        className="absolute inset-0 rounded-[var(--r-sm)] bg-[var(--l-surface)] shadow-[var(--shadow-xs)]"
                         transition={{ type: "spring", duration: 0.3, bounce: 0.1 }}
                       />
                     )}
@@ -258,6 +258,9 @@ export function LinuxSettings({ onBack, onStoragePathChanged }: LinuxSettingsPro
           </Row>
           <Row label="Glass" hint="The desktop shows through the window, with a fine grain. Works with every theme.">
             <Switch label="Glass" on={theme.glass} onChange={(glass) => setTheme({ glass })} />
+          </Row>
+          <Row label="Boxy" hint="Square corners and hairline edges instead of soft shadows. Works with every theme.">
+            <Switch label="Boxy" on={theme.boxy} onChange={(boxy) => setTheme({ boxy })} />
           </Row>
         </Section>
 
@@ -272,7 +275,7 @@ export function LinuxSettings({ onBack, onStoragePathChanged }: LinuxSettingsPro
               }}
               spellCheck={false}
               aria-label="Notes folder"
-              className="h-8 min-w-0 flex-1 rounded-lg border border-[var(--l-border)] bg-[var(--l-canvas)] px-2.5 font-mono text-[12.5px] text-ink-1 [font-variant-ligatures:none] focus:border-[color-mix(in_oklab,var(--l-focus)_60%,var(--l-border))]"
+              className="h-8 min-w-0 flex-1 rounded-[var(--r-md)] border border-[var(--l-border)] bg-[var(--l-canvas)] px-2.5 font-mono text-[12.5px] text-ink-1 [font-variant-ligatures:none] focus:border-[color-mix(in_oklab,var(--l-focus)_60%,var(--l-border))]"
             />
             {pathChanged ? (
               <button type="button" onClick={() => void applyPath()} className="btn" data-variant="primary">

@@ -6,7 +6,7 @@
  */
 
 import { trackWindowFrame } from "./linux/frame";
-import { applyLinuxTheme, restoreLinuxTheme, themeFromSettings } from "./linux/theme";
+import { applyLinuxTheme, restoreLinuxTheme, themeFromSettings, type ThemeSettings } from "./linux/theme";
 
 export type Platform = "windows" | "linux" | "macos" | "other";
 
@@ -36,7 +36,7 @@ export function markPlatform(): void {
 }
 
 /** Applies the saved theme. Windows themes itself through `theme_mode`; Linux ignores that field. */
-export function applyThemeSettings(settings: { palette?: string | null; appearance?: string | null; glass?: boolean | null }): void {
+export function applyThemeSettings(settings: ThemeSettings): void {
   if (isLinux) applyLinuxTheme(themeFromSettings(settings));
 }
 

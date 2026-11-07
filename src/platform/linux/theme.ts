@@ -3,7 +3,8 @@
  * custom properties on <html>. `linux.css` maps DoIT's own colour tokens onto them.
  *
  * Six palettes come from T3 Code (MIT, see THIRD_PARTY_NOTICES.md); Monochrome is DoIT's own look.
- * Glass is not a palette but a flag on top of any of them (`data-glass`, styled in linux.css).
+ * Glass and Boxy are not palettes but flags on top of any of them (`data-glass`, `data-shape`,
+ * styled in linux.css).
  */
 
 export type Appearance = "system" | "light" | "dark";
@@ -473,14 +474,19 @@ export interface LinuxTheme {
   appearance: Appearance;
   /** Translucent, grainy window over any palette. */
   glass: boolean;
+  /** Near-square corners and hairline edges instead of soft shadows. */
+  boxy: boolean;
 }
 
 /** The stored settings as a theme, including the old "glass" palette (now Monochrome + Glass). */
-export function themeFromSettings(s: { palette?: string | null; appearance?: string | null; glass?: boolean | null }): LinuxTheme {
+export type ThemeSettings = { palette?: string | null; appearance?: string | null; glass?: boolean | null; boxy?: boolean | null };
+
+export function themeFromSettings(s: ThemeSettings): LinuxTheme {
   return {
     palette: normalizePalette(s.palette),
     appearance: normalizeAppearance(s.appearance),
     glass: s.glass ?? s.palette === "glass",
+    boxy: s.boxy ?? false,
   };
 }
 
@@ -495,7 +501,7 @@ function resolve(appearance: Appearance): Resolved {
 
 const kebab = (role: string) => role.replace(/[A-Z]/g, (c) => `-${c.toLowerCase()}`);
 
-function paint({ palette, appearance, glass }: LinuxTheme) {
+function paint({ palette, appearance, glass, boxy }: LinuxTheme) {
   const root = document.documentElement;
   const resolved = resolve(appearance);
   const colors = PALETTES[palette][resolved];
@@ -507,6 +513,8 @@ function paint({ palette, appearance, glass }: LinuxTheme) {
   root.dataset.palette = palette;
   root.dataset.appearance = resolved;
   root.toggleAttribute("data-glass", glass);
+  if (boxy) root.dataset.shape = "boxy";
+  else delete root.dataset.shape;
   root.style.colorScheme = resolved;
   requestAnimationFrame(() => requestAnimationFrame(() => root.classList.remove("theme-switching")));
 }
@@ -524,7 +532,7 @@ export function applyLinuxTheme(theme: LinuxTheme): void {
 
 /** First paint: the last theme this machine used. */
 export function restoreLinuxTheme(): void {
-  let cached: { palette?: string; appearance?: string; glass?: boolean } = {};
+  let cached: ThemeSettings = {};
   try {
     cached = JSON.parse(localStorage.getItem(CACHE_KEY) ?? "{}");
   } catch {

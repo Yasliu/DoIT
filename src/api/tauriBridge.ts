@@ -99,6 +99,8 @@ export interface AppSettings {
   palette?: string;
   appearance?: string;
   glass?: boolean;
+  /** Linux only: near-square corners and hairline edges. */
+  boxy?: boolean;
   /** Shelves in the order the user dragged them into; others follow alphabetically. */
   shelf_order?: string[];
 }

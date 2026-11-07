@@ -124,6 +124,9 @@ pub struct AppSettings {
     /// Linux: translucent, grainy window on top of the palette.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub glass: Option<bool>,
+    /// Linux: near-square corners and hairline edges instead of soft shadows.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub boxy: Option<bool>,
     /// Shelves in the order the user dragged them into (others follow alphabetically).
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub shelf_order: Option<Vec<String>>,
@@ -209,6 +212,7 @@ impl Default for AppSettings {
             palette: None,
             appearance: None,
             glass: None,
+            boxy: None,
             shelf_order: None,
         }
     }
@@ -774,5 +778,20 @@ This is content.
         assert!(note.id.starts_with("ext_"));
         let out = note.to_external_text();
         assert!(out.starts_with("---\ntitle: Hello\ncustom: yes\n---\n\nBody line\n- [ ] task"));
+    }
+
+    #[test]
+    fn look_settings_stay_out_of_settings_files_until_chosen() {
+        let classic = AppSettings { theme_mode: "monochrome".to_string(), ..Default::default() };
+        let written = serde_json::to_value(&classic).unwrap();
+        for key in ["palette", "appearance", "glass", "boxy"] {
+            assert!(written.get(key).is_none(), "{key} written before it was chosen");
+        }
+        let settings: AppSettings = serde_json::from_value(written).unwrap();
+        assert_eq!(settings.theme_mode, "monochrome");
+
+        let chosen = AppSettings { boxy: Some(true), glass: Some(false), ..settings };
+        let back: AppSettings = serde_json::from_value(serde_json::to_value(&chosen).unwrap()).unwrap();
+        assert_eq!((back.boxy, back.glass), (Some(true), Some(false)));
     }
 }
