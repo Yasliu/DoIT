@@ -1,0 +1,26 @@
+[Desktop Entry]
+Type=Application
+Name={{name}}
+{{#if comment}}
+Comment={{comment}}
+{{/if}}
+Exec={{exec}} %F
+Icon={{icon}}
+StartupWMClass=doit
+Categories={{categories}}
+Keywords=notes;tasks;todo;markdown;checklist;
+MimeType=text/markdown;text/plain;
+Terminal=false
+Actions=canvas;dock;quit;
+
+[Desktop Action canvas]
+Name=Open Canvas
+Exec={{exec}} --canvas
+
+[Desktop Action dock]
+Name=Switch to Docking Mode
+Exec={{exec}} --dock
+
+[Desktop Action quit]
+Name=Quit DoIT
+Exec={{exec}} --quit

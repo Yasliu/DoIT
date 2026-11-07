@@ -115,6 +115,15 @@ pub struct AppSettings {
     pub last_seen_version: Option<String>,
     #[serde(default)]
     pub category_icons: Option<HashMap<String, String>>,
+    /// Linux colour theme ("neutral", "grove", ...). Windows themes through `theme_mode`.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub palette: Option<String>,
+    /// Linux light/dark choice: "system", "light" or "dark".
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub appearance: Option<String>,
+    /// Linux: translucent, grainy window on top of the palette.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub glass: Option<bool>,
 }
 
 fn default_dock_on_close() -> bool {
@@ -159,18 +168,8 @@ fn default_theme_mode() -> String {
 }
 
 pub fn default_note_storage_path() -> String {
-    if let Some(profile) = std::env::var_os("USERPROFILE") {
-        let mut p = std::path::PathBuf::from(profile);
-        p.push("Documents");
-        p.push("DoIT");
-        p.push("Notes");
-        p.to_string_lossy().to_string()
-    } else if let Some(home) = std::env::var_os("HOME") {
-        let mut p = std::path::PathBuf::from(home);
-        p.push("Documents");
-        p.push("DoIT");
-        p.push("Notes");
-        p.to_string_lossy().to_string()
+    if let Some(docs) = crate::platform::documents_dir() {
+        docs.join("DoIT").join("Notes").to_string_lossy().to_string()
     } else if let Some(app_data) = std::env::var_os("APPDATA") {
         let mut p = std::path::PathBuf::from(app_data);
         p.push("DoIT");
@@ -204,6 +203,9 @@ impl Default for AppSettings {
             dock_on_close: true,
             last_seen_version: None,
             category_icons: Some(HashMap::new()),
+            palette: None,
+            appearance: None,
+            glass: None,
         }
     }
 }
@@ -313,6 +315,17 @@ pub fn compute_markdown_filename(
 }
 
 pub const MAX_FILE_SIZE_BYTES: u64 = 30 * 1024 * 1024; // 30 MB
+
+/// The result of importing a folder as a shelf.
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct FolderImport {
+    pub shelf: String,
+    pub total_scanned: usize,
+    pub imported_count: usize,
+    pub skipped_count: usize,
+    /// Every note in the workspace afterwards.
+    pub notes: Vec<NoteItem>,
+}
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct ScanSummary {

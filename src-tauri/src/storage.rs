@@ -1,12 +1,12 @@
 use std::collections::HashMap;
 use std::fs::{self, File};
 use std::io::{Read, Write};
-use std::path::PathBuf;
+use std::path::{Path, PathBuf};
 use std::sync::{Arc, RwLock};
 
 use crate::models::{
-    compute_note_filename, AppSettings, AppStateData, CategoryInfo, GridCoordinates, NoteItem,
-    ScanSummary, MAX_FILE_SIZE_BYTES,
+    compute_note_filename, AppSettings, AppStateData, CategoryInfo, FolderImport, GridCoordinates,
+    NoteItem, ScanSummary, MAX_FILE_SIZE_BYTES,
 };
 
 pub struct StorageManager {
@@ -34,12 +34,9 @@ impl StorageManager {
     }
 
     fn resolve_settings_path() -> PathBuf {
-        if let Some(app_data) = std::env::var_os("APPDATA") {
-            let mut dir = PathBuf::from(app_data);
-            dir.push("DoIT");
+        if let Some(dir) = crate::platform::config_dir() {
             let _ = fs::create_dir_all(&dir);
-            dir.push("settings.json");
-            return dir;
+            return dir.join("settings.json");
         }
 
         let mut local = std::env::current_dir().unwrap_or_else(|_| PathBuf::from("."));
@@ -648,6 +645,68 @@ impl StorageManager {
             .ok_or_else(|| "Only .md and .txt files can be imported.".to_string())?;
         self.upsert_note(note)
     }
+    /// Every .md / .txt file directly inside `dir` as a note, with how many files were looked at and
+    /// how many could not be read.
+    fn read_note_files(dir: &Path) -> (Vec<NoteItem>, usize, usize) {
+        let mut notes = Vec::new();
+        let (mut scanned, mut skipped) = (0usize, 0usize);
+        for entry in fs::read_dir(dir).into_iter().flatten().flatten() {
+            let path = entry.path();
+            let is_note_file = path.is_file()
+                && path
+                    .extension()
+                    .and_then(|s| s.to_str())
+                    .is_some_and(|e| e.eq_ignore_ascii_case("md") || e.eq_ignore_ascii_case("txt"));
+            if !is_note_file {
+                continue;
+            }
+            scanned += 1;
+            match Self::read_note_file(&path) {
+                Some(note) => notes.push(note),
+                None => skipped += 1,
+            }
+        }
+        (notes, scanned, skipped)
+    }
+
+    /// The notes in `dir`, all filed on one shelf: a folder imports as a shelf.
+    fn notes_for_shelf(dir: &Path, shelf: &str) -> (Vec<NoteItem>, usize, usize) {
+        let (mut notes, scanned, skipped) = Self::read_note_files(dir);
+        for note in &mut notes {
+            note.category = shelf.to_string();
+        }
+        (notes, scanned, skipped)
+    }
+
+    /// Imports the .md / .txt files in `dir` as the shelf `shelf`, or, when that is empty, a shelf
+    /// named after the folder. The shelf is created even when the folder holds no notes.
+    pub fn import_folder_as_shelf(&self, dir: &str, shelf: Option<&str>) -> Result<FolderImport, String> {
+        let dir = PathBuf::from(dir.trim());
+        if !dir.is_dir() {
+            return Err(format!("Directory does not exist: {}", dir.to_string_lossy()));
+        }
+        let shelf = shelf
+            .map(str::trim)
+            .filter(|s| !s.is_empty())
+            .map(String::from)
+            .or_else(|| dir.file_name().map(|n| n.to_string_lossy().trim().to_string()))
+            .filter(|s| !s.is_empty())
+            .unwrap_or_else(|| "Imported".to_string());
+        let (notes, total_scanned, skipped_count) = Self::notes_for_shelf(&dir, &shelf);
+        self.add_category(&shelf)?;
+        let imported_count = notes.len();
+        for note in notes {
+            self.upsert_note(note)?;
+        }
+        Ok(FolderImport {
+            shelf,
+            total_scanned,
+            imported_count,
+            skipped_count,
+            notes: self.get_all_notes()?,
+        })
+    }
+
     /// Automated Folder Scanning Loop:
     /// Iterates through every .md file in the target directory,
     /// ingests every file without requiring any header,
@@ -665,32 +724,8 @@ impl StorageManager {
             return Err(format!("Directory does not exist: {}", target_dir.to_string_lossy()));
         }
 
-        let mut total_scanned = 0usize;
-        let mut imported_count = 0usize;
-        let mut skipped_count = 0usize;
-        let mut valid_notes = Vec::new();
-
-        if let Ok(entries) = fs::read_dir(&target_dir) {
-            for entry in entries.flatten() {
-                let path = entry.path();
-                let is_note_file = path.is_file()
-                    && path
-                        .extension()
-                        .and_then(|s| s.to_str())
-                        .map(|e| e.eq_ignore_ascii_case("md") || e.eq_ignore_ascii_case("txt"))
-                        .unwrap_or(false);
-                if is_note_file {
-                    total_scanned += 1;
-                    match Self::read_note_file(&path) {
-                        Some(note) => {
-                            valid_notes.push(note);
-                            imported_count += 1;
-                        }
-                        None => skipped_count += 1,
-                    }
-                }
-            }
-        }
+        let (valid_notes, total_scanned, skipped_count) = Self::read_note_files(&target_dir);
+        let imported_count = valid_notes.len();
         // Ingest valid notes into memory pool
         for note in &valid_notes {
             let _ = self.upsert_note(note.clone());
@@ -704,5 +739,27 @@ impl StorageManager {
             skipped_count,
             imported_notes: all_notes,
         })
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::StorageManager;
+
+    #[test]
+    fn a_folder_imports_as_one_shelf_whatever_its_files_say() {
+        let dir = std::env::temp_dir().join(format!("doit-shelf-import-{}", std::process::id()));
+        std::fs::create_dir_all(&dir).unwrap();
+        std::fs::write(dir.join("plain.md"), "# Plain\nno front matter").unwrap();
+        // A file DoIT exported from another shelf still lands on the folder's shelf.
+        std::fs::write(dir.join("Work - Plan - 2026-11-07 - 0.md"), "---\ncategory: \"Work\"\n---\nship it").unwrap();
+        std::fs::write(dir.join("todo.txt"), "- [ ] call").unwrap();
+        std::fs::write(dir.join("photo.png"), [0u8, 1, 2]).unwrap();
+
+        let (notes, scanned, skipped) = StorageManager::notes_for_shelf(&dir, "Recipes");
+        std::fs::remove_dir_all(&dir).unwrap();
+
+        assert_eq!((scanned, skipped, notes.len()), (3, 0, 3));
+        assert!(notes.iter().all(|n| n.category == "Recipes"));
     }
 }
