@@ -9,13 +9,15 @@ interface RawEditorProps {
   className?: string;
   minHeight?: number;
   onArrowUpAtStart?: () => void;
+  textareaRef?: React.RefObject<HTMLTextAreaElement | null>;
 }
 
 /** Text Mode: the file exactly as stored (raw markdown source in a monospace area, no rendering). */
-export function RawEditor({ content, onChange, className = "", minHeight = 240, onArrowUpAtStart }: RawEditorProps) {
+export function RawEditor({ content, onChange, className = "", minHeight = 240, onArrowUpAtStart, textareaRef }: RawEditorProps) {
   const value = contentToMarkdown(content);
   const [text, setText] = useState(value);
-  const ref = useRef<HTMLTextAreaElement | null>(null);
+  const internalRef = useRef<HTMLTextAreaElement | null>(null);
+  const ref = textareaRef || internalRef;
 
   // Adopt outside changes (undo / redo) but never normalise what the user is typing
   useEffect(() => {

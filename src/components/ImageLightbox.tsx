@@ -1,8 +1,9 @@
-import { useCallback, useEffect, useRef } from "react";
-import { X } from "lucide-react";
+import { useCallback, useEffect, useRef, useState } from "react";
+import { Check, Copy, ExternalLink, X } from "lucide-react";
+import { copyImageToClipboard, openExternalUrl } from "../lib/format";
 
 const MIN_ZOOM = 0.5;
-const MAX_ZOOM = 6;
+const MAX_ZOOM = 8;
 
 interface ImageLightboxProps {
   src: string;
@@ -10,23 +11,77 @@ interface ImageLightboxProps {
 }
 
 /**
- * Full-screen image viewer. Pan / zoom state lives in refs and is written straight to the image's
- * transform inside requestAnimationFrame, so dragging and wheel-zooming never re-render React
- * (the parent editor tree is heavy, which made the old state-driven viewer lag).
+ * High-fidelity image viewer with native-resolution rasterization.
+ * Dynamically sizes the img element to eliminate low-res GPU layer caching,
+ * ensuring razor-sharp clarity in compact companion windows and full screens.
  */
 export function ImageLightbox({ src, onClose }: ImageLightboxProps) {
   const viewRef = useRef<HTMLDivElement | null>(null);
   const imgRef = useRef<HTMLImageElement | null>(null);
   const labelRef = useRef<HTMLSpanElement | null>(null);
-  const s = useRef({ zoom: 1, x: 0, y: 0, dragging: false, moved: false, sx: 0, sy: 0, px: 0, py: 0, raf: 0 });
+  const s = useRef({
+    zoom: 1,
+    x: 0,
+    y: 0,
+    dragging: false,
+    moved: false,
+    sx: 0,
+    sy: 0,
+    px: 0,
+    py: 0,
+    raf: 0,
+    natW: 0,
+    natH: 0,
+    fitScale: 1,
+  });
+  const [copied, setCopied] = useState(false);
+
+  const handleCopy = async () => {
+    const ok = await copyImageToClipboard(src);
+    if (ok) {
+      setCopied(true);
+      setTimeout(() => setCopied(false), 1800);
+    }
+  };
+
+  const updateSize = useCallback(() => {
+    const img = imgRef.current;
+    const view = viewRef.current;
+    if (!img || !view) return;
+    const st = s.current;
+    if (!st.natW || !st.natH) {
+      st.natW = img.naturalWidth || 800;
+      st.natH = img.naturalHeight || 600;
+    }
+    const viewW = view.clientWidth || window.innerWidth;
+    const viewH = view.clientHeight || window.innerHeight;
+    const availW = Math.max(120, viewW - 24);
+    const availH = Math.max(120, viewH - 40);
+
+    st.fitScale = Math.min(availW / st.natW, availH / st.natH, 1);
+  }, []);
 
   const paint = useCallback((animate: boolean) => {
     const img = imgRef.current;
     if (!img) return;
     const st = s.current;
-    img.style.transition = animate ? "transform 150ms ease-out" : "none";
-    img.style.transform = `translate3d(${st.x}px, ${st.y}px, 0) scale(${st.zoom})`;
-    if (labelRef.current) labelRef.current.textContent = `${Math.round(st.zoom * 100)}%`;
+
+    const baseW = (st.natW || 800) * (st.fitScale || 1);
+    const baseH = (st.natH || 600) * (st.fitScale || 1);
+    const targetW = Math.round(baseW * st.zoom);
+    const targetH = Math.round(baseH * st.zoom);
+
+    img.style.transition = animate ? "transform 140ms ease-out, width 140ms ease-out, height 140ms ease-out" : "none";
+    img.style.width = `${targetW}px`;
+    img.style.height = `${targetH}px`;
+    img.style.maxWidth = "none";
+    img.style.maxHeight = "none";
+    img.style.transform = `translate3d(${st.x}px, ${st.y}px, 0)`;
+
+    if (labelRef.current) {
+      const isNative = Math.abs(st.zoom * st.fitScale - 1) < 0.05;
+      labelRef.current.textContent = isNative ? "1:1" : `${Math.round(st.zoom * 100)}%`;
+    }
   }, []);
 
   const schedulePaint = useCallback(() => {
@@ -72,19 +127,51 @@ export function ImageLightbox({ src, onClose }: ImageLightboxProps) {
     paint(true);
   }, [paint]);
 
+  const toggleNative = useCallback(() => {
+    const st = s.current;
+    if (st.fitScale && st.fitScale < 1) {
+      const nativeZoom = 1 / st.fitScale;
+      if (Math.abs(st.zoom - nativeZoom) < 0.1) {
+        reset();
+      } else {
+        st.zoom = nativeZoom;
+        st.x = 0;
+        st.y = 0;
+        paint(true);
+      }
+    } else {
+      if (st.zoom === 1) zoomAt(2, null, null, true);
+      else reset();
+    }
+  }, [paint, reset, zoomAt]);
+
+  const handleImgLoad = () => {
+    const img = imgRef.current;
+    if (!img) return;
+    s.current.natW = img.naturalWidth;
+    s.current.natH = img.naturalHeight;
+    updateSize();
+    paint(false);
+  };
+
+  useEffect(() => {
+    updateSize();
+    paint(false);
+  }, [updateSize, paint]);
+
   // Non-passive wheel listener (React's onWheel is passive and cannot prevent page scroll)
   useEffect(() => {
     const view = viewRef.current;
     if (!view) return;
     const onWheel = (e: WheelEvent) => {
       e.preventDefault();
-      zoomAt(e.deltaY < 0 ? 1.12 : 1 / 1.12, e.clientX, e.clientY, false);
+      zoomAt(e.deltaY < 0 ? 1.15 : 1 / 1.15, e.clientX, e.clientY, false);
     };
     view.addEventListener("wheel", onWheel, { passive: false });
     return () => view.removeEventListener("wheel", onWheel);
   }, [zoomAt]);
 
-  // Escape closes only the viewer (captured before the editor's own Escape handling)
+  // Escape closes only the viewer
   useEffect(() => {
     const onKey = (e: KeyboardEvent) => {
       if (e.key !== "Escape") return;
@@ -132,7 +219,6 @@ export function ImageLightbox({ src, onClose }: ImageLightboxProps) {
       /* already released */
     }
     if (st.moved) return;
-    // plain click: outside the picture closes, on the picture toggles 1x <-> 2x
     const r = imgRef.current?.getBoundingClientRect();
     const onImage = !!r && e.clientX >= r.left && e.clientX <= r.right && e.clientY >= r.top && e.clientY <= r.bottom;
     if (!onImage) {
@@ -147,15 +233,15 @@ export function ImageLightbox({ src, onClose }: ImageLightboxProps) {
     "grid size-6 place-items-center rounded text-[14px] font-bold text-white/70 transition-colors hover:bg-white/10 hover:text-white cursor-pointer";
 
   return (
-    <div className="fixed inset-0 z-[100] flex select-none flex-col items-center justify-center bg-black/90 p-3">
+    <div className="fixed inset-0 z-[100] flex select-none flex-col items-center justify-center bg-black/92 p-2">
       <div
-        className="z-20 mb-2 flex items-center gap-2 rounded-full border border-white/20 bg-black/80 px-3.5 py-1.5"
+        className="z-20 mb-2 flex items-center gap-1.5 rounded-full border border-white/20 bg-black/85 px-3 py-1.5 shadow-xl backdrop-blur-md"
         onPointerDown={(e) => e.stopPropagation()}
       >
         <button type="button" className={btn} title="Zoom out" onClick={() => zoomAt(1 / 1.25, null, null, true)}>
           -
         </button>
-        <span ref={labelRef} className="min-w-[38px] text-center font-mono text-[10px] font-semibold text-white/90">
+        <span ref={labelRef} className="min-w-[42px] text-center font-mono text-[10px] font-semibold text-white/90">
           100%
         </span>
         <button type="button" className={btn} title="Zoom in" onClick={() => zoomAt(1.25, null, null, true)}>
@@ -163,11 +249,28 @@ export function ImageLightbox({ src, onClose }: ImageLightboxProps) {
         </button>
         <button
           type="button"
-          onClick={reset}
-          title="Reset zoom (100%)"
-          className="ml-1 cursor-pointer rounded bg-white/10 px-1.5 py-0.5 font-mono text-[9.5px] uppercase text-white/90 hover:bg-white/20"
+          onClick={toggleNative}
+          title="Toggle 1:1 original pixel resolution / Fit"
+          className="ml-0.5 cursor-pointer rounded bg-white/10 px-2 py-0.5 font-mono text-[9.5px] uppercase text-white/90 hover:bg-white/20 transition-colors"
         >
           1:1
+        </button>
+        <button
+          type="button"
+          onClick={handleCopy}
+          title="Copy full-resolution image to clipboard"
+          className="flex items-center gap-1 cursor-pointer rounded bg-white/10 px-2 py-0.5 font-mono text-[9.5px] uppercase text-white/90 hover:bg-white/20 transition-colors"
+        >
+          {copied ? <Check size={11} className="text-emerald-400" /> : <Copy size={11} />}
+          <span>{copied ? "Copied" : "Copy"}</span>
+        </button>
+        <button
+          type="button"
+          onClick={() => openExternalUrl(src)}
+          title="Open in external system viewer"
+          className="grid size-6 place-items-center rounded text-white/70 hover:bg-white/10 hover:text-white transition-colors cursor-pointer"
+        >
+          <ExternalLink size={11.5} />
         </button>
         <span className="mx-0.5 h-3 w-px bg-white/20" />
         <button type="button" className={btn} title="Close preview" onClick={onClose}>
@@ -189,10 +292,13 @@ export function ImageLightbox({ src, onClose }: ImageLightboxProps) {
           src={src}
           alt="Preview"
           draggable={false}
-          decoding="async"
-          className="max-h-[78vh] max-w-[90vw] rounded-xl border border-white/20 object-contain"
-          style={{ willChange: "transform", transformOrigin: "center center" }}
-          title="Drag to move | click to toggle 2x | scroll to zoom"
+          onLoad={handleImgLoad}
+          className="rounded-xl border border-white/20 object-contain shadow-2xl"
+          style={{
+            imageRendering: "-webkit-optimize-contrast",
+            transformOrigin: "center center",
+          }}
+          title="Drag to pan | click to toggle 2x | scroll to zoom"
         />
       </div>
     </div>

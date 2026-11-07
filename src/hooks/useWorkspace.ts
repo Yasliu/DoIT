@@ -312,7 +312,13 @@ export function useWorkspace() {
       const name = (note.category || "Uncategorized").trim();
       if (name) names.add(name);
     });
-    return [...names].sort((a, b) => a.localeCompare(b, undefined, { sensitivity: "base" }));
+    return [...names].sort((a, b) => {
+      const aUn = a.toLowerCase() === "uncategorized";
+      const bUn = b.toLowerCase() === "uncategorized";
+      if (aUn && !bUn) return 1;
+      if (!aUn && bUn) return -1;
+      return a.localeCompare(b, undefined, { sensitivity: "base" });
+    });
   }, [categories, notes]);
 
   useEffect(() => {

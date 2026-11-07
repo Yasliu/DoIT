@@ -10,6 +10,7 @@ import {
   Minimize2,
   Plus,
   Save,
+  Smile,
   Trash,
   Type,
   X,
@@ -20,6 +21,10 @@ import type { NoteItem } from "../api/tauriBridge";
 import { NOTE_FONTS, fontStack, tauriApi } from "../api/tauriBridge";
 import { useUndoStack } from "../hooks/useUndoStack";
 import { HeadingSelect } from "./HeadingSelect";
+import { EmojiAutocomplete } from "./EmojiAutocomplete";
+import { EmojiPickerModal } from "./EmojiPickerModal";
+import { EditImageModal } from "./EditImageModal";
+import { ImageContextMenu } from "./ImageContextMenu";
 import { ImageLightbox } from "./ImageLightbox";
 import { InsertMenu } from "./InsertMenu";
 import { ModeToggle } from "./ModeToggle";
@@ -41,9 +46,23 @@ import {
   applyHeading,
   insertTableAtCaret,
   insertCodeBlockAtCaret,
+  applyOrderedList,
+  applyBlockquote,
+  applyDefinitionList,
+  applyInlineCode,
+  applyLink,
+  applyFootnote,
+  applyStrikethrough,
+  applyHighlight,
+  applySubscript,
+  applySuperscript,
+  insertEmojiAtCaret,
+  insertInlineImageAtCaret,
+  insertInlineImageInMarkdown,
   isCaretAtEditorStart,
   placeCaretAtEditorStart,
   fixCheckboxCaret,
+  openExternalUrl,
 } from "../lib/format";
 import { accentFor, cleanText, cx, fullStamp, uid } from "../lib/text";
 
@@ -287,9 +306,27 @@ export function NoteSheet({
 
   // Rich text formatting state
   const editorRef = useRef<HTMLDivElement | null>(null);
+  const rawTextareaRef = useRef<HTMLTextAreaElement | null>(null);
   const [isBoldActive, setIsBoldActive] = useState(false);
   const [isItalicActive, setIsItalicActive] = useState(false);
   const lastNoteIdRef = useRef<string | null>(null);
+
+  // Dedicated Emoji Picker Modal
+  const [showEmojiPicker, setShowEmojiPicker] = useState(false);
+  const [emojiAnchor, setEmojiAnchor] = useState<DOMRect | null>(null);
+
+  // Image context menu & edit modal
+  const [contextMenuImg, setContextMenuImg] = useState<{
+    element: HTMLImageElement;
+    x: number;
+    y: number;
+  } | null>(null);
+  const [editImgModal, setEditImgModal] = useState<{
+    element: HTMLImageElement;
+    alt: string;
+    src: string;
+    refKey?: string;
+  } | null>(null);
 
   const updateActiveFormatting = () => {
     setIsBoldActive(isRichBoldActive());
@@ -345,14 +382,6 @@ export function NoteSheet({
     }
   };
 
-  const appendImages = (newUrls: string[]) => {
-    const existing = (draftRef.current.media_urls && draftRef.current.media_urls.length > 0)
-      ? draftRef.current.media_urls
-      : (draftRef.current.media_url ? [draftRef.current.media_url] : []);
-    const merged = [...existing, ...newUrls];
-    edit({ media_urls: merged, media_url: merged[0] });
-  };
-
   const removeImageAt = (index: number) => {
     const existing = (draftRef.current.media_urls && draftRef.current.media_urls.length > 0)
       ? draftRef.current.media_urls
@@ -373,16 +402,30 @@ export function NoteSheet({
     }
     if (files.length === 0) return;
     event.preventDefault();
-    const loaded: string[] = [];
-    let pending = files.length;
     files.forEach((file) => {
       const reader = new FileReader();
       reader.onload = (loadEvt) => {
         const dataUrl = loadEvt.target?.result as string;
-        if (dataUrl) loaded.push(dataUrl);
-        pending -= 1;
-        if (pending === 0 && loaded.length > 0) {
-          appendImages(loaded);
+        if (!dataUrl) return;
+        const altText = file.name ? file.name.replace(/\.[^.]+$/, "") : "Pasted Image";
+        if (rawMode) {
+          const ed = rawTextareaRef.current;
+          const pos = ed?.selectionStart ?? draftRef.current.content.length;
+          const currentMd = contentToMarkdown(draftRef.current.content);
+          const { text, newCaret } = insertInlineImageInMarkdown(currentMd, dataUrl, pos, altText);
+          edit({ content: markdownToContent(text, draftRef.current.content, () => uid("line")) });
+          if (ed) {
+            requestAnimationFrame(() => {
+              ed.selectionStart = newCaret;
+              ed.selectionEnd = newCaret;
+            });
+          }
+        } else {
+          const ed = editorRef.current;
+          if (ed) {
+            insertInlineImageAtCaret(ed, dataUrl, altText);
+            handleEditorInput();
+          }
         }
       };
       reader.readAsDataURL(file);
@@ -395,16 +438,30 @@ export function NoteSheet({
     if (!files || files.length === 0) return;
     const imageFiles = Array.from(files).filter((f) => f.type.startsWith("image/"));
     if (imageFiles.length === 0) return;
-    const loaded: string[] = [];
-    let pending = imageFiles.length;
     imageFiles.forEach((file) => {
       const reader = new FileReader();
       reader.onload = (loadEvt) => {
         const dataUrl = loadEvt.target?.result as string;
-        if (dataUrl) loaded.push(dataUrl);
-        pending -= 1;
-        if (pending === 0 && loaded.length > 0) {
-          appendImages(loaded);
+        if (!dataUrl) return;
+        const altText = file.name ? file.name.replace(/\.[^.]+$/, "") : "Dropped Image";
+        if (rawMode) {
+          const ed = rawTextareaRef.current;
+          const pos = ed?.selectionStart ?? draftRef.current.content.length;
+          const currentMd = contentToMarkdown(draftRef.current.content);
+          const { text, newCaret } = insertInlineImageInMarkdown(currentMd, dataUrl, pos, altText);
+          edit({ content: markdownToContent(text, draftRef.current.content, () => uid("line")) });
+          if (ed) {
+            requestAnimationFrame(() => {
+              ed.selectionStart = newCaret;
+              ed.selectionEnd = newCaret;
+            });
+          }
+        } else {
+          const ed = editorRef.current;
+          if (ed) {
+            insertInlineImageAtCaret(ed, dataUrl, altText);
+            handleEditorInput();
+          }
         }
       };
       reader.readAsDataURL(file);
@@ -1049,12 +1106,42 @@ export function NoteSheet({
               editorRef={editorRef}
               onInsertTable={() => runEditorCommand((ed) => insertTableAtCaret(ed))}
               onInsertTask={() => runEditorCommand((ed) => applyTask(ed))}
+              onInsertOrderedList={() => runEditorCommand((ed) => applyOrderedList(ed))}
+              onInsertBlockquote={() => runEditorCommand((ed) => applyBlockquote(ed))}
               onInsertCode={() => runEditorCommand((ed) => insertCodeBlockAtCaret(ed))}
+              onInsertDefinitionList={() => runEditorCommand((ed) => applyDefinitionList(ed))}
               onAttachImage={() => fileInputRef.current?.click()}
+              onInsertInlineCode={() => runEditorCommand((ed) => applyInlineCode(ed))}
+              onInsertLink={() => runEditorCommand((ed) => applyLink(ed))}
+              onInsertFootnote={() => runEditorCommand((ed) => applyFootnote(ed))}
+              onInsertStrikethrough={() => runEditorCommand((ed) => applyStrikethrough(ed))}
+              onInsertHighlight={() => runEditorCommand((ed) => applyHighlight(ed))}
+              onInsertSubscript={() => runEditorCommand((ed) => applySubscript(ed))}
+              onInsertSuperscript={() => runEditorCommand((ed) => applySuperscript(ed))}
               hasMedia={Boolean((draft.media_urls && draft.media_urls.length > 0) || draft.media_url)}
               large={isMaximized}
               compact={isVeryTight}
             />
+
+            <button
+              type="button"
+              onMouseDown={(e) => e.preventDefault()}
+              onClick={(e) => {
+                const rect = e.currentTarget.getBoundingClientRect();
+                setEmojiAnchor(rect);
+                setShowEmojiPicker((v) => !v);
+              }}
+              aria-label="Emoji Picker"
+              title="Insert Emoji (:name:)"
+              data-active={showEmojiPicker || undefined}
+              className={cx(
+                "icon-btn cursor-pointer shrink-0 transition-all duration-150 ease-out",
+                isMaximized ? "!size-8.5" : (isVeryTight ? "!size-6.5" : "!size-7"),
+                showEmojiPicker && "!bg-white/20 !text-white",
+              )}
+            >
+              <Smile size={isMaximized ? 14.5 : (isVeryTight ? 11.5 : 12.5)} strokeWidth={2.2} />
+            </button>
 
             <input
               ref={fileInputRef}
@@ -1066,16 +1153,30 @@ export function NoteSheet({
                 const files = e.target.files;
                 if (!files || files.length === 0) return;
                 const imageFiles = Array.from(files);
-                const loaded: string[] = [];
-                let pending = imageFiles.length;
                 imageFiles.forEach((file) => {
                   const reader = new FileReader();
                   reader.onload = (loadEvt) => {
                     const dataUrl = loadEvt.target?.result as string;
-                    if (dataUrl) loaded.push(dataUrl);
-                    pending -= 1;
-                    if (pending === 0 && loaded.length > 0) {
-                      appendImages(loaded);
+                    if (!dataUrl) return;
+                    const altText = file.name ? file.name.replace(/\.[^.]+$/, "") : "Attached Image";
+                    if (rawMode) {
+                      const ed = rawTextareaRef.current;
+                      const pos = ed?.selectionStart ?? draftRef.current.content.length;
+                      const currentMd = contentToMarkdown(draftRef.current.content);
+                      const { text, newCaret } = insertInlineImageInMarkdown(currentMd, dataUrl, pos, altText);
+                      edit({ content: markdownToContent(text, draftRef.current.content, () => uid("line")) });
+                      if (ed) {
+                        requestAnimationFrame(() => {
+                          ed.selectionStart = newCaret;
+                          ed.selectionEnd = newCaret;
+                        });
+                      }
+                    } else {
+                      const ed = editorRef.current;
+                      if (ed) {
+                        insertInlineImageAtCaret(ed, dataUrl, altText);
+                        handleEditorInput();
+                      }
                     }
                   };
                   reader.readAsDataURL(file);
@@ -1144,13 +1245,11 @@ export function NoteSheet({
               adjustZoom(e.deltaY < 0 ? 10 : -10);
             }
           }}
-          className={cx("scroll min-h-0 flex-1 overflow-y-auto", isMaximized ? "px-8 md:px-12" : "px-6")}
+          className={cx("scroll min-h-0 flex-1 overflow-y-auto overflow-x-auto", isMaximized ? "px-8 md:px-12" : "px-6")}
         >
           <div
             className={cx("mx-auto w-full pb-8 pt-2 transition-[zoom] duration-150 origin-top", isMaximized ? "max-w-[960px] pt-4" : "max-w-[760px]")}
-            style={{
-              zoom: `${zoom}%`,
-            }}
+            style={zoom !== 100 ? { zoom: `${zoom}%` } : undefined}
           >
             <input
               ref={titleRef}
@@ -1238,6 +1337,7 @@ export function NoteSheet({
               {rawMode ? (
                 <RawEditor
                   content={draft.content}
+                  textareaRef={rawTextareaRef}
                   minHeight={300}
                   className="text-[13px]"
                   onChange={(content) => commit({ ...draftRef.current, content, last_edited: Date.now() })}
@@ -1260,6 +1360,17 @@ export function NoteSheet({
                   suppressContentEditableWarning
                   onInput={() => handleEditorInput()}
                   onContextMenu={(e) => {
+                    const img = (e.target as HTMLElement).closest("img.md-img") as HTMLImageElement | null;
+                    if (img) {
+                      e.preventDefault();
+                      e.stopPropagation();
+                      setContextMenuImg({
+                        element: img,
+                        x: e.clientX,
+                        y: e.clientY,
+                      });
+                      return;
+                    }
                     const cell = (e.target as HTMLElement).closest("td,th") as HTMLElement | null;
                     if (cell && editorRef.current?.contains(cell)) {
                       e.preventDefault();
@@ -1271,6 +1382,19 @@ export function NoteSheet({
                     if ((e.target as HTMLElement).closest(".md-cb")) e.preventDefault();
                   }}
                   onClick={(e) => {
+                    const img = (e.target as HTMLElement).closest("img.md-img") as HTMLImageElement | null;
+                    if (img) {
+                      e.preventDefault();
+                      setPreviewImage(img.src);
+                      return;
+                    }
+                    const link = (e.target as HTMLElement).closest("a.md-link") as HTMLAnchorElement | null;
+                    if (link && (e.ctrlKey || e.metaKey)) {
+                      e.preventDefault();
+                      const href = link.getAttribute("href");
+                      if (href) openExternalUrl(href);
+                      return;
+                    }
                     if (handleCheckboxClick(e, editorRef.current)) handleEditorInput();
                     if (editorRef.current) fixCheckboxCaret(editorRef.current);
                   }}
@@ -1349,6 +1473,82 @@ export function NoteSheet({
           </div>
         </div>
       </div>
+
+      <EmojiAutocomplete editorRef={editorRef} onEmojiInserted={handleEditorInput} />
+
+      <EmojiPickerModal
+        isOpen={showEmojiPicker}
+        onClose={() => setShowEmojiPicker(false)}
+        anchorRect={emojiAnchor}
+        onSelect={(emoji) => {
+          if (rawMode) {
+            const ed = rawTextareaRef.current;
+            if (ed) {
+              const start = ed.selectionStart;
+              const end = ed.selectionEnd;
+              const val = ed.value;
+              const next = val.slice(0, start) + emoji + val.slice(end);
+              edit({ content: markdownToContent(next, draftRef.current.content, () => uid("line")) });
+              requestAnimationFrame(() => {
+                ed.selectionStart = start + emoji.length;
+                ed.selectionEnd = start + emoji.length;
+                ed.focus();
+              });
+            }
+          } else {
+            runEditorCommand((ed) => insertEmojiAtCaret(ed, emoji));
+            handleEditorInput();
+          }
+        }}
+      />
+
+      {contextMenuImg && (
+        <ImageContextMenu
+          isOpen={Boolean(contextMenuImg)}
+          x={contextMenuImg.x}
+          y={contextMenuImg.y}
+          imgElement={contextMenuImg.element}
+          onClose={() => setContextMenuImg(null)}
+          onZoom={() => {
+            setPreviewImage(contextMenuImg.element.src);
+            setContextMenuImg(null);
+          }}
+          onEdit={() => {
+            setEditImgModal({
+              element: contextMenuImg.element,
+              alt: contextMenuImg.element.alt || "Image",
+              src: contextMenuImg.element.src,
+              refKey: contextMenuImg.element.getAttribute("data-ref") || undefined,
+            });
+            setContextMenuImg(null);
+          }}
+          onDelete={() => {
+            contextMenuImg.element.remove();
+            handleEditorInput();
+            setContextMenuImg(null);
+          }}
+        />
+      )}
+
+      <EditImageModal
+        isOpen={Boolean(editImgModal)}
+        onClose={() => setEditImgModal(null)}
+        alt={editImgModal?.alt ?? ""}
+        src={editImgModal?.src ?? ""}
+        refKey={editImgModal?.refKey}
+        onSave={(newAlt) => {
+          if (!editImgModal) return;
+          editImgModal.element.alt = newAlt;
+          const ref = editImgModal.element.getAttribute("data-ref");
+          if (ref) {
+            editImgModal.element.setAttribute("data-md", `![${newAlt}][${ref}]`);
+          } else {
+            editImgModal.element.setAttribute("data-md", `![${newAlt}](${editImgModal.element.src})`);
+          }
+          handleEditorInput();
+          setEditImgModal(null);
+        }}
+      />
 
       {tableMenu && (
         <TableMenu

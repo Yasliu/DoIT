@@ -2,6 +2,7 @@ import React from "react";
 import { convertFileSrc } from "@tauri-apps/api/core";
 import type { ContentItem } from "../api/tauriBridge";
 import { getMarkdownShortcuts, matchesCombo } from "./shortcuts";
+import { EMOJI_MAP } from "./emoji";
 
 /**
  * Renders inline markdown bold and italic formatting without raw asterisks.
@@ -42,6 +43,163 @@ export function renderFormattedText(text: string): React.ReactNode {
  * Converts Markdown text (with **bold** and *italic*) into HTML for a contenteditable rich editor.
  */
 const IMAGE_MD = /!\[([^\]\n]*)\]\(([^)\n]+)\)/g;
+const IMAGE_REF_MD = /!\[([^\]\n]*)\]\[([^\]\n]+)\]/g;
+
+export async function copyImageToClipboard(src: string): Promise<boolean> {
+  if (!src) return false;
+  try {
+    let blob: Blob | null = null;
+    if (src.startsWith("data:image/png;base64,")) {
+      const b64 = src.slice("data:image/png;base64,".length);
+      const binary = atob(b64);
+      const len = binary.length;
+      const bytes = new Uint8Array(len);
+      for (let i = 0; i < len; i++) {
+        bytes[i] = binary.charCodeAt(i);
+      }
+      blob = new Blob([bytes], { type: "image/png" });
+    } else if (src.startsWith("data:")) {
+      blob = await new Promise<Blob | null>((resolve) => {
+        const img = new Image();
+        img.onload = () => {
+          const cvs = document.createElement("canvas");
+          cvs.width = img.naturalWidth || img.width;
+          cvs.height = img.naturalHeight || img.height;
+          const ctx = cvs.getContext("2d");
+          if (!ctx) return resolve(null);
+          ctx.drawImage(img, 0, 0);
+          cvs.toBlob((b) => resolve(b), "image/png");
+        };
+        img.onerror = () => resolve(null);
+        img.src = src;
+      });
+    } else {
+      try {
+        const resp = await fetch(src);
+        const fetchedBlob = await resp.blob();
+        if (fetchedBlob.type === "image/png") {
+          blob = fetchedBlob;
+        } else {
+          const bitmap = await createImageBitmap(fetchedBlob);
+          const cvs = document.createElement("canvas");
+          cvs.width = bitmap.width;
+          cvs.height = bitmap.height;
+          const ctx = cvs.getContext("2d");
+          ctx?.drawImage(bitmap, 0, 0);
+          blob = await new Promise<Blob | null>((resolve) => {
+            cvs.toBlob((b) => resolve(b), "image/png");
+          });
+        }
+      } catch {
+        blob = null;
+      }
+    }
+
+    if (!blob) return false;
+    await navigator.clipboard.write([
+      new ClipboardItem({ "image/png": blob }),
+    ]);
+    return true;
+  } catch (err) {
+    console.error("Failed to copy image to clipboard:", err);
+    return false;
+  }
+}
+
+export function insertInlineImageAtCaret(editor: HTMLElement, base64OrUrl: string, alt = "Pasted Image"): void {
+  let maxN = 0;
+  const imgs = Array.from(editor.querySelectorAll("img[data-ref]"));
+  imgs.forEach((img) => {
+    const m = (img.getAttribute("data-ref") || "").match(/^img-(\d+)$/);
+    if (m) maxN = Math.max(maxN, parseInt(m[1], 10));
+  });
+  const text = editor.innerText || editor.textContent || "";
+  const matches = text.matchAll(/\[img-(\d+)\]/g);
+  for (const m of matches) {
+    maxN = Math.max(maxN, parseInt(m[1], 10));
+  }
+  const nextId = `img-${maxN + 1}`;
+
+  const img = document.createElement("img");
+  img.className = "md-img";
+  img.contentEditable = "false";
+  img.draggable = false;
+  img.alt = alt;
+  img.src = base64OrUrl;
+  img.setAttribute("data-ref", nextId);
+  img.setAttribute("data-md", `![${alt}][${nextId}]`);
+
+  const nextLine = document.createElement("div");
+  const br = document.createElement("br");
+  nextLine.appendChild(br);
+
+  const sel = window.getSelection();
+  if (sel && sel.rangeCount > 0 && editor.contains(sel.getRangeAt(0).startContainer)) {
+    const range = sel.getRangeAt(0);
+    range.deleteContents();
+
+    let block: Node | null = range.startContainer;
+    while (block && block.parentNode !== editor && block !== editor) {
+      block = block.parentNode;
+    }
+
+    if (block && block !== editor && block.parentNode === editor) {
+      range.insertNode(img);
+      block.parentNode.insertBefore(nextLine, block.nextSibling);
+    } else {
+      range.insertNode(img);
+      img.after(nextLine);
+    }
+
+    const newRange = document.createRange();
+    newRange.setStart(nextLine, 0);
+    newRange.collapse(true);
+    sel.removeAllRanges();
+    sel.addRange(newRange);
+  } else {
+    const imgDiv = document.createElement("div");
+    imgDiv.appendChild(img);
+    editor.appendChild(imgDiv);
+    editor.appendChild(nextLine);
+
+    if (sel) {
+      const newRange = document.createRange();
+      newRange.setStart(nextLine, 0);
+      newRange.collapse(true);
+      sel.removeAllRanges();
+      sel.addRange(newRange);
+    }
+  }
+}
+
+export function insertInlineImageInMarkdown(
+  md: string,
+  base64OrUrl: string,
+  caretPos: number,
+  alt = "Pasted Image"
+): { text: string; newCaret: number } {
+  let maxN = 0;
+  const matches = md.matchAll(/\[img-(\d+)\]/g);
+  for (const m of matches) {
+    maxN = Math.max(maxN, parseInt(m[1], 10));
+  }
+  const nextId = `img-${maxN + 1}`;
+  const tag = `![${alt}][${nextId}]`;
+
+  const before = md.slice(0, caretPos);
+  const after = md.slice(caretPos);
+
+  const prefix = before.length > 0 && !before.endsWith("\n") ? "\n" : "";
+  const insertedSegment = `${prefix}${tag}\n`;
+  const newTagInserted = `${before}${insertedSegment}${after}`;
+  const newDef = `[${nextId}]: ${base64OrUrl}`;
+  const finalMd = `${newTagInserted.trimEnd()}\n\n${newDef}`;
+
+  return {
+    text: finalMd,
+    newCaret: caretPos + insertedSegment.length,
+  };
+}
 
 const escapeHtml = (s: string) => s.replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;");
 const escapeAttr = (s: string) => escapeHtml(s).replace(/"/g, "&quot;");
@@ -59,10 +217,17 @@ function resolveImageSrc(raw: string): string | null {
   return null;
 }
 
-export function inlineMarkdownToHtml(line: string): string {
-  // Pull images out first so their paths are never touched by bold/italic rules
+export function openExternalUrl(url: string): void {
+  if (!url) return;
+  void import("@tauri-apps/plugin-opener")
+    .then((m) => m.openUrl(url))
+    .catch(() => window.open(url, "_blank", "noopener,noreferrer"));
+}
+
+export function inlineMarkdownToHtml(line: string, refMap?: Map<string, string>): string {
+  // Pull images out first so their paths are never touched by other rules
   const images: string[] = [];
-  const work = line.replace(IMAGE_MD, (match: string, alt: string, src: string) => {
+  let work = line.replace(IMAGE_MD, (match: string, alt: string, src: string) => {
     const url = resolveImageSrc(src);
     if (!url) return match;
     images.push(
@@ -71,7 +236,33 @@ export function inlineMarkdownToHtml(line: string): string {
     return `\u0001${images.length - 1}\u0002`;
   });
 
+  // Reference-style images: ![alt][ref-id]
+  work = work.replace(IMAGE_REF_MD, (match: string, alt: string, refId: string) => {
+    const rawSrc = refMap?.get(refId.trim().toLowerCase());
+    const url = rawSrc ? resolveImageSrc(rawSrc) : null;
+    if (!url) return match;
+    images.push(
+      `<img class="md-img" contenteditable="false" draggable="false" data-ref="${escapeAttr(refId.trim())}" data-md="${escapeAttr(match)}" alt="${escapeAttr(alt)}" src="${escapeAttr(url)}" />`,
+    );
+    return `\u0001${images.length - 1}\u0002`;
+  });
+
+  // Pull links out next: [title](url)
+  const links: string[] = [];
+  work = work.replace(/\[([^\]\n]+)\]\(([^)\n\s]+)\)/g, (_m: string, title: string, url: string) => {
+    links.push(
+      `<a class="md-link" href="${escapeAttr(url)}" target="_blank" rel="noopener noreferrer" title="Ctrl+Click to open: ${escapeAttr(url)}">${escapeHtml(title)}</a>`,
+    );
+    return `\u0003${links.length - 1}\u0004`;
+  });
+
   let formatted = escapeHtml(work);
+
+  // Emojis: :name: -> emoji
+  formatted = formatted.replace(/:([a-z0-9_+-]+):/g, (match, name) => EMOJI_MAP[name] ?? match);
+
+  // Footnote references: [^1]
+  formatted = formatted.replace(/\[\^([^\]\n]+)\](?!:)/g, '<sup class="md-footnote-ref" data-fn="$1">[$1]</sup>');
 
   // Replace bold+italic ***text*** -> <strong><em>text</em></strong>
   formatted = formatted.replace(/\*\*\*([^*]+?)\*\*\*/g, "<strong><em>$1</em></strong>");
@@ -79,9 +270,20 @@ export function inlineMarkdownToHtml(line: string): string {
   formatted = formatted.replace(/\*\*([^*]+?)\*\*/g, "<strong>$1</strong>");
   // Replace italic *text* -> <em>text</em>
   formatted = formatted.replace(/(?<!\*)\*([^*]+?)\*(?!\*)/g, "<em>$1</em>");
-  // Replace inline code `text` -> <code class="md-code">text</code>
-  formatted = formatted.replace(/(?<!`)(`)([^`\n]+?)\1(?!`)/g, '<code class="md-code">$2</code>');
+  // Replace strikethrough ~~text~~ -> <del class="md-del">$1</del>
+  formatted = formatted.replace(/~~([^~\n]+?)~~/g, '<del class="md-del">$1</del>');
+  // Replace highlight ===text=== or ==text== -> <mark class="md-mark">$1</mark>
+  formatted = formatted.replace(/(?:===|==)([^=\n]+?)(?:===|==)/g, '<mark class="md-mark">$1</mark>');
+  // Replace inline code `text` -> <code class="md-code">$2</code>
+  formatted = formatted.replace(/(?<!`)([`])([^`\n]+?)\1(?!`)/g, '<code class="md-code">$2</code>');
+  // Replace subscript ~text~ (single ~ not adjacent to ~)
+  formatted = formatted.replace(/(?<!~)~([^~\s\n]+?)~(?!~)/g, '<sub class="md-sub">$1</sub>');
+  // Replace superscript ^text^ or letter^number (e.g. x^2)
+  formatted = formatted.replace(/\^([^^ \n]+?)\^/g, '<sup class="md-sup">$1</sup>');
+  formatted = formatted.replace(/([a-zA-Z0-9])\^(\d+)\b/g, '$1<sup class="md-sup">$2</sup>');
 
+  // Restore links and images
+  formatted = formatted.replace(/\u0003(\d+)\u0004/g, (_m: string, i: string) => links[Number(i)] ?? "");
   return formatted.replace(/\u0001(\d+)\u0002/g, (_m: string, i: string) => images[Number(i)] ?? "");
 }
 
@@ -123,6 +325,15 @@ function blockPrefix(text: string, typed = false): { cls: string; prefix: string
       };
     }
   }
+  const ol = text.match(/^(\s*\d+\.\s+)/);
+  if (ol) return { cls: "md-ol", prefix: ol[1], consumed: ol[1].length };
+
+  const fn = text.match(/^(\[\^([^\]\n]+)\]:\s*)/);
+  if (fn) return { cls: "md-footnote-def", prefix: fn[1], consumed: fn[1].length };
+
+  const dl = text.match(/^(:{1,2}\s+)/);
+  if (dl) return { cls: "md-dd", prefix: dl[1], consumed: dl[1].length };
+
   const h = text.match(/^(#{1,6})\s+/);
   if (h) return { cls: `md-h${h[1].length}`, prefix: h[0], consumed: h[0].length };
   const li = text.match(/^(\s*[-*\u2022]\s+)/);
@@ -202,11 +413,26 @@ export function insertCodeBlockAtCaret(editor: HTMLElement, lang = ""): void {
 export function markdownToHtml(md: string): string {
   if (!md) return "<div><br></div>";
   const lines = md.split("\n");
+
+  // Pre-collect reference definitions: [img-1]: data:image/png;base64,...
+  const refMap = new Map<string, string>();
+  for (const line of lines) {
+    const m = line.match(/^\s*\[([a-zA-Z0-9_\-]+)\]:\s*(\S+)\s*$/);
+    if (m) {
+      refMap.set(m[1].toLowerCase(), m[2]);
+    }
+  }
+
   const out: string[] = [];
 
   for (let i = 0; i < lines.length; i++) {
     const line = lines[i];
     const t = line.trim();
+
+    // Skip image reference definition lines from visible block rendering
+    if (/^\s*\[([a-zA-Z0-9_\-]+)\]:\s*(\S+)\s*$/.test(line)) {
+      continue;
+    }
 
     const fence = t.match(/^(`{3,}|~{3,})\s*([^\s`]*)\s*$/);
     if (fence) {
@@ -245,13 +471,14 @@ export function markdownToHtml(md: string): string {
     if (info) {
       const rest = line.slice(info.consumed);
       const cb = info.cls.startsWith("md-task") ? CHECKBOX_HTML : "";
+      const fnBadge = info.cls === "md-footnote-def" ? `<span class="md-fn-badge" contenteditable="false">${escapeHtml(info.prefix)}</span>` : "";
       out.push(
-        `<div class="${info.cls}" data-p="${escapeAttr(info.prefix)}">${cb}${rest ? inlineMarkdownToHtml(rest) : "<br>"}</div>`,
+        `<div class="${info.cls}" data-p="${escapeAttr(info.prefix)}">${cb}${fnBadge}${rest ? inlineMarkdownToHtml(rest, refMap) : "<br>"}</div>`,
       );
       continue;
     }
 
-    out.push(line ? `<div>${inlineMarkdownToHtml(line)}</div>` : "<div><br></div>");
+    out.push(line ? `<div>${inlineMarkdownToHtml(line, refMap)}</div>` : "<div><br></div>");
   }
 
   return out.join("");
@@ -395,7 +622,289 @@ function ensureCheckbox(block: HTMLElement, placeCaret: boolean): void {
  * lines (marker moves into data-p, never shown) and turns a typed "| a | b |" + "|---|---|" pair into a table.
  */
 export function normalizeEditor(editor: HTMLElement): void {
+
+function convertInlineInTextNodes(container: HTMLElement): void {
+  const sel = window.getSelection();
+  const anchorNode = sel?.anchorNode;
+  const anchorOffset = sel?.anchorOffset ?? 0;
+
+  const walker = document.createTreeWalker(container, NodeFilter.SHOW_TEXT);
+  const textNodes: Text[] = [];
+  let n = walker.nextNode();
+  while (n) {
+    const parent = n.parentElement;
+    if (
+      parent &&
+      !parent.closest("pre") &&
+      !parent.closest("code.md-code") &&
+      !parent.closest("a.md-link") &&
+      !parent.classList.contains("md-cb") &&
+      !parent.classList.contains("md-fn-badge") &&
+      !parent.classList.contains("md-footnote-ref")
+    ) {
+      textNodes.push(n as Text);
+    }
+    n = walker.nextNode();
+  }
+
+  for (const node of textNodes) {
+    const val = node.data;
+    if (!val) continue;
+
+    // 1. Emoji :name:
+    const emojiMatch = val.match(/:([a-z0-9_+-]+):/);
+    if (emojiMatch && EMOJI_MAP[emojiMatch[1]]) {
+      const emojiChar = EMOJI_MAP[emojiMatch[1]];
+      const startIdx = emojiMatch.index!;
+      const endIdx = startIdx + emojiMatch[0].length;
+      const isCaretHere = anchorNode === node && anchorOffset >= endIdx;
+      const before = val.slice(0, startIdx);
+      const after = val.slice(endIdx);
+      node.data = before + emojiChar + after;
+      if (isCaretHere && sel) {
+        const r = document.createRange();
+        r.setStart(node, startIdx + emojiChar.length);
+        r.collapse(true);
+        sel.removeAllRanges();
+        sel.addRange(r);
+      }
+      return;
+    }
+
+    // 2. Inline Code `code`
+    const codeMatch = val.match(/(?<!`)([`])([^`\n]+)\1(?!`)/);
+    if (codeMatch && codeMatch.index !== undefined) {
+      const startIdx = codeMatch.index;
+      const fullLen = codeMatch[0].length;
+      const innerText = codeMatch[2];
+      const isCaretAtEnd = anchorNode === node && anchorOffset >= startIdx + fullLen;
+
+      const beforeText = val.slice(0, startIdx);
+      const afterText = val.slice(startIdx + fullLen);
+
+      const codeEl = document.createElement("code");
+      codeEl.className = "md-code";
+      codeEl.textContent = innerText;
+
+      const afterNode = document.createTextNode(afterText || "\u200B");
+      node.data = beforeText;
+      node.after(codeEl);
+      codeEl.after(afterNode);
+
+      if (isCaretAtEnd && sel) {
+        const r = document.createRange();
+        r.setStart(afterNode, afterText ? 0 : 1);
+        r.collapse(true);
+        sel.removeAllRanges();
+        sel.addRange(r);
+      }
+      return;
+    }
+
+    // 3. Strikethrough ~~text~~
+    const delMatch = val.match(/~~([^~\n]+)~~/);
+    if (delMatch && delMatch.index !== undefined) {
+      const startIdx = delMatch.index;
+      const fullLen = delMatch[0].length;
+      const innerText = delMatch[1];
+      const isCaretAtEnd = anchorNode === node && anchorOffset >= startIdx + fullLen;
+
+      const beforeText = val.slice(0, startIdx);
+      const afterText = val.slice(startIdx + fullLen);
+
+      const delEl = document.createElement("del");
+      delEl.className = "md-del";
+      delEl.textContent = innerText;
+
+      const afterNode = document.createTextNode(afterText || "\u200B");
+      node.data = beforeText;
+      node.after(delEl);
+      delEl.after(afterNode);
+
+      if (isCaretAtEnd && sel) {
+        const r = document.createRange();
+        r.setStart(afterNode, afterText ? 0 : 1);
+        r.collapse(true);
+        sel.removeAllRanges();
+        sel.addRange(r);
+      }
+      return;
+    }
+
+    // 4. Highlight ==text== or ===text===
+    const markMatch = val.match(/(?:===|==)([^=\n]+?)(?:===|==)/);
+    if (markMatch && markMatch.index !== undefined) {
+      const startIdx = markMatch.index;
+      const fullLen = markMatch[0].length;
+      const innerText = markMatch[1];
+      const isCaretAtEnd = anchorNode === node && anchorOffset >= startIdx + fullLen;
+
+      const beforeText = val.slice(0, startIdx);
+      const afterText = val.slice(startIdx + fullLen);
+
+      const markEl = document.createElement("mark");
+      markEl.className = "md-mark";
+      markEl.textContent = innerText;
+
+      const afterNode = document.createTextNode(afterText || "\u200B");
+      node.data = beforeText;
+      node.after(markEl);
+      markEl.after(afterNode);
+
+      if (isCaretAtEnd && sel) {
+        const r = document.createRange();
+        r.setStart(afterNode, afterText ? 0 : 1);
+        r.collapse(true);
+        sel.removeAllRanges();
+        sel.addRange(r);
+      }
+      return;
+    }
+
+    // 5. Link [title](url)
+    const linkMatch = val.match(/\[([^\]\n]+)\]\((https?:\/\/[^\s)]+)\)/);
+    if (linkMatch && linkMatch.index !== undefined) {
+      const startIdx = linkMatch.index;
+      const fullLen = linkMatch[0].length;
+      const title = linkMatch[1];
+      const href = linkMatch[2];
+      const isCaretAtEnd = anchorNode === node && anchorOffset >= startIdx + fullLen;
+
+      const beforeText = val.slice(0, startIdx);
+      const afterText = val.slice(startIdx + fullLen);
+
+      const aEl = document.createElement("a");
+      aEl.className = "md-link";
+      aEl.href = href;
+      aEl.target = "_blank";
+      aEl.rel = "noopener noreferrer";
+      aEl.title = `Ctrl+Click to open: ${href}`;
+      aEl.textContent = title;
+
+      const afterNode = document.createTextNode(afterText || "\u200B");
+      node.data = beforeText;
+      node.after(aEl);
+      aEl.after(afterNode);
+
+      if (isCaretAtEnd && sel) {
+        const r = document.createRange();
+        r.setStart(afterNode, afterText ? 0 : 1);
+        r.collapse(true);
+        sel.removeAllRanges();
+        sel.addRange(r);
+      }
+      return;
+    }
+
+    // 6. Footnote ref [^1]
+    const fnMatch = val.match(/\[\^(\d+)\](?!:)/);
+    if (fnMatch && fnMatch.index !== undefined) {
+      const startIdx = fnMatch.index;
+      const fullLen = fnMatch[0].length;
+      const fnNum = fnMatch[1];
+      const isCaretAtEnd = anchorNode === node && anchorOffset >= startIdx + fullLen;
+
+      const beforeText = val.slice(0, startIdx);
+      const afterText = val.slice(startIdx + fullLen);
+
+      const supEl = document.createElement("sup");
+      supEl.className = "md-footnote-ref";
+      supEl.setAttribute("data-fn", fnNum);
+      supEl.setAttribute("contenteditable", "false");
+      supEl.textContent = `[${fnNum}]`;
+
+      const afterNode = document.createTextNode(afterText || "\u200B");
+      node.data = beforeText;
+      node.after(supEl);
+      supEl.after(afterNode);
+
+      if (isCaretAtEnd && sel) {
+        const r = document.createRange();
+        r.setStart(afterNode, afterText ? 0 : 1);
+        r.collapse(true);
+        sel.removeAllRanges();
+        sel.addRange(r);
+      }
+      return;
+    }
+
+    // 7. Subscript ~text~ e.g. H~2~O
+    const subMatch = val.match(/(?<!~)~([^~\s\n]+)~(?!~)/);
+    if (subMatch && subMatch.index !== undefined) {
+      const startIdx = subMatch.index;
+      const fullLen = subMatch[0].length;
+      const innerText = subMatch[1];
+      const isCaretAtEnd = anchorNode === node && anchorOffset >= startIdx + fullLen;
+
+      const beforeText = val.slice(0, startIdx);
+      const afterText = val.slice(startIdx + fullLen);
+
+      const subEl = document.createElement("sub");
+      subEl.className = "md-sub";
+      subEl.textContent = innerText;
+
+      const afterNode = document.createTextNode(afterText || "\u200B");
+      node.data = beforeText;
+      node.after(subEl);
+      subEl.after(afterNode);
+
+      if (isCaretAtEnd && sel) {
+        const r = document.createRange();
+        r.setStart(afterNode, afterText ? 0 : 1);
+        r.collapse(true);
+        sel.removeAllRanges();
+        sel.addRange(r);
+      }
+      return;
+    }
+
+    // 8. Superscript ^text^ e.g. x^2^ or x^2
+    let supMatch = val.match(/\^([^^ \n]+)\^/);
+    let innerSup = "";
+    let sIdx = -1;
+    let sLen = 0;
+
+    if (supMatch && supMatch.index !== undefined) {
+      sIdx = supMatch.index;
+      sLen = supMatch[0].length;
+      innerSup = supMatch[1];
+    } else {
+      const shortMatch = val.match(/([a-zA-Z0-9])\^(\d+)/);
+      if (shortMatch && shortMatch.index !== undefined) {
+        sIdx = shortMatch.index + shortMatch[1].length;
+        sLen = shortMatch[0].length - shortMatch[1].length;
+        innerSup = shortMatch[2];
+      }
+    }
+
+    if (sIdx >= 0) {
+      const isCaretAtEnd = anchorNode === node && anchorOffset >= sIdx + sLen;
+      const beforeText = val.slice(0, sIdx);
+      const afterText = val.slice(sIdx + sLen);
+
+      const supEl = document.createElement("sup");
+      supEl.className = "md-sup";
+      supEl.textContent = innerSup;
+
+      const afterNode = document.createTextNode(afterText || "\u200B");
+      node.data = beforeText;
+      node.after(supEl);
+      supEl.after(afterNode);
+
+      if (isCaretAtEnd && sel) {
+        const r = document.createRange();
+        r.setStart(afterNode, afterText ? 0 : 1);
+        r.collapse(true);
+        sel.removeAllRanges();
+        sel.addRange(r);
+      }
+      return;
+    }
+  }
+}
+
   wrapStrayNodes(editor);
+  convertInlineInTextNodes(editor);
   const caretBlock = currentBlock(editor);
 
   // Fenced code block detection: merge consecutive divs bounded by ``` ... ``` or ~~~ ... ~~~
@@ -537,6 +1046,7 @@ export function handleMarkdownPaste(e: React.ClipboardEvent<HTMLElement>): boole
 export function htmlToMarkdown(container: HTMLElement): string {
   const BLOCK_TAGS = new Set(["DIV", "P", "LI", "UL", "OL", "H1", "H2", "H3", "H4", "H5", "H6", "BLOCKQUOTE", "PRE"]);
   const lines: string[] = [];
+  const refDefinitions = new Map<string, string>();
   let cur = "";
   const flush = () => {
     lines.push(cur);
@@ -554,7 +1064,7 @@ export function htmlToMarkdown(container: HTMLElement): string {
   const walk = (node: Node): void => {
     if (node.nodeType === Node.TEXT_NODE) {
       // Editors are white-space: pre-wrap, so a pasted "\n" inside a text node is a real line break
-      const parts = (node.textContent || "").replace(/\u00a0/g, " ").split(/\r\n|\r|\n/);
+      const parts = (node.textContent || "").replace(/\u200B/g, "").replace(/\u00a0/g, " ").split(/\r\n|\r|\n/);
       parts.forEach((part, i) => {
         if (i > 0) flush();
         cur += part;
@@ -566,7 +1076,26 @@ export function htmlToMarkdown(container: HTMLElement): string {
     const el = node as HTMLElement;
     const tag = el.tagName.toUpperCase();
 
-    if (el.classList.contains("md-cb")) return;
+    if (el.classList.contains("md-cb") || el.classList.contains("md-fn-badge")) return;
+
+    if (tag === "A") {
+      const href = el.getAttribute("href") || "";
+      const text = (el.textContent || "").replace(/\u200B/g, "");
+      cur += `[${text}](${href})`;
+      return;
+    }
+
+    if (tag === "CODE" || el.classList.contains("md-code")) {
+      const codeText = (el.textContent || "").replace(/\u200B/g, "");
+      cur += `\`${codeText}\``;
+      return;
+    }
+
+    if (el.classList.contains("md-footnote-ref") || (tag === "SUP" && el.hasAttribute("data-fn"))) {
+      const fnId = el.getAttribute("data-fn") || (el.textContent || "").replace(/[\[\]\u200B]/g, "") || "1";
+      cur += `[^${fnId}]`;
+      return;
+    }
 
     if (el.classList.contains("md-tablewrap")) {
       if (cur !== "") flush();
@@ -592,7 +1121,17 @@ export function htmlToMarkdown(container: HTMLElement): string {
     }
 
     if (tag === "IMG") {
-      cur += el.getAttribute("data-md") ?? "";
+      const refId = el.getAttribute("data-ref");
+      const alt = el.getAttribute("alt") || "Image";
+      const src = el.getAttribute("src") || "";
+      if (refId) {
+        cur += `![${alt}][${refId}]`;
+        if (src) {
+          refDefinitions.set(refId, src);
+        }
+      } else {
+        cur += el.getAttribute("data-md") || `![${alt}](${src})`;
+      }
       return;
     }
 
@@ -618,18 +1157,29 @@ export function htmlToMarkdown(container: HTMLElement): string {
       el.style.fontWeight === "bold" ||
       parseInt(el.style.fontWeight, 10) >= 600;
     const isItalic = tag === "EM" || tag === "I" || el.style.fontStyle === "italic";
+    const isDel = tag === "DEL" || tag === "S" || tag === "STRIKE" || el.classList.contains("md-del") || (el.style.textDecoration && el.style.textDecoration.includes("line-through"));
+    const isMark = tag === "MARK" || el.classList.contains("md-mark");
+    const isSub = tag === "SUB" || el.classList.contains("md-sub");
+    const isSup = tag === "SUP" || el.classList.contains("md-sup");
 
     const before = cur;
     const startLines = lines.length;
     for (const child of Array.from(el.childNodes)) walk(child);
 
-    if ((isBold || isItalic) && lines.length === startLines) {
+    if ((isBold || isItalic || isDel || isMark || isSub || isSup) && lines.length === startLines) {
       const inner = cur.slice(before.length);
       const trimmed = inner.trim();
       if (trimmed) {
         const lead = inner.match(/^\s*/)?.[0] || "";
         const trail = inner.match(/\s*$/)?.[0] || "";
-        const mark = isBold && isItalic ? "***" : isBold ? "**" : "*";
+        let mark = "";
+        if (isBold && isItalic) mark = "***";
+        else if (isBold) mark = "**";
+        else if (isItalic) mark = "*";
+        else if (isDel) mark = "~~";
+        else if (isMark) mark = "==";
+        else if (isSub) mark = "~";
+        else if (isSup) mark = "^";
         cur = `${before}${lead}${mark}${trimmed}${mark}${trail}`;
       }
     }
@@ -638,7 +1188,15 @@ export function htmlToMarkdown(container: HTMLElement): string {
   for (const child of Array.from(container.childNodes)) walk(child);
   if (cur !== "") flush();
 
-  return lines.join("\n");
+  let result = lines.join("\n").replace(/\n+$/, "");
+  if (refDefinitions.size > 0) {
+    const defs = Array.from(refDefinitions.entries())
+      .map(([k, v]) => `[${k}]: ${v}`)
+      .join("\n");
+    result = `${result}\n\n${defs}`;
+  }
+
+  return result;
 }
 function tableToLines(wrap: HTMLElement): string[] {
   const table = wrap.querySelector("table");
@@ -716,7 +1274,28 @@ export function handleRichEditorKeyDown(
   const headingLevel = matchesCombo(e, sc.h1) ? 1 : matchesCombo(e, sc.h2) ? 2 : matchesCombo(e, sc.h3) ? 3 : 0;
   const wantsTable = matchesCombo(e, sc.table);
   const wantsTask = matchesCombo(e, sc.task);
-  const isShortcut = headingLevel > 0 || wantsTable || wantsTask;
+  const wantsDel = matchesCombo(e, sc.strikethrough);
+  const wantsMark = matchesCombo(e, sc.highlight);
+  const wantsCode = matchesCombo(e, sc.inlineCode);
+  const wantsLink = matchesCombo(e, sc.link);
+  const wantsOl = matchesCombo(e, sc.orderedList);
+  const wantsQuote = matchesCombo(e, sc.blockquote);
+  const wantsSub = matchesCombo(e, sc.subscript);
+  const wantsSup = matchesCombo(e, sc.superscript);
+  const wantsFn = matchesCombo(e, sc.footnote);
+  const isShortcut =
+    headingLevel > 0 ||
+    wantsTable ||
+    wantsTask ||
+    wantsDel ||
+    wantsMark ||
+    wantsCode ||
+    wantsLink ||
+    wantsOl ||
+    wantsQuote ||
+    wantsSub ||
+    wantsSup ||
+    wantsFn;
 
   // ---- inside a table cell ----
   const cell = startEl?.closest("td,th") as HTMLElement | null;
@@ -811,7 +1390,16 @@ export function handleRichEditorKeyDown(
     e.preventDefault();
     if (wantsTable) insertTableAtCaret(editor);
     else if (wantsTask) applyTask(editor);
-    else applyHeading(editor, headingLevel);
+    else if (headingLevel > 0) applyHeading(editor, headingLevel);
+    else if (wantsDel) applyStrikethrough(editor);
+    else if (wantsMark) applyHighlight(editor);
+    else if (wantsCode) applyInlineCode(editor);
+    else if (wantsLink) applyLink(editor);
+    else if (wantsOl) applyOrderedList(editor);
+    else if (wantsQuote) applyBlockquote(editor);
+    else if (wantsSub) applySubscript(editor);
+    else if (wantsSup) applySuperscript(editor);
+    else if (wantsFn) applyFootnote(editor);
     onInput();
     return true;
   }
@@ -821,6 +1409,9 @@ export function handleRichEditorKeyDown(
 
   const isList = block.classList.contains("md-li") || block.classList.contains("md-quote");
   const isTask = block.classList.contains("md-task");
+  const isOl = block.classList.contains("md-ol");
+  const isDd = block.classList.contains("md-dd");
+  const isFnDef = block.classList.contains("md-footnote-def");
   const isHeading = /\bmd-h\d\b/.test(block.className);
   const hasPrefix = block.hasAttribute("data-p");
 
@@ -858,7 +1449,7 @@ export function handleRichEditorKeyDown(
     }
   }
 
-  if (!hasPrefix && !isList && !isTask && !isHeading) {
+  if (!hasPrefix && !isList && !isTask && !isHeading && !isOl && !isDd && !isFnDef) {
     if (e.key === "Backspace" && caretOffsetIn(block, range) === 0) {
       const prev = block.previousElementSibling;
       if (prev && prev instanceof HTMLElement && (prev.classList.contains("md-hr") || prev.hasAttribute("data-raw"))) {
@@ -872,7 +1463,7 @@ export function handleRichEditorKeyDown(
   }
 
   if (e.key === "Enter") {
-    if (isEmpty && (isList || isTask || isHeading)) {
+    if (isEmpty && (isList || isTask || isHeading || isOl || isDd || isFnDef)) {
       // Empty bullet / task / quote / heading line: exit to normal text paragraph!
       e.preventDefault();
       clearPrefix(block);
@@ -903,6 +1494,22 @@ export function handleRichEditorKeyDown(
       const next = document.createElement("div");
       next.setAttribute("data-p", block.getAttribute("data-p") || "- ");
       next.className = block.className || "md-li";
+      next.appendChild(document.createElement("br"));
+      block.after(next);
+      placeCaretStart(next);
+      onInput();
+      return true;
+    }
+
+    if (isOl && caretAtEnd(block, range)) {
+      e.preventDefault();
+      const currentPrefix = block.getAttribute("data-p") || "1. ";
+      const numMatch = currentPrefix.match(/\d+/);
+      const nextNum = numMatch ? parseInt(numMatch[0], 10) + 1 : 1;
+      const nextPrefix = `${nextNum}. `;
+      const next = document.createElement("div");
+      next.setAttribute("data-p", nextPrefix);
+      next.className = "md-ol";
       next.appendChild(document.createElement("br"));
       block.after(next);
       placeCaretStart(next);
@@ -953,7 +1560,7 @@ export function handleRichEditorKeyDown(
       onInput();
       return true;
     }
-    if (isList || isTask || isHeading || hasPrefix) {
+    if (isList || isTask || isHeading || hasPrefix || isOl || isDd || isFnDef) {
       e.preventDefault();
       clearPrefix(block);
       placeCaretStart(block);
@@ -1073,7 +1680,7 @@ function caretAtEnd(block: HTMLElement, range: Range): boolean {
 function clearPrefix(block: HTMLElement): void {
   block.removeAttribute("data-p");
   block.removeAttribute("class");
-  block.querySelectorAll(".md-cb").forEach((b) => b.remove());
+  block.querySelectorAll(".md-cb, .md-fn-badge").forEach((b) => b.remove());
   if (!block.firstChild) block.appendChild(document.createElement("br"));
 }
 
@@ -1341,3 +1948,310 @@ export function deleteTableColumn(cell: HTMLElement): boolean {
   if (target) selectContents(target, true);
   return true;
 }
+
+/**
+ * Wraps the current selection with prefix and suffix, or inserts a placeholder.
+ */
+function applyInlineTag(editor: HTMLElement, tag: string, className: string): void {
+  wrapStrayNodes(editor);
+  const sel = window.getSelection();
+  if (!sel || sel.rangeCount === 0 || !editor.contains(sel.anchorNode)) editor.focus();
+  const currentSel = window.getSelection();
+  if (!currentSel || currentSel.rangeCount === 0) return;
+  const range = currentSel.getRangeAt(0);
+
+  if (range.collapsed) {
+    const el = document.createElement(tag);
+    el.className = className;
+    const zw = document.createTextNode("\u200B");
+    el.appendChild(zw);
+    range.insertNode(el);
+
+    const afterNode = document.createTextNode("\u200B");
+    el.after(afterNode);
+
+    const r = document.createRange();
+    r.setStart(zw, 0);
+    r.collapse(true);
+    currentSel.removeAllRanges();
+    currentSel.addRange(r);
+  } else {
+    const selectedText = range.toString();
+    const el = document.createElement(tag);
+    el.className = className;
+    el.textContent = selectedText;
+    range.deleteContents();
+    range.insertNode(el);
+
+    const afterNode = document.createTextNode("\u200B");
+    el.after(afterNode);
+    const r = document.createRange();
+    r.setStart(afterNode, 1);
+    r.collapse(true);
+    currentSel.removeAllRanges();
+    currentSel.addRange(r);
+  }
+}
+
+export function applyInlineCode(editor: HTMLElement): void {
+  wrapStrayNodes(editor);
+  const sel = window.getSelection();
+  if (!sel || sel.rangeCount === 0 || !editor.contains(sel.anchorNode)) editor.focus();
+  const currentSel = window.getSelection();
+  if (!currentSel || currentSel.rangeCount === 0) return;
+  const range = currentSel.getRangeAt(0);
+
+  const existingCode = (
+    range.startContainer.nodeType === Node.ELEMENT_NODE
+      ? (range.startContainer as HTMLElement)
+      : range.startContainer.parentElement
+  )?.closest("code.md-code") as HTMLElement | null;
+
+  if (existingCode && editor.contains(existingCode)) {
+    let after = existingCode.nextSibling;
+    if (!after) {
+      after = document.createTextNode("\u200B");
+      existingCode.after(after);
+    }
+    const r = document.createRange();
+    r.setStart(after, after.nodeType === Node.TEXT_NODE ? Math.min(1, (after as Text).length) : 0);
+    r.collapse(true);
+    currentSel.removeAllRanges();
+    currentSel.addRange(r);
+    return;
+  }
+
+  if (range.collapsed) {
+    const codeEl = document.createElement("code");
+    codeEl.className = "md-code";
+    const zw = document.createTextNode("\u200B");
+    codeEl.appendChild(zw);
+    range.insertNode(codeEl);
+
+    const afterNode = document.createTextNode("\u200B");
+    codeEl.after(afterNode);
+
+    const r = document.createRange();
+    r.setStart(zw, 0);
+    r.collapse(true);
+    currentSel.removeAllRanges();
+    currentSel.addRange(r);
+  } else {
+    const selectedText = range.toString();
+    const codeEl = document.createElement("code");
+    codeEl.className = "md-code";
+    codeEl.textContent = selectedText;
+    range.deleteContents();
+    range.insertNode(codeEl);
+
+    const afterNode = document.createTextNode("\u200B");
+    codeEl.after(afterNode);
+    const r = document.createRange();
+    r.setStart(afterNode, 1);
+    r.collapse(true);
+    currentSel.removeAllRanges();
+    currentSel.addRange(r);
+  }
+}
+
+export function applyStrikethrough(editor: HTMLElement): void {
+  applyInlineTag(editor, "del", "md-del");
+}
+
+export function applyHighlight(editor: HTMLElement): void {
+  applyInlineTag(editor, "mark", "md-mark");
+}
+
+export function applySubscript(editor: HTMLElement): void {
+  applyInlineTag(editor, "sub", "md-sub");
+}
+
+export function applySuperscript(editor: HTMLElement): void {
+  applyInlineTag(editor, "sup", "md-sup");
+}
+
+export function applyLink(editor: HTMLElement, customUrl?: string): void {
+  wrapStrayNodes(editor);
+  const sel = window.getSelection();
+  if (!sel || sel.rangeCount === 0 || !editor.contains(sel.anchorNode)) editor.focus();
+  const currentSel = window.getSelection();
+  if (!currentSel || currentSel.rangeCount === 0) return;
+  const range = currentSel.getRangeAt(0);
+
+  const selectedText = range.collapsed ? "" : range.toString();
+  const urlPrompt = customUrl ?? window.prompt("Enter link URL:", "https://");
+  if (urlPrompt === null) return;
+  const url = urlPrompt.trim() || "https://";
+
+  let title = selectedText;
+  if (!title) {
+    const titlePrompt = window.prompt("Enter link text:", url);
+    if (titlePrompt === null) return;
+    title = titlePrompt.trim() || url;
+  }
+
+  const a = document.createElement("a");
+  a.className = "md-link";
+  a.href = url;
+  a.target = "_blank";
+  a.rel = "noopener noreferrer";
+  a.title = `Ctrl+Click to open: ${url}`;
+  a.textContent = title;
+
+  range.deleteContents();
+  range.insertNode(a);
+
+  const afterNode = document.createTextNode("\u200B");
+  a.after(afterNode);
+  const r = document.createRange();
+  r.setStart(afterNode, 1);
+  r.collapse(true);
+  currentSel.removeAllRanges();
+  currentSel.addRange(r);
+}
+
+export function applyFootnote(editor: HTMLElement): void {
+  wrapStrayNodes(editor);
+  const sel = window.getSelection();
+  if (!sel || sel.rangeCount === 0 || !editor.contains(sel.anchorNode)) editor.focus();
+  const currentSel = window.getSelection();
+  if (!currentSel || currentSel.rangeCount === 0) return;
+  const range = currentSel.getRangeAt(0);
+
+  const existingRefs = Array.from(editor.querySelectorAll(".md-footnote-ref, .md-footnote-def"));
+  let nextIdx = 1;
+  const nums: number[] = [];
+  existingRefs.forEach((el) => {
+    const fnAttr = el.getAttribute("data-fn");
+    if (fnAttr) {
+      const n = parseInt(fnAttr, 10);
+      if (!isNaN(n)) nums.push(n);
+    }
+    const pAttr = el.getAttribute("data-p");
+    if (pAttr) {
+      const m = pAttr.match(/\[\^(\d+)\]/);
+      if (m) nums.push(parseInt(m[1], 10));
+    }
+  });
+  if (nums.length > 0) nextIdx = Math.max(...nums) + 1;
+
+  // Insert footnote ref tag at caret
+  const sup = document.createElement("sup");
+  sup.className = "md-footnote-ref";
+  sup.setAttribute("data-fn", String(nextIdx));
+  sup.setAttribute("contenteditable", "false");
+  sup.textContent = `[${nextIdx}]`;
+  range.deleteContents();
+  range.insertNode(sup);
+
+  const afterSup = document.createTextNode("\u200B");
+  sup.after(afterSup);
+
+  // Append footnote definition line at bottom
+  const defLine = document.createElement("div");
+  defLine.setAttribute("data-p", `[^${nextIdx}]: `);
+  defLine.className = "md-footnote-def";
+
+  const badge = document.createElement("span");
+  badge.className = "md-fn-badge";
+  badge.setAttribute("contenteditable", "false");
+  badge.textContent = `[^${nextIdx}]: `;
+  defLine.appendChild(badge);
+
+  const textNode = document.createTextNode("Footnote explanation");
+  defLine.appendChild(textNode);
+  editor.appendChild(defLine);
+
+  // Focus and select the explanation text
+  const r = document.createRange();
+  r.selectNodeContents(textNode);
+  currentSel.removeAllRanges();
+  currentSel.addRange(r);
+}
+
+export function applyOrderedList(editor: HTMLElement): void {
+  wrapStrayNodes(editor);
+  let block = currentBlock(editor);
+  if (!block) block = editor.lastElementChild as HTMLElement | null;
+  if (!block) {
+    block = document.createElement("div");
+    block.appendChild(document.createElement("br"));
+    editor.appendChild(block);
+  }
+  if (block.tagName !== "DIV" || isSpecialBlock(block)) return;
+
+  if (block.classList.contains("md-ol")) {
+    clearPrefix(block);
+    return;
+  }
+  block.querySelectorAll(".md-cb, .md-fn-badge").forEach((b) => b.remove());
+  block.setAttribute("data-p", "1. ");
+  block.className = "md-ol";
+}
+
+export function applyBlockquote(editor: HTMLElement): void {
+  wrapStrayNodes(editor);
+  let block = currentBlock(editor);
+  if (!block) block = editor.lastElementChild as HTMLElement | null;
+  if (!block) {
+    block = document.createElement("div");
+    block.appendChild(document.createElement("br"));
+    editor.appendChild(block);
+  }
+  if (block.tagName !== "DIV" || isSpecialBlock(block)) return;
+
+  if (block.classList.contains("md-quote")) {
+    clearPrefix(block);
+    return;
+  }
+  block.querySelectorAll(".md-cb, .md-fn-badge").forEach((b) => b.remove());
+  block.setAttribute("data-p", "> ");
+  block.className = "md-quote";
+}
+
+export function applyDefinitionList(editor: HTMLElement): void {
+  wrapStrayNodes(editor);
+  let block = currentBlock(editor);
+  if (!block) block = editor.lastElementChild as HTMLElement | null;
+  if (!block) {
+    block = document.createElement("div");
+    block.appendChild(document.createElement("br"));
+    editor.appendChild(block);
+  }
+  if (block.tagName !== "DIV" || isSpecialBlock(block)) return;
+
+  if (block.classList.contains("md-dd")) {
+    clearPrefix(block);
+    return;
+  }
+  const termText = block.textContent?.trim() || "Term";
+  block.textContent = termText;
+  block.removeAttribute("data-p");
+  block.removeAttribute("class");
+
+  const defLine = document.createElement("div");
+  defLine.setAttribute("data-p", ": ");
+  defLine.className = "md-dd";
+  defLine.appendChild(document.createTextNode("Definition here"));
+  block.after(defLine);
+
+  selectContents(defLine, true);
+}
+
+export function insertEmojiAtCaret(editor: HTMLElement, emoji: string): void {
+  const sel = window.getSelection();
+  if (!sel || sel.rangeCount === 0 || !editor.contains(sel.anchorNode)) editor.focus();
+  const currentSel = window.getSelection();
+  if (!currentSel || currentSel.rangeCount === 0) return;
+  const range = currentSel.getRangeAt(0);
+
+  const textNode = document.createTextNode(emoji);
+  range.deleteContents();
+  range.insertNode(textNode);
+  const newRange = document.createRange();
+  newRange.setStartAfter(textNode);
+  newRange.collapse(true);
+  currentSel.removeAllRanges();
+  currentSel.addRange(newRange);
+}
+
