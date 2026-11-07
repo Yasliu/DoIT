@@ -2,26 +2,28 @@
   "$schema": "https://schema.tauri.app/config/2",
   "bundle": {
     "targets": [
-      "deb",
       "rpm",
       "appimage"
     ],
     "category": "Productivity",
     "shortDescription": "Local-first notes and tasks on a bento grid",
-    "linux": {
-      "deb": {
-        "desktopTemplate": "linux/doit.desktop"
-      },
-      "rpm": {
-        "desktopTemplate": "linux/doit.desktop"
-      }
-    },
+    "longDescription": "DoIT keeps notes and task lists on a bento grid of shelves, stored as plain Markdown files on your own disk. A docking mode keeps a small pill on screen for quick notes.",
+    "publisher": "Yasin Islam",
+    "copyright": "Copyright (c) 2026 Yasin Islam",
+    "license": "MIT",
+    "licenseFile": "../LICENSE",
+    "homepage": "https://github.com/Yasliu/DoIT",
     "icon": [
       "icons/128x128@2x.png",
       "icons/32x32.png",
       "icons/64x64.png",
       "icons/128x128.png",
       "icons/icon.png"
-    ]
+    ],
+    "linux": {
+      "rpm": {
+        "desktopTemplate": "linux/doit.desktop"
+      }
+    }
   }
 }

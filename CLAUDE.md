@@ -40,7 +40,8 @@ React + TypeScript frontend, Rust backend. Shipped for Windows; a Linux port is 
 - Dev: `npm install`, then `npm run tauri dev`.
 - Frontend typecheck and build: `npm run build`.
 - Rust: `cd src-tauri && cargo check` / `cargo test` (Linux needs the WebKitGTK dev packages, see README).
-- Release: `.github/workflows/release.yml` (Windows). Linux packages (deb, rpm, AppImage):
-  `npx tauri build`; Linux-only config is `src-tauri/tauri.linux.conf.json`, desktop entry
-  `src-tauri/linux/doit.desktop`.
+- Release: a `v*` tag runs `.github/workflows/release.yml` (Windows), then `release-linux.yml` adds
+  the Fedora rpm (self-updating) and an experimental AppImage to the same release and `latest.json`.
+  Local Linux build: `npx tauri build`; Linux-only config `src-tauri/tauri.linux.conf.json`, desktop
+  entry `src-tauri/linux/doit.desktop`.
 - Linux runs through XWayland by default (positioning needs it); set `DOIT_NATIVE_WAYLAND=1` to opt out.
