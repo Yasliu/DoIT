@@ -38,6 +38,7 @@ interface InsertMenuProps {
   hasMedia?: boolean;
   large?: boolean;
   compact?: boolean;
+  onOpenChange?: (open: boolean) => void;
 }
 
 export function InsertMenu({
@@ -59,6 +60,7 @@ export function InsertMenu({
   hasMedia = false,
   large = false,
   compact = false,
+  onOpenChange,
 }: InsertMenuProps) {
   const [open, setOpen] = useState(false);
   const buttonRef = useRef<HTMLButtonElement>(null);
@@ -80,12 +82,17 @@ export function InsertMenu({
     setMenuPos({ left, top, maxHeight });
   }, [open]);
 
+  const closeMenu = () => {
+    setOpen(false);
+    onOpenChange?.(false);
+  };
+
   useEffect(() => {
     if (!open) return;
     const onKey = (e: KeyboardEvent) => {
       if (e.key === "Escape") {
         e.preventDefault();
-        setOpen(false);
+        closeMenu();
       }
     };
     document.addEventListener("keydown", onKey);
@@ -102,7 +109,9 @@ export function InsertMenu({
         savedRangeRef.current = sel.getRangeAt(0).cloneRange();
       }
     }
-    setOpen((v) => !v);
+    const next = !open;
+    setOpen(next);
+    onOpenChange?.(next);
   };
 
   const restoreCaret = () => {
@@ -122,7 +131,7 @@ export function InsertMenu({
   };
 
   const handleAction = (action: () => void) => {
-    setOpen(false);
+    closeMenu();
     restoreCaret();
     action();
   };
@@ -156,11 +165,11 @@ export function InsertMenu({
               className="fixed inset-0 z-[9998]"
               onPointerDown={(e) => {
                 e.stopPropagation();
-                setOpen(false);
+                closeMenu();
               }}
               onClick={(e) => {
                 e.stopPropagation();
-                setOpen(false);
+                closeMenu();
               }}
             />
 

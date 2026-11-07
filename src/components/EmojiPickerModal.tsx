@@ -31,17 +31,26 @@ export function EmojiPickerModal({ isOpen, onClose, onSelect, anchorRect }: Emoj
         onClose();
         return;
       }
-      if (e instanceof MouseEvent && modalRef.current && !modalRef.current.contains(e.target as Node)) {
+      if (e instanceof MouseEvent) {
+        if (modalRef.current && modalRef.current.contains(e.target as Node)) {
+          return;
+        }
+        if (anchorRect) {
+          const { clientX: x, clientY: y } = e;
+          if (x >= anchorRect.left && x <= anchorRect.right && y >= anchorRect.top && y <= anchorRect.bottom) {
+            return;
+          }
+        }
         onClose();
       }
     };
-    document.addEventListener("mousedown", handleDown);
+    document.addEventListener("pointerdown", handleDown, true);
     document.addEventListener("keydown", handleDown);
     return () => {
-      document.removeEventListener("mousedown", handleDown);
+      document.removeEventListener("pointerdown", handleDown, true);
       document.removeEventListener("keydown", handleDown);
     };
-  }, [isOpen, onClose]);
+  }, [isOpen, onClose, anchorRect]);
 
   const filteredEmojis = useMemo(() => {
     let list = EMOJI_LIST;

@@ -166,7 +166,7 @@ pub fn open_tray_mode_inner(
         // the page calls `tray_ready` once mounted, which shows the window (no blank flash)
     } else {
         let _ = tray.show();
-        let _ = tray.set_always_on_top(true);
+        platform::ensure_always_on_top(&tray);
         platform::focus_window(&tray);
         let _ = tray.emit("set-expanded", should_expand);
         if should_expand {

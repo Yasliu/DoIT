@@ -33,6 +33,7 @@ export function TrayPill({ onOpen }: { onOpen: () => void }) {
 
   const onPointerDown = (e: React.PointerEvent) => {
     if (e.button !== 0 || busy.current) return;
+    void tauriApi.ensureDockTopmost();
     setPressed(true);
     const startX = e.screenX;
     const startY = e.screenY;
@@ -77,6 +78,7 @@ export function TrayPill({ onOpen }: { onOpen: () => void }) {
       <motion.div
         onPointerDown={onPointerDown}
         onPointerEnter={() => {
+          void tauriApi.ensureDockTopmost();
           if (!isDraggingRef.current) setHovered(true);
         }}
         onPointerLeave={() => {

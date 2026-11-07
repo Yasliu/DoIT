@@ -676,6 +676,7 @@ export function TrayCompanion() {
   const handleTopBarPointerDown = (e: React.PointerEvent) => {
     if (e.button !== 0) return;
     if (Date.now() < visibilityLockRef.current) return;
+    void tauriApi.ensureDockTopmost();
     const startX = e.screenX;
     const startY = e.screenY;
     const grabX = e.clientX;
@@ -692,6 +693,7 @@ export function TrayCompanion() {
         window.removeEventListener("pointerup", onPointerUp);
         void tauriApi.dragDockWindow(grabX, grabY).then(() => {
           void tauriApi.saveTrayPosition();
+          void tauriApi.ensureDockTopmost();
         });
       }
     };
@@ -1073,6 +1075,9 @@ export function TrayCompanion() {
                 onInsertSuperscript={() => runEditorCommand((ed) => applySuperscript(ed))}
                 hasMedia={Boolean((activeNote.media_urls && activeNote.media_urls.length > 0) || activeNote.media_url)}
                 compact
+                onOpenChange={(isOpen) => {
+                  if (isOpen) setShowEmojiPicker(false);
+                }}
               />
 
               <button

@@ -146,6 +146,40 @@ pub fn set_window_bounds(window: &tauri::WebviewWindow, x: i32, y: i32, w: u32, 
     let _ = window.set_position(tauri::Position::Physical(tauri::PhysicalPosition::new(x, y)));
 }
 
+/// Re-asserts HWND_TOPMOST and always_on_top status on the window.
+/// Called after moves, drags, focus changes, or mode switches so other apps cannot push the dock behind.
+pub fn ensure_always_on_top(window: &tauri::WebviewWindow) {
+    let _ = window.set_always_on_top(true);
+    if let Ok(hwnd) = window.hwnd() {
+        unsafe extern "system" {
+            fn SetWindowPos(
+                hwnd: *mut std::ffi::c_void,
+                hwnd_insert_after: *mut std::ffi::c_void,
+                x: i32,
+                y: i32,
+                cx: i32,
+                cy: i32,
+                flags: u32,
+            ) -> i32;
+        }
+        const HWND_TOPMOST: *mut std::ffi::c_void = -1isize as *mut std::ffi::c_void;
+        const SWP_NOSIZE: u32 = 0x0001;
+        const SWP_NOMOVE: u32 = 0x0002;
+        const SWP_NOACTIVATE: u32 = 0x0010;
+        unsafe {
+            SetWindowPos(
+                hwnd.0,
+                HWND_TOPMOST,
+                0,
+                0,
+                0,
+                0,
+                SWP_NOMOVE | SWP_NOSIZE | SWP_NOACTIVATE,
+            );
+        }
+    }
+}
+
 /// Asks WebView2 to trim its working set (ICoreWebView2_19::MemoryUsageTargetLevel).
 pub fn set_webview_memory_level(window: &tauri::WebviewWindow, low: bool) {
     let _ = window.with_webview(move |webview| unsafe {

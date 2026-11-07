@@ -1145,6 +1145,9 @@ export function NoteSheet({
               hasMedia={Boolean((draft.media_urls && draft.media_urls.length > 0) || draft.media_url)}
               large={isMaximized}
               compact={isVeryTight}
+              onOpenChange={(isOpen) => {
+                if (isOpen) setShowEmojiPicker(false);
+              }}
             />
 
             <button

@@ -39,7 +39,7 @@ mod unix;
 use unix as os;
 
 pub use os::{
-    config_dir, dock_drag_by_app, documents_dir, focus_window, has_tray, init, keep_wm_from_moving, monitor_of_window, prepare_webview, release_webview,
+    config_dir, dock_drag_by_app, documents_dir, ensure_always_on_top, focus_window, has_tray, init, keep_wm_from_moving, monitor_of_window, prepare_webview, release_webview,
     set_webview_memory_level, set_window_bounds,
     system_fonts, work_area,
     DOCK_WINDOW_RESIZABLE, TRAY_SKIPS_TASKBAR,

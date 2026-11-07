@@ -72,6 +72,14 @@ pub fn run() {
                 }
             }
 
+            if let tauri::WindowEvent::Focused(focused) = event {
+                if label == "tray" && *focused {
+                    if let Some(tray) = window.app_handle().get_webview_window("tray") {
+                        platform::ensure_always_on_top(&tray);
+                    }
+                }
+            }
+
             if let tauri::WindowEvent::Resized(_) = event {
                 if label == "main" {
                     if let Ok(is_min) = window.is_minimized() {
@@ -247,6 +255,7 @@ pub fn run() {
             commands::window::start_drag,
             commands::window::begin_dock_drag,
             commands::window::end_dock_drag,
+            commands::window::ensure_dock_topmost,
             commands::window::save_tray_position,
             commands::window::restart_app,
             commands::window::quit_app,

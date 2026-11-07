@@ -65,7 +65,7 @@ pub fn tray_ready(window: tauri::WebviewWindow) -> String {
         position_tray_on_monitor(&window, m, start_expanded);
     }
     let _ = window.show();
-    let _ = window.set_always_on_top(true);
+    platform::ensure_always_on_top(&window);
     platform::keep_wm_from_moving(&window);
     platform::focus_window(&window);
     if start_expanded {
@@ -135,6 +135,7 @@ pub fn set_tray_mode(app: AppHandle, mode: String) -> Result<QuadrantInfo, Strin
 
     lock_window_transition(250);
     platform::set_window_bounds(&tray, x, y, w as u32, h as u32);
+    platform::ensure_always_on_top(&tray);
     if mode == "pill" {
         flush_webview_memory(&tray);
         platform::set_webview_memory_level(&tray, true);
@@ -171,7 +172,18 @@ pub fn begin_dock_drag(window: tauri::WebviewWindow, grab_x: f64, grab_y: f64) -
 #[tauri::command]
 pub fn end_dock_drag(app: AppHandle) -> Result<(), String> {
     crate::window::drag::end();
+    if let Some(tray) = app.get_webview_window("tray") {
+        platform::ensure_always_on_top(&tray);
+    }
     save_tray_position(app)
+}
+
+#[tauri::command]
+pub fn ensure_dock_topmost(app: AppHandle) -> Result<(), String> {
+    if let Some(tray) = app.get_webview_window("tray") {
+        platform::ensure_always_on_top(&tray);
+    }
+    Ok(())
 }
 
 #[tauri::command]
@@ -200,7 +212,9 @@ pub fn save_tray_position(app: AppHandle) -> Result<(), String> {
 
                 // Desktop Screen Edge Constraints: Enforce physical screen blockage
                 if clamped_x != pos.x || clamped_y != pos.y {
-                    let _ = tray_win.set_position(tauri::Position::Physical(tauri::PhysicalPosition::new(clamped_x, clamped_y)));
+                    platform::set_window_bounds(&tray_win, clamped_x, clamped_y, win_size.width, win_size.height);
+                } else {
+                    platform::ensure_always_on_top(&tray_win);
                 }
 
                 let clamped_pos = tauri::PhysicalPosition::new(clamped_x, clamped_y);
