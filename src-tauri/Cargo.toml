@@ -32,6 +32,12 @@ pulldown-cmark = { version = "0.12", default-features = false }
 webview2-com = "0.39"
 windows-core = "0.62"
 
+[target.'cfg(target_os = "linux")'.dependencies]
+webkit2gtk = { version = "2.0.2", features = ["v2_40"] }
+gio = "0.18"
+gtk = "0.18"
+gdkx11 = "0.18"
+
 # Read the optimization guideline for more details: https://tauri.app/concept/size/#cargo-configuration
 [profile.release]
 codegen-units = 1

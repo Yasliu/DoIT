@@ -1,4 +1,5 @@
 import type { NoteItem } from "../api/tauriBridge";
+import { pick } from "../platform";
 
 export const cx = (...parts: Array<string | false | null | undefined>) =>
   parts.filter(Boolean).join(" ");
@@ -100,7 +101,11 @@ export function edgeOpacity(ts: number, now = Date.now()): number {
   return Math.max(0.22, 0.9 - days * 0.075);
 }
 
-const ACCENTS = ["#f2f2f4", "#cfd0d5", "#a6a8af", "#7c7f87", "#5a5d65", "#43464d"];
+// Modern themes can be light, so there the ramp runs from the theme's text colour toward its canvas.
+const ACCENTS = pick(
+  ["#f2f2f4", "#cfd0d5", "#a6a8af", "#7c7f87", "#5a5d65", "#43464d"],
+  [92, 78, 64, 52, 42, 34].map((share) => `color-mix(in oklab, var(--l-text) ${share}%, var(--l-canvas))`),
+);
 
 /** Shelves are told apart by luminance, never by hue. */
 export function accentFor(name: string, shelves: string[]): string {
