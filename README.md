@@ -9,6 +9,7 @@
 No cloud. No accounts. No tracking. Your notes are plain Markdown files on your own machine.
 
 [![Latest release](https://img.shields.io/github/v/release/Yasliu/DoIT)](https://github.com/Yasliu/DoIT/releases)
+[![Microsoft Store](https://img.shields.io/badge/download-Microsoft%20Store-0078D4)](https://apps.microsoft.com/detail/9PMXDXXKJDFG?hl=en-us&gl=US&ocid=pdpshare)
 [![License](https://img.shields.io/github/license/Yasliu/DoIT)](LICENSE)
 [![Platform](https://img.shields.io/badge/platform-Windows-blue)]()
 [![Built with](https://img.shields.io/badge/built%20with-Tauri%20%2B%20Rust-2494EA)](https://v2.tauri.app/)
@@ -27,7 +28,7 @@ Most note apps want an account before they want your thoughts. DoIT doesn't. Eve
 - **Open external files in place.** Point DoIT at any `.md` or `.txt` and edit it where it lives. Externally opened files save with an explicit Save; DoIT's own notes always autosave.
 - **A canvas, not a list.** An asymmetric bento grid that grows each card to match its content density — paragraph, table, checklist, or code.
 - **Tray-native.** Folds into the Windows system tray and comes back instantly.
-- **Light.** Native Rust via Tauri v2, flat idle footprint under 20 MB RAM.
+- **Light.** Native Rust via Tauri v2. Idles under 20 MB RAM. The built-in web view adds around 180 MB while you're actively editing.
 - **Zero cloud, zero accounts, zero tracking.** No remote auth, no telemetry, MIT-licensed source.
 
 <p align="center">
@@ -48,11 +49,11 @@ DoIT lives in the system tray as a floating companion — one click expands it i
 
 ## Getting started
 
-1. Download the standalone installer from the [Releases](https://github.com/Yasliu/DoIT/releases) page.
+1. Install from the [Microsoft Store](https://apps.microsoft.com/detail/9PMXDXXKJDFG?hl=en-us&gl=US&ocid=pdpshare), or grab the standalone installer from the [Releases](https://github.com/Yasliu/DoIT/releases) page.
 2. Run the setup wizard and pick your install directory.
 3. On first launch, set your note repository folder in Settings — every note you create lands there as a Markdown file.
 
-> **Windows SmartScreen notice:** DoIT is an independent open-source build, so SmartScreen may show a blue warning. Click **More info → Run anyway**.
+> **Windows SmartScreen notice (standalone installer only):** DoIT is an independent open-source build, so SmartScreen may show a blue warning. Click **More info → Run anyway**. Installing from the Microsoft Store never triggers this.
 
 File handling stays sandboxed: imports are capped at 30 MB and path operations are isolated from administrative elevation.
 
@@ -70,19 +71,43 @@ Drop any `.md` or `.txt` files into your note repository folder, hit **Sync Repo
   <img src="docs/shot-save.jpg" width="700" alt="The Save button for externally opened files">
 </p>
 
-## What's new in v1.1.7
+## What's new in v1.1.9
 
-- Maximized notes now take the full screen and close with a flush slide-out, no dashboard flash underneath
-- Code blocks land properly: typing three backticks creates one instantly, pasted fences convert automatically, and inline code gets real monospace styling
-- The sidebar stopped twitching: stationary track when toggling, tidy vertical stacking when collapsed, and the bento grid holds its layout instead of reshuffling
-- Dock and multi-monitor fixes: the tray companion respects the taskbar and work area on every monitor, and normal screens no longer misfire vertical mode
-- Category icons are here and they persist across restarts, managed in one unified editor with instant search
-- Store-ready packaging: dual NSIS/MSI installers with offline WebView2, plus the official privacy policy linked at the bottom
-
+- Uncategorized is now pinned at the bottom of the sidebar and dashboard
+- Markdown support expanded: numbered lists, inline code, web links, footnotes, definition lists, strikethrough, text highlights, sub/superscript and emoji shortcodes
+- Paste images inline anywhere in a note; a slide-in drawer edits alt text, and one click copies any rendered image
+- A dedicated emoji picker in the toolbar
+- Keyboard shortcuts in Settings reorganized into collapsible categories
+- Card previews no longer clip footnotes or superscripts; text and images stay sharp at every zoom level and display scale
 The full history lives in the release log below.
 
 <details>
 <summary><strong>Release log</strong> (click to expand)</summary>
+
+<details>
+<summary><strong>v1.1.9</strong> — November 7, 2026</summary>
+
+- Uncategorized is now permanently locked to the bottom of the sidebar and dashboard
+- Markdown formatting expanded: numbered lists, inline code, web links, footnotes, definition lists, strikethrough, radiant text highlights, subscript and superscript, emoji shortcodes
+- Inline image pasting inserts images anywhere in a note while keeping the raw markdown clean and compact
+- A smooth slide-in drawer edits image alt text and labels
+- Dedicated emoji picker button in the toolbar; click any rendered image to copy it to your clipboard
+- Keyboard shortcut settings reorganized into collapsible accordion tiles sorted by category
+- Card preview fixes: footnotes and superscripts render cleanly without cut-off text; display scaling fixed so text and images stay sharp at all zoom levels and monitor densities
+
+</details>
+
+<details>
+<summary><strong>v1.1.8</strong> — November 6, 2026</summary>
+
+- Card dragging stays with your mouse: moving notes on your board now stays centered right under your cursor, even when grabbing long notes or scrolling down
+- Neat tool dropdown: grouped the table, checklist, code block, and image buttons into a clean popup menu so toolbar buttons don't get squeezed or cut off when you narrow the note panel
+- Zoom in notes & dock mode: Ctrl + +, Ctrl + - or Ctrl + scroll wheel makes note text bigger or smaller in both the main editor and Dock Mode
+- Simplified category menu: removed redundant buttons so you only see one unified "Rename & icon" option
+- Blurred glass fixed: the blurred glass theme in Settings now activates and looks crisp as intended
+- Bug report button: added a direct "Spotted a bug? Report Here" link in Settings
+
+</details>
 
 <details>
 <summary><strong>v1.1.7</strong> — November 5, 2026</summary>
