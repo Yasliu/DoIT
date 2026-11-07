@@ -57,6 +57,14 @@ DoIT lives in the system tray as a floating companion — one click expands it i
 
 File handling stays sandboxed: imports are capped at 30 MB and path operations are isolated from administrative elevation.
 
+### On Linux
+
+- **No tray icon?** Stock GNOME shows none, so DoIT stays in your dock instead: right-click it for **Open Canvas**, **Switch to Docking Mode** and **Quit DoIT**. Closing the docking pill (Alt+F4, or Quit from the dock) quits DoIT. On desktops with a tray (KDE, GNOME with the AppIndicator extension) it hides to the tray as on Windows.
+- **Keyboard shortcut:** bind `doit --toggle` to a system shortcut (GNOME: Settings → Keyboard → Custom Shortcuts) to flip between the canvas and the dock from anywhere. `--canvas`, `--dock` and `--quit` also work.
+- **Look:** Linux has its own interface with eight themes (Neutral, Orchid, Grove, Ocean, Ember, Iris, Glass and Monochrome); the first six come in light and dark and can follow GNOME's style. Pick one in Settings → Appearance.
+- **AppImage icon:** GNOME shows an app's icon only through an installed desktop entry, which the `.rpm` and `.deb` provide. For the AppImage, integrate it with Gear Lever or AppImageLauncher, or the dock shows a generic icon.
+- **Wayland:** DoIT runs through XWayland so the docking pill can place itself and stay on top. With fractional scaling that can look slightly soft; `DOIT_NATIVE_WAYLAND=1 doit` runs natively and sharp, but GNOME then decides where the pill goes and won't keep it on top.
+
 ## External files: open, edit, sync
 
 DoIT doubles as your external Markdown editor. Right-click any `.md` or `.txt` in Explorer, choose **Open with → DoIT**, and the file opens in place — it is not copied into your DoIT shelf. Edit in MD mode or text mode, then hit **Save** to write it back to the same file. DoIT's own notes autosave as always.
@@ -162,6 +170,8 @@ The full history lives in the release log below.
 **Stack:** Rust + Tauri v2 · TypeScript · Tailwind CSS
 
 **Prerequisites:** C++ build tools, Rust (Cargo), Node.js (npm)
+
+On Linux you also need the WebKitGTK and GTK development packages (Fedora: `webkit2gtk4.1-devel gtk3-devel libappindicator-gtk3-devel librsvg2-devel`; Debian/Ubuntu: `libwebkit2gtk-4.1-dev libgtk-3-dev libayatana-appindicator3-dev librsvg2-dev`).
 
 ```bash
 git clone https://github.com/Yasliu/DoIT.git

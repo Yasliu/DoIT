@@ -2,6 +2,7 @@ import { useEffect, useRef, useState } from "react";
 import { motion } from "motion/react";
 import { Mark } from "./Mark";
 import { tauriApi } from "../api/tauriBridge";
+import { text } from "../platform";
 
 export function TrayPill({ onOpen }: { onOpen: () => void }) {
   const [shown, setShown] = useState(false);
@@ -35,6 +36,8 @@ export function TrayPill({ onOpen }: { onOpen: () => void }) {
     setPressed(true);
     const startX = e.screenX;
     const startY = e.screenY;
+    const grabX = e.clientX;
+    const grabY = e.clientY;
 
     const cleanup = () => {
       window.removeEventListener("pointermove", onMove);
@@ -47,7 +50,7 @@ export function TrayPill({ onOpen }: { onOpen: () => void }) {
         cleanup();
         setPressed(false);
         setHovered(false);
-        void tauriApi.beginDrag().finally(() => {
+        void tauriApi.dragDockWindow(grabX, grabY).finally(() => {
           isDraggingRef.current = false;
           setPressed(false);
           setHovered(false);
@@ -88,7 +91,8 @@ export function TrayPill({ onOpen }: { onOpen: () => void }) {
           scale: pressed ? 0.96 : hovered ? 1.055 : 1,
         }}
         transition={{ type: "spring", stiffness: 420, damping: 24 }}
-        title="Click to open Docking Mode · Hold and drag to move"
+        title={text.pillTitle}
+        data-slot="pill"
         className="box-border flex h-[38px] w-[172px] cursor-pointer items-center justify-center gap-2 overflow-hidden whitespace-nowrap rounded-2xl border border-white/10 text-ink-1"
         style={{
           opacity: shown ? 1 : 0,

@@ -377,6 +377,13 @@ export function useWorkspace() {
     return summary;
   }, []);
 
+  const importFolderAsShelf = useCallback(async (shelf?: string) => {
+    const result = await tauriApi.importFolderAsShelf(shelf);
+    setNotes(result.notes);
+    void tauriApi.getCategories().then(setCategories);
+    return result;
+  }, []);
+
   return {
     notes,
     categories,
@@ -395,6 +402,7 @@ export function useWorkspace() {
     importNoteFile,
     scanFolder,
     pickAndScan,
+    importFolderAsShelf,
   };
 }
 

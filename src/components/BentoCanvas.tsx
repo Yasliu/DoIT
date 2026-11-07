@@ -5,6 +5,7 @@ import { Check, FolderPlus, Plus, X } from "lucide-react";
 import type { NoteItem } from "../api/tauriBridge";
 import { cx, longDate, noteMatches, relativeShort } from "../lib/text";
 import { CategoryShelf } from "./CategoryShelf";
+import { text } from "../platform";
 
 interface BentoCanvasProps {
   notes: NoteItem[];
@@ -277,14 +278,14 @@ export function BentoCanvas({
         <header className="flex flex-wrap items-start justify-between gap-4 sm:gap-8">
           <div className="min-w-0">
             <div className="micro">{today}</div>
-            <h1 className="mt-2.5 text-[32px] font-medium leading-[1.04] tracking-[-0.04em] text-ink-1">
+            <h1 data-slot="page-title" className="mt-2.5 text-[32px] font-medium leading-[1.04] tracking-[-0.04em] text-ink-1">
               {title}
             </h1>
-            <p className="mt-2.5 max-w-[52ch] text-[12.5px] leading-relaxed text-ink-3">
+            <p data-slot="page-meta" className="mt-2.5 max-w-[52ch] text-[12.5px] leading-relaxed text-ink-3">
               {loading
-                ? "Opening the workspace…"
+                ? text.loadingWorkspace
                 : notes.length === 0
-                  ? "An empty canvas. Write the first note and it will find a shelf."
+                  ? text.noNotes
                   : query.trim()
                     ? `${totalVisible} note${totalVisible === 1 ? "" : "s"} matching “${query.trim()}”.`
                     : active
@@ -312,7 +313,7 @@ export function BentoCanvas({
                       setNewCatName("");
                     }
                   }}
-                  placeholder="Category name..."
+                  placeholder={text.categoryPlaceholder}
                   className="h-7 w-32 rounded-lg bg-black/40 px-2 text-[12px] text-white outline-none placeholder:text-white/30"
                 />
                 <button
@@ -345,15 +346,16 @@ export function BentoCanvas({
               <button
                 type="button"
                 onClick={() => setIsAddingCategory(true)}
+                data-slot="button-outline"
                 className="flex h-9 items-center gap-1.5 rounded-xl border border-white/10 bg-white/[0.04] px-3 text-[12.5px] font-medium text-ink-2 hover:bg-white/[0.09] hover:text-white transition-all cursor-pointer"
                 title="Create a new shelf/category"
               >
                 <FolderPlus size={13.5} strokeWidth={1.8} />
-                <span>New category</span>
+                <span>{text.newCategory}</span>
               </button>
             )}
 
-            <button type="button" onClick={() => onNewNote()} className="btn">
+            <button type="button" onClick={() => onNewNote()} className="btn" data-variant="primary">
               <Plus size={14} strokeWidth={1.9} />
               <span>New note</span>
             </button>
@@ -390,7 +392,7 @@ export function BentoCanvas({
               ))}
             </div>
           ) : groups.length === 0 ? (
-            <div className="flex flex-col items-start justify-center rounded-[22px] px-8 py-20 shadow-[inset_0_0_0_1px_rgba(255,255,255,0.06)]">
+            <div data-slot="empty-state" className="flex flex-col items-start justify-center rounded-[22px] px-8 py-20 shadow-[inset_0_0_0_1px_rgba(255,255,255,0.06)]">
               <p className="text-[19px] tracking-[-0.02em] text-ink-2">
                 {query.trim() ? "Nothing matches that." : "An empty canvas."}
               </p>

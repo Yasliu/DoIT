@@ -37,7 +37,26 @@ import {
   User,
   Library,
   Hash,
+  Baby,
+  Camera,
+  Car,
+  ChefHat,
+  Dumbbell,
+  Gamepad2,
+  Gift,
+  House,
+  Landmark,
+  Mountain,
+  PawPrint,
+  Plane,
+  ShoppingCart,
+  Sprout,
+  Stethoscope,
+  Users,
+  Wallet,
+  Wrench,
 } from "lucide-react";
+import { pick } from "../platform";
 
 export const CATEGORY_ICONS: Record<
   string,
@@ -81,7 +100,30 @@ export const CATEGORY_ICONS: Record<
   Hash,
 };
 
-export const CATEGORY_ICON_NAMES = Object.keys(CATEGORY_ICONS);
+/** Icons Linux adds to the picker. Windows can draw them (a shelf named on Linux) but does not offer them. */
+const LINUX_EXTRA_ICONS = {
+  ChefHat,
+  Plane,
+  Dumbbell,
+  ShoppingCart,
+  Wallet,
+  House,
+  Users,
+  Gift,
+  PawPrint,
+  Gamepad2,
+  Camera,
+  Car,
+  Sprout,
+  Mountain,
+  Stethoscope,
+  Baby,
+  Wrench,
+  Landmark,
+};
+const PICKER_ICON_NAMES = Object.keys(CATEGORY_ICONS);
+Object.assign(CATEGORY_ICONS, LINUX_EXTRA_ICONS);
+export const CATEGORY_ICON_NAMES = pick(PICKER_ICON_NAMES, [...PICKER_ICON_NAMES, ...Object.keys(LINUX_EXTRA_ICONS)]);
 
 const STORAGE_KEY = "doit.category_icons";
 

@@ -1,6 +1,7 @@
 import { useEffect, useRef, useState } from "react";
 import { Pencil, Trash2, X } from "lucide-react";
 import { cleanText } from "../lib/text";
+import { pick } from "../platform";
 import {
   CATEGORY_ICON_NAMES,
   CATEGORY_ICONS,
@@ -111,7 +112,7 @@ export function CategoryMenu({ x, y, shelf, onClose, onRename, onDelete, onOpenI
             className="flex h-8 w-full items-center gap-2 rounded-[8px] px-2 text-[12px] text-ink-2 transition-colors hover:bg-white/[0.08] hover:text-white cursor-pointer"
           >
             <Pencil size={12.5} strokeWidth={1.8} className="shrink-0 text-white/70" />
-            Rename & icon
+            {pick("Rename & icon", "Edit shelf…")}
           </button>
           <button
             type="button"
@@ -119,7 +120,7 @@ export function CategoryMenu({ x, y, shelf, onClose, onRename, onDelete, onOpenI
             className="flex h-8 w-full items-center gap-2 rounded-[8px] px-2 text-[12px] text-ink-2 transition-colors hover:bg-red-500/10 hover:text-red-400 cursor-pointer"
           >
             <Trash2 size={12.5} strokeWidth={1.8} className="shrink-0" />
-            Delete category
+            {pick("Delete category", "Delete shelf")}
           </button>
         </div>
       ) : mode === "icon" ? (

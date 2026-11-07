@@ -18,6 +18,7 @@ export function ModeToggle({ rawMode, onChange, compact = false, large = false }
     <div
       role="group"
       aria-label="Editor mode"
+      data-slot="mode-toggle"
       className={cx(
         "inline-flex shrink-0 items-center gap-0.5 rounded-[9px] border border-white/[0.1] bg-white/[0.03] transition-all duration-200 ease-out",
         large ? "p-1" : "p-0.5",

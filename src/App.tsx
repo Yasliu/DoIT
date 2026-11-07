@@ -8,7 +8,8 @@ import { CategoryMenu } from "./components/CategoryMenu";
 import { IconPickerModal } from "./components/IconPickerModal";
 import { setMarkdownBaseDir } from "./lib/format";
 import { applyShortcutSettings } from "./lib/shortcuts";
-import { initCategoryIcons } from "./lib/categoryIcons";
+import { initCategoryIcons, setCategoryIcon } from "./lib/categoryIcons";
+import { suggestShelfIcon } from "./platform/linux/ShelfIcons";
 import { NoteSheet } from "./components/NoteSheet";
 import { SettingsPanel } from "./components/SettingsPanel";
 import { Sidebar } from "./components/Sidebar";
@@ -17,6 +18,13 @@ import { UpdateInfo, UpdateModal } from "./components/UpdateModal";
 import { ReleaseLogModal } from "./components/ReleaseLogModal";
 import { useWorkspace } from "./hooks/useWorkspace";
 import { accentFor, cx } from "./lib/text";
+import { applyThemeSettings, isLinux } from "./platform";
+import { LinuxSettings } from "./platform/linux/LinuxSettings";
+import { LinuxShelfDialog } from "./platform/linux/LinuxShelfDialog";
+import { LinuxSidebar } from "./platform/linux/LinuxSidebar";
+import { LinuxSpotlight } from "./platform/linux/LinuxSpotlight";
+import { LinuxNewNoteDialog } from "./platform/linux/LinuxNewNoteDialog";
+import { LinuxNewShelfDialog } from "./platform/linux/LinuxNewShelfDialog";
 
 interface OpenNote {
   note: NoteItem;
@@ -84,12 +92,23 @@ export default function App() {
   const canvasRef = useRef<HTMLElement | null>(null);
   const deletedRef = useRef<NoteItem[]>([]);
   const [query, setQuery] = useState("");
+  /** Linux's Spotlight and create dialogs; only one is open at a time. */
+  const [linuxDialog, setLinuxDialog] = useState<null | "search" | "new-note" | "new-shelf">(null);
   const [active, setActive] = useState<string | null>(null);
   const [openNote, setOpenNote] = useState<OpenNote | null>(null);
   const [isNoteMaximized, setIsNoteMaximized] = useState(false);
   const [isVerticalScreen, setIsVerticalScreen] = useState(() => window.innerHeight > window.innerWidth);
   const [isResizingSheet, setIsResizingSheet] = useState(false);
   const [drawerWidth, setDrawerWidth] = useState<number>(getStoredDrawerWidth);
+
+  // The page can mount before GTK has given the window its real size, which left the editor drawer
+  // sized for a ~850px window. Re-fit the default (a width the user dragged stays) as the window sizes.
+  useEffect(() => {
+    if (!isLinux) return;
+    const fit = () => setDrawerWidth(getStoredDrawerWidth());
+    window.addEventListener("resize", fit);
+    return () => window.removeEventListener("resize", fit);
+  }, []);
   const [contextMenu, setContextMenu] = useState<{ x: number; y: number; note: NoteItem } | null>(null);
   const [categoryMenu, setCategoryMenu] = useState<{ x: number; y: number; shelf: string } | null>(null);
   const [iconPickerShelf, setIconPickerShelf] = useState<string | null>(null);
@@ -108,7 +127,7 @@ export default function App() {
 
   // Background update check. It never blocks the UI, but GitHub's release CDN sometimes needs 10s+ for the
   // TLS handshake: one 3s attempt silently missed updates for 6 hours. So retry with growing patience.
-  const checkForUpdate = useCallback(async (timeoutMs: number): Promise<"found" | "none" | "error"> => {
+  const checkForUpdate = useCallback(async (timeoutMs: number): Promise<"found" | "none" | "unsupported" | "error"> => {
     if (typeof navigator !== "undefined" && navigator.onLine === false) return "error";
     try {
       const { check } = await import("@tauri-apps/plugin-updater");
@@ -140,7 +159,10 @@ export default function App() {
         return "found";
       }
       return "none";
-    } catch {
+    } catch (err) {
+      // A newer release exists but ships no package for this OS/bundle (e.g. Linux before its
+      // assets are published): retrying would only fail the same way.
+      if (/platforms?` object/.test(String(err))) return "unsupported";
       return "error";
     }
   }, []);
@@ -234,6 +256,7 @@ export default function App() {
     void tauriApi.getSettings().then((s) => {
       setMarkdownBaseDir(s.storage_path);
       applyShortcutSettings(s);
+      applyThemeSettings(s);
       if (s.theme_mode) {
         setThemeMode(s.theme_mode as "glass" | "monochrome");
         document.documentElement.dataset.theme = s.theme_mode;
@@ -305,6 +328,7 @@ export default function App() {
     const onManualCheck = async () => {
       const result = await checkForUpdate(30000);
       if (result === "none") notify("You are on the latest version.");
+      else if (result === "unsupported") notify("A newer DoIT is out, but there is no update package for this system yet.");
       else if (result === "error") notify("Could not reach the update server. Try again in a moment.");
     };
     window.addEventListener("doit:check-updates", onManualCheck);
@@ -337,8 +361,10 @@ export default function App() {
         else unlisten = fn;
       }),
     ).catch(() => undefined);
+    // Taking the path consumes it, so open it even if this effect was already cleaned up
+    // (StrictMode's dev double-mount): the re-run would only get null.
     void tauriApi.takeLaunchFile().then((path) => {
-      if (path && !cancelled) void openExternal(path);
+      if (path) void openExternal(path);
     });
     return () => {
       cancelled = true;
@@ -370,6 +396,16 @@ export default function App() {
       if (shelf) setActive(shelf);
     },
     [active, create, shelves, originFromCanvas],
+  );
+
+  /** Linux asks which shelf a new note goes on; a given shelf, or Windows, creates it directly. */
+  const requestNewNote = useCallback(
+    (shelf?: string) => {
+      setIsSettings(false);
+      if (!shelf && isLinux) setLinuxDialog("new-note");
+      else newNote(shelf);
+    },
+    [newNote],
   );
 
   const closeSheet = useCallback(() => {
@@ -471,7 +507,11 @@ export default function App() {
       if (meta && event.key.toLowerCase() === "n") {
         event.preventDefault();
         if (isSettings) setIsSettings(false);
-        if (!openNote) newNote();
+        if (!openNote) requestNewNote();
+      }
+      if (isLinux && meta && event.key.toLowerCase() === "k") {
+        event.preventDefault();
+        setLinuxDialog((d) => (d === "search" ? null : "search"));
       }
       if (meta && event.key.toLowerCase() === "o") {
         event.preventDefault();
@@ -488,7 +528,46 @@ export default function App() {
     };
     window.addEventListener("keydown", onKey);
     return () => window.removeEventListener("keydown", onKey);
-  }, [newNote, openNote, toggleMini, isSettings, handleImportNote]);
+  }, [requestNewNote, openNote, toggleMini, isSettings, handleImportNote]);
+
+  /** Linux: import one file onto `shelf` (made first when `created`), then open it. */
+  const importFileInto = useCallback(
+    async (shelf: string, created: boolean) => {
+      setLinuxDialog(null);
+      try {
+        const imported = await workspace.importNoteFile();
+        if (created) await createCategory(shelf);
+        if (imported.category !== shelf) await moveCategory(imported.id, shelf);
+        notify(`Imported “${imported.title || "Untitled"}” into ${shelf}.`);
+        setIsSettings(false);
+        setSheetClosing(false);
+        setOpenNote({ note: { ...imported, category: shelf }, origin: originFromCanvas() });
+      } catch (err: any) {
+        const msg = typeof err === "string" ? err : err?.message || "";
+        if (msg && !msg.toLowerCase().includes("cancelled")) notify(msg);
+      }
+    },
+    [workspace, createCategory, moveCategory, notify, originFromCanvas],
+  );
+
+  /** Linux: import a folder as a shelf, named `name` or after the folder. */
+  const importFolderShelf = useCallback(
+    async (name: string, icon: string | null) => {
+      setLinuxDialog(null);
+      try {
+        const result = await workspace.importFolderAsShelf(name || undefined);
+        setCategoryIcon(result.shelf, icon ?? suggestShelfIcon(result.shelf));
+        setIsSettings(false);
+        setActive(result.shelf);
+        const n = result.imported_count;
+        notify(`Imported ${n} note${n === 1 ? "" : "s"} into ${result.shelf}.`);
+      } catch (err: any) {
+        const msg = typeof err === "string" ? err : err?.message || "";
+        if (msg && !msg.toLowerCase().includes("cancelled")) notify(msg);
+      }
+    },
+    [workspace, notify],
+  );
 
   useEffect(() => () => window.clearTimeout(toastTimer.current), []);
 
@@ -496,7 +575,28 @@ export default function App() {
 
   return (
     <div data-theme={themeMode} className="chassis flex h-full w-full overflow-hidden">
-      {!mini && (
+      {!mini && isLinux && (
+        <LinuxSidebar
+          shelves={shelves}
+          counts={counts}
+          total={notes.length}
+          active={active}
+          isSettings={isSettings}
+          open={railOpen}
+          onSelect={(shelf) => {
+            setIsSettings(false);
+            setActive(shelf);
+          }}
+          onNewNote={() => requestNewNote()}
+          onNewShelf={() => setLinuxDialog("new-shelf")}
+          onOpenSettings={() => setIsSettings((v) => !v)}
+          onShelfMenu={(event, shelf) => {
+            const r = (event.currentTarget as HTMLElement).getBoundingClientRect();
+            setCategoryMenu({ x: event.clientX || r.right, y: event.clientY || r.bottom, shelf });
+          }}
+        />
+      )}
+      {!mini && !isLinux && (
         <Sidebar
           shelves={shelves}
           counts={counts}
@@ -534,6 +634,9 @@ export default function App() {
           onToggleMini={toggleMini}
           onOpenSettings={() => setIsSettings((v) => !v)}
           isSettings={isSettings}
+          sidebarOpen={railOpen}
+          onToggleSidebar={() => setRailOpen((prev) => !prev)}
+          onOpenSearch={() => setLinuxDialog("search")}
         />
 
         {(() => {
@@ -559,11 +662,15 @@ export default function App() {
                 <div className="relative z-10 h-full">
                 {isSettings ? (
                   <div className="scroll relative h-full overflow-y-scroll" style={{ scrollbarGutter: "stable" }}>
-                    <SettingsPanel
-                      onBack={() => setIsSettings(false)}
-                      onStoragePathChanged={() => void workspace.reload()}
-                      onThemeChanged={(mode) => setThemeMode(mode)}
-                    />
+                    {isLinux ? (
+                      <LinuxSettings onBack={() => setIsSettings(false)} onStoragePathChanged={() => void workspace.reload()} />
+                    ) : (
+                      <SettingsPanel
+                        onBack={() => setIsSettings(false)}
+                        onStoragePathChanged={() => void workspace.reload()}
+                        onThemeChanged={(mode) => setThemeMode(mode)}
+                      />
+                    )}
                   </div>
                 ) : state === "error" ? (
                   <div className="flex h-full flex-col items-start justify-center px-10">
@@ -580,13 +687,13 @@ export default function App() {
                     notes={notes}
                     shelves={shelves}
                     active={active}
-                    query={query}
+                    query={isLinux ? "" : query}
                     loading={state === "loading"}
                     locked={false}
                     collapsed={collapsed}
                     onToggleCollapse={toggleCollapse}
                     onOpen={openTile}
-                    onNewNote={newNote}
+                    onNewNote={requestNewNote}
                     onNewCategory={(name) => {
                       void createCategory(name);
                       setActive(name);
@@ -605,6 +712,7 @@ export default function App() {
 
               {/* Sliding editor drawer: reserves space so the dashboard stays visible + interactive */}
               <aside
+                data-slot="sheet-dock"
                 className={cx(
                   isMaxClosing
                     ? "absolute top-0 bottom-3 left-3 right-3 z-30 min-h-0 min-w-0 overflow-hidden pointer-events-none"
@@ -719,7 +827,22 @@ export default function App() {
         />
       )}
 
-      {iconPickerShelf && (
+      {iconPickerShelf && isLinux && (
+        <LinuxShelfDialog
+          shelf={iconPickerShelf}
+          onClose={() => setIconPickerShelf(null)}
+          onRename={async (shelf, newName) => {
+            const err = await renameCategory(shelf, newName);
+            if (!err && active === shelf) setActive(newName);
+            return err;
+          }}
+          onDelete={(shelf) => {
+            setIconPickerShelf(null);
+            void deleteCategory(shelf);
+          }}
+        />
+      )}
+      {iconPickerShelf && !isLinux && (
         <IconPickerModal
           shelf={iconPickerShelf}
           accent={accentFor(iconPickerShelf, shelves)}
@@ -771,6 +894,55 @@ export default function App() {
             />
           </div>
         </div>
+      )}
+
+      {isLinux && linuxDialog === "search" && (
+        <LinuxSpotlight
+          notes={notes}
+          shelves={shelves}
+          onClose={() => setLinuxDialog(null)}
+          onOpenNote={(note) => {
+            setIsSettings(false);
+            openTile(note, originFromCanvas());
+          }}
+          onOpenShelf={(shelf) => {
+            setIsSettings(false);
+            setActive(shelf);
+          }}
+          onNewNote={() => setLinuxDialog("new-note")}
+          onNewShelf={() => setLinuxDialog("new-shelf")}
+          onSettings={() => setIsSettings(true)}
+          onDock={toggleMini}
+        />
+      )}
+      {isLinux && linuxDialog === "new-note" && (
+        <LinuxNewNoteDialog
+          shelves={shelves}
+          current={active}
+          onClose={() => setLinuxDialog(null)}
+          onCreate={(shelf, created) => {
+            setLinuxDialog(null);
+            void (async () => {
+              if (created) await createCategory(shelf);
+              newNote(shelf);
+            })();
+          }}
+          onImportFile={(shelf, created) => void importFileInto(shelf, created)}
+        />
+      )}
+      {isLinux && linuxDialog === "new-shelf" && (
+        <LinuxNewShelfDialog
+          shelves={shelves}
+          onClose={() => setLinuxDialog(null)}
+          onCreate={(name, icon) => {
+            setLinuxDialog(null);
+            setIsSettings(false);
+            setCategoryIcon(name, icon);
+            void createCategory(name);
+            setActive(name);
+          }}
+          onImportFolder={(name, icon) => void importFolderShelf(name, icon)}
+        />
       )}
 
       {availableUpdate && <UpdateModal info={availableUpdate} />}

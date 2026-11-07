@@ -6,6 +6,7 @@ import type { NoteItem } from "../api/tauriBridge";
 import { fontStack } from "../api/tauriBridge";
 import { accentFor, cleanText, cx, densityOf, edgeOpacity, relativeShort, stripDate } from "../lib/text";
 import { contentToMarkdown, previewMarkup, openExternalUrl, copyImageToClipboard } from "../lib/format";
+import { pick, text } from "../platform";
 
 interface NoteTileProps {
   note: NoteItem;
@@ -233,7 +234,7 @@ function NoteTileComponent({
 
       <div className="flex min-w-0 flex-1 flex-col">
         {empty ? (
-          <p className="mt-2 text-[12px] leading-relaxed text-ink-4">Open to start writing.</p>
+          <p className="mt-2 text-[12px] leading-relaxed text-ink-4">{text.openNoteToWrite}</p>
         ) : rawMode ? (
           /* Text Mode note: the file exactly as the user sees it when the tile is opened */
           <pre
@@ -289,11 +290,11 @@ function NoteTileComponent({
             <span>Image copied!</span>
           </div>
         )}
-        <div className="mt-auto flex items-center justify-between gap-3 pt-3.5">
+        <div data-slot="card-meta" className="mt-auto flex items-center justify-between gap-3 pt-3.5">
           <span className="font-mono text-[9.5px] uppercase tracking-[0.1em] text-ink-4">
             {total > 0
-              ? `${done}/${total} done`
-              : `${note.content.length} line${note.content.length === 1 ? "" : "s"}`}
+              ? pick(`${done}/${total} done`, `${done} of ${total} done`)
+              : pick(`${note.content.length} line${note.content.length === 1 ? "" : "s"}`, "")}
           </span>
           <span className="shrink-0 font-mono text-[10.5px] tracking-[0.04em] text-ink-3 group-hover:text-ink-1 transition-colors">
             {relativeShort(note.last_edited)}

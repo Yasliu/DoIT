@@ -1,0 +1,1480 @@
+/*
+ * DoIT's Linux look. Every rule is scoped to html[data-platform="linux"], so Windows never matches
+ * any of it. The file is unlayered on purpose: unlayered rules beat Tailwind's layered utilities,
+ * which lets this file restyle components without forking their markup. Components expose stable
+ * hooks for it as data-slot attributes.
+ *
+ * Colours come from the active theme (theme.ts writes the --l-* properties). The original design
+ * draws everything in white on black, so remapping white -> text and black -> canvas makes every
+ * existing white/alpha overlay theme-aware, light themes included.
+ */
+
+@import "@fontsource-variable/inter/opsz.css";
+@import "@fontsource-variable/inter/opsz-italic.css";
+
+/* ---------- tokens ---------- */
+
+html[data-platform="linux"],
+html[data-platform="linux"] [data-theme] {
+  --color-white: var(--l-text);
+  --color-black: var(--l-canvas);
+  --color-ink-1: var(--l-text);
+  --color-ink-2: color-mix(in oklab, var(--l-text) 80%, var(--l-text-muted));
+  --color-ink-3: var(--l-text-muted);
+  --color-ink-4: color-mix(in oklab, var(--l-text-muted) 74%, var(--l-canvas));
+  --color-void: var(--l-canvas);
+  --color-chassis: var(--l-canvas);
+  --color-red-200: var(--l-error-foreground);
+  --color-red-400: var(--l-error-foreground);
+  --color-red-500: var(--l-error);
+
+  --theme-chassis-bg: var(--l-canvas);
+  --theme-glass-bg: var(--l-surface-overlay);
+  --theme-sheet-bg: var(--l-surface);
+  --theme-card-bg: var(--l-surface);
+  --theme-card-hover-bg: var(--l-surface);
+  --theme-card-inner: transparent;
+  --theme-border: var(--l-border);
+  --theme-tray-bg: var(--l-canvas);
+  --theme-tray-border: var(--l-border);
+  --theme-pill-bg: var(--l-surface-overlay);
+  --theme-chassis-blur: none;
+  --theme-glass-blur: none;
+  --theme-sheet-blur: none;
+  --theme-card-blur: none;
+  --theme-tray-blur: none;
+  --theme-pill-blur: none;
+  --line-1: var(--l-border);
+  --line-2: color-mix(in oklab, var(--l-text) 16%, var(--l-border));
+
+  --font-sans: "Inter Variable", "Inter", system-ui, sans-serif;
+  --font-grotesk: var(--font-sans);
+  --font-mono: "JetBrains Mono", ui-monospace, "DejaVu Sans Mono", monospace;
+
+  /* Motion: a strong ease-out for things that enter, the drawer curve for things that slide. */
+  --ease-out: cubic-bezier(0.23, 1, 0.32, 1);
+  --ease-drawer: cubic-bezier(0.32, 0.72, 0, 1);
+
+  /* Surfaces and lines used by the rules below. */
+  --hover: color-mix(in oklab, var(--l-text) 6%, transparent);
+  --press: color-mix(in oklab, var(--l-text) 10%, transparent);
+  --line-strong: color-mix(in oklab, var(--l-text) 18%, var(--l-border));
+  --shadow-xs: 0 1px 2px rgb(0 0 0 / 0.05);
+  --shadow-pop: 0 12px 32px -12px rgb(0 0 0 / 0.28), 0 2px 6px -2px rgb(0 0 0 / 0.08);
+}
+
+html[data-platform="linux"][data-appearance="dark"] {
+  --shadow-xs: 0 1px 2px rgb(0 0 0 / 0.4);
+  --shadow-pop: 0 16px 40px -12px rgb(0 0 0 / 0.7), 0 0 0 1px rgb(255 255 255 / 0.02);
+}
+
+/* ---------- base ---------- */
+
+html[data-platform="linux"] body {
+  color: var(--l-text);
+  font-family: var(--font-sans);
+  font-size: 14px;
+  line-height: 1.5;
+  font-optical-sizing: auto;
+  font-feature-settings: "calt", "kern";
+  font-synthesis: none;
+}
+
+/* The original resets kill every shadow and outline; here shadows are opt-in per component. */
+html[data-platform="linux"] *,
+html[data-platform="linux"] *::before,
+html[data-platform="linux"] *::after {
+  box-shadow: none;
+  outline: none;
+  -webkit-tap-highlight-color: transparent;
+}
+
+/* Keyboard focus is always visible; pointer focus is not. */
+html[data-platform="linux"] :focus-visible {
+  outline: 2px solid color-mix(in oklab, var(--l-focus) 70%, transparent);
+  outline-offset: 1px;
+}
+html[data-platform="linux"] :is(input, textarea, [contenteditable="true"]):focus-visible {
+  outline: none;
+}
+
+html[data-platform="linux"] ::selection {
+  background: color-mix(in oklab, var(--l-accent) 26%, transparent);
+  color: inherit;
+}
+
+html[data-platform="linux"] :is(input, textarea)::placeholder {
+  color: var(--l-placeholder);
+  opacity: 0.8;
+}
+
+/* A theme switch recolours everything at once instead of fading each element. */
+html[data-platform="linux"].theme-switching *,
+html[data-platform="linux"].theme-switching *::before,
+html[data-platform="linux"].theme-switching *::after {
+  transition: none !important;
+}
+
+/* Headings balance, prose avoids orphans. */
+html[data-platform="linux"] :is(h1, h2, h3) {
+  text-wrap: balance;
+}
+html[data-platform="linux"] p {
+  text-wrap: pretty;
+}
+
+/* The decorative uppercase mono labels become plain small text; mono numbers become tabular sans.
+   Real code (kbd, code, pre, inputs) keeps its monospace. */
+html[data-platform="linux"] [class~="font-mono"]:not(input, textarea, kbd, code, pre, [data-mono]) {
+  font-family: var(--font-sans);
+  font-variant-numeric: tabular-nums;
+  letter-spacing: 0;
+}
+html[data-platform="linux"] [class~="font-mono"][class~="uppercase"]:not(kbd, code, pre) {
+  text-transform: none;
+  font-size: 12px;
+  line-height: 16px;
+}
+html[data-platform="linux"] :is([class~="text-[9px]"], [class~="text-[9.5px]"], [class~="text-[10px]"]) {
+  font-size: 11px;
+}
+
+/* ---------- materials ---------- */
+
+html[data-platform="linux"] .chassis {
+  background-color: var(--l-canvas);
+  backdrop-filter: none;
+  -webkit-backdrop-filter: none;
+}
+/* Rounded by painting, never by clipping: overflow:hidden with a radius makes WebKit mask every
+   layer under it each frame, which halved the scrolling frame rate. */
+html[data-platform="linux"]:not([data-maximized]) .chassis {
+  border-radius: 12px;
+  border: 1px solid var(--line-strong);
+  overflow: visible;
+}
+html[data-platform="linux"]:not([data-maximized]) .lx-sidebar {
+  border-radius: 11px 0 0 11px;
+}
+html[data-platform="linux"]:not([data-glass]) .chassis::after,
+html[data-platform="linux"] .lightscape {
+  display: none;
+}
+
+html[data-platform="linux"] :is(.glass, .glass-sheet, .glass-soft) {
+  background-color: var(--l-surface-overlay);
+  backdrop-filter: none;
+  -webkit-backdrop-filter: none;
+  border: 1px solid var(--l-border);
+}
+
+/* Menus and popovers drawn with hard-coded near-black fills. */
+html[data-platform="linux"]
+  :is(
+    [class~="bg-[#14151a]"],
+    [class~="bg-[#14151a]/95"],
+    [class~="bg-[#131418]/95"],
+    [class~="bg-[#121317]/95"],
+    [class~="bg-[#121318]/95"]
+  ) {
+  background-color: var(--l-surface-overlay);
+  border-color: var(--l-border);
+  box-shadow: var(--shadow-pop);
+  backdrop-filter: none;
+}
+
+/* ---------- controls ---------- */
+
+html[data-platform="linux"] .btn,
+html[data-platform="linux"] [data-slot="button-outline"] {
+  height: 32px;
+  padding: 0 12px;
+  gap: 6px;
+  border-radius: 8px;
+  border: 1px solid var(--l-border);
+  background-color: var(--l-surface);
+  color: var(--l-text);
+  font-size: 13px;
+  font-weight: 500;
+  letter-spacing: 0;
+  box-shadow: var(--shadow-xs);
+  transition:
+    background-color 150ms var(--ease-out),
+    border-color 150ms var(--ease-out),
+    transform 120ms var(--ease-out);
+}
+html[data-platform="linux"] :is(.btn, [data-slot="button-outline"]):hover {
+  background-color: color-mix(in oklab, var(--l-text) 4%, var(--l-surface));
+  border-color: var(--line-strong);
+  color: var(--l-text);
+}
+html[data-platform="linux"] .btn[data-variant="primary"] {
+  background-color: var(--l-accent);
+  border-color: var(--l-accent);
+  color: var(--l-accent-foreground);
+}
+html[data-platform="linux"] .btn[data-variant="primary"]:hover {
+  background-color: color-mix(in oklab, var(--l-accent) 90%, var(--l-text));
+  color: var(--l-accent-foreground);
+}
+/* Discrete buttons give under the pointer; full-width rows only change colour. */
+html[data-platform="linux"]
+  :is(.btn, .ghost, .icon-btn, .lx-icon-button, [data-slot="button-outline"], [data-slot="window-control"]):not(:disabled):active {
+  transform: scale(0.97);
+}
+
+html[data-platform="linux"] .ghost {
+  height: 28px;
+  padding: 0 8px;
+  border-radius: 6px;
+  font-size: 13px;
+  color: var(--l-text-muted);
+}
+html[data-platform="linux"] .ghost:hover {
+  background-color: var(--hover);
+  color: var(--l-text);
+}
+
+html[data-platform="linux"] .icon-btn {
+  width: 28px;
+  height: 28px;
+  border-radius: 6px;
+  color: var(--l-text-muted);
+}
+html[data-platform="linux"] .icon-btn:hover {
+  background-color: var(--hover);
+  color: var(--l-text);
+}
+html[data-platform="linux"] .icon-btn[data-active="true"] {
+  background-color: var(--l-text);
+  color: var(--l-canvas);
+}
+
+html[data-platform="linux"] .micro {
+  font-family: var(--font-sans);
+  font-size: 12px;
+  font-weight: 500;
+  line-height: 16px;
+  letter-spacing: 0;
+  text-transform: none;
+  color: var(--l-text-muted);
+}
+
+html[data-platform="linux"] .kbd,
+html[data-platform="linux"] kbd {
+  font-family: var(--font-sans);
+  font-size: 11px;
+  font-weight: 500;
+  letter-spacing: 0;
+  color: var(--l-text-muted);
+  background-color: var(--l-surface-raised);
+  border: 1px solid var(--l-border);
+  border-radius: 4px;
+  padding: 1px 5px;
+}
+
+html[data-platform="linux"] .rule {
+  background-color: var(--l-border);
+}
+
+/* Lucide's default 2px stroke reads heavy next to Inter; 1.75 matches the text weight. */
+html[data-platform="linux"] svg.lucide[stroke-width="2"] {
+  stroke-width: 1.75;
+}
+
+/* ---------- window chrome ---------- */
+
+html[data-platform="linux"] [data-slot="titlebar"] {
+  height: 48px;
+  padding-inline: 12px 10px;
+}
+/* The sidebar already has Settings. */
+html[data-platform="linux"] [data-slot="titlebar-settings"] {
+  display: none;
+}
+html[data-platform="linux"] [data-slot="titlebar-dock"] {
+  font-weight: 500;
+}
+html[data-platform="linux"] [data-slot="titlebar-dock"] span {
+  font-size: 13px;
+  letter-spacing: 0;
+}
+html[data-platform="linux"] [data-slot="titlebar-divider"] {
+  background-color: var(--l-border);
+  margin-inline: 4px;
+}
+/* GNOME-style round window buttons. */
+html[data-platform="linux"] [data-slot="window-control"] {
+  width: 24px;
+  height: 24px;
+  margin-left: 6px;
+  border-radius: 999px;
+  color: var(--l-text);
+  background-color: color-mix(in oklab, var(--l-text) 8%, transparent);
+}
+html[data-platform="linux"] [data-slot="window-control"]:hover {
+  background-color: color-mix(in oklab, var(--l-text) 14%, transparent);
+  color: var(--l-text);
+}
+html[data-platform="linux"] [data-slot="window-control"]:active {
+  background-color: color-mix(in oklab, var(--l-text) 20%, transparent);
+}
+
+/* ---------- canvas ---------- */
+
+html[data-platform="linux"] [data-slot="page-title"] {
+  margin-top: 6px;
+  font-size: 26px;
+  font-weight: 600;
+  line-height: 1.2;
+  letter-spacing: -0.022em;
+}
+html[data-platform="linux"] [data-slot="page-meta"] {
+  margin-top: 4px;
+  font-size: 13px;
+  line-height: 20px;
+  color: var(--l-text-muted);
+  font-variant-numeric: tabular-nums;
+}
+html[data-platform="linux"] [data-slot="button-outline"] {
+  height: 32px;
+}
+
+html[data-platform="linux"] [data-slot="empty-state"] {
+  border: 1px dashed var(--l-border);
+  border-radius: 12px;
+  padding-block: 48px;
+}
+
+/* Shelf headers stay pinned while their notes scroll under them. */
+html[data-platform="linux"] [data-slot="shelf-head"] {
+  position: sticky;
+  top: 0;
+  z-index: 20;
+  padding-block: 10px 8px;
+  background-color: var(--l-canvas);
+}
+html[data-platform="linux"] [data-slot="shelf-head"] h2 {
+  font-size: 14px;
+  font-weight: 600;
+  letter-spacing: -0.006em;
+}
+html[data-platform="linux"] [data-slot="shelf-count"] {
+  font-size: 12px;
+  color: var(--l-text-muted);
+}
+html[data-platform="linux"] .shelf-rule {
+  background-color: var(--l-border);
+  transform: none;
+}
+html[data-platform="linux"] [data-slot="empty-shelf"] {
+  border: 1px dashed var(--l-border);
+  border-radius: 12px;
+  padding: 20px;
+}
+html[data-platform="linux"] [data-slot="empty-shelf"]:hover {
+  border-color: var(--line-strong);
+  background-color: var(--hover);
+}
+
+/* ---------- note cards ---------- */
+
+html[data-platform="linux"] .card {
+  border-radius: 12px;
+  padding: 16px;
+  background-color: var(--l-surface);
+  border: 1px solid var(--l-border);
+  box-shadow: var(--shadow-xs);
+  backdrop-filter: none;
+  -webkit-backdrop-filter: none;
+  transition:
+    border-color 150ms var(--ease-out),
+    box-shadow 200ms var(--ease-out),
+    transform 200ms var(--ease-out);
+}
+html[data-platform="linux"] .card:hover {
+  background-color: var(--l-surface);
+  border-color: var(--line-strong);
+  box-shadow: 0 6px 16px -10px rgb(0 0 0 / 0.25);
+}
+html[data-platform="linux"] .card[data-dragging="true"] {
+  opacity: 0.4;
+  border-style: dashed;
+}
+html[data-platform="linux"] .card h3 {
+  font-size: 14.5px;
+  letter-spacing: -0.008em;
+}
+html[data-platform="linux"] .strip {
+  width: 3px;
+  top: 12px;
+  bottom: 12px;
+  border-radius: 0 3px 3px 0;
+}
+html[data-platform="linux"] .strip-label {
+  font-family: var(--font-sans);
+  font-size: 10.5px;
+  letter-spacing: 0.04em;
+  color: var(--l-text-muted);
+}
+html[data-platform="linux"] [data-slot="card-meta"] > span {
+  font-size: 12px;
+  color: var(--l-text-muted);
+}
+html[data-platform="linux"] .done-line {
+  color: var(--l-text-muted);
+  text-decoration-color: color-mix(in oklab, var(--l-text-muted) 60%, transparent);
+}
+
+/* ---------- note sheet ---------- */
+
+html[data-platform="linux"] [data-slot="note-sheet"] {
+  border-radius: 14px;
+  background-color: var(--l-surface);
+  border: 1px solid var(--l-border);
+  box-shadow: var(--shadow-pop);
+}
+html[data-platform="linux"] .sheet-scrim {
+  background-color: rgb(0 0 0 / 0.32);
+}
+
+html[data-platform="linux"] .line-input {
+  color: var(--l-text);
+  font-size: 15px;
+  line-height: 1.65;
+  letter-spacing: 0;
+}
+html[data-platform="linux"] .line-input::placeholder {
+  color: var(--l-placeholder);
+}
+
+/* ---------- checkboxes ---------- */
+
+html[data-platform="linux"] :is(.check, .md-cb) {
+  /* From the text colour, not the input colour: dark palettes put inputs almost on the surface. */
+  border: 1.5px solid color-mix(in oklab, var(--l-text) 30%, transparent);
+  border-radius: 4px;
+  transition:
+    background-color 150ms var(--ease-out),
+    border-color 150ms var(--ease-out),
+    transform 120ms var(--ease-out);
+}
+html[data-platform="linux"] :is(.check, .md-cb):hover {
+  border-color: color-mix(in oklab, var(--l-text) 45%, var(--l-input));
+}
+html[data-platform="linux"] :is(.md-cb):active {
+  transform: scale(0.9);
+}
+html[data-platform="linux"] .check[data-done="true"],
+html[data-platform="linux"] .md-task-done .md-cb {
+  background-color: var(--l-accent);
+  border-color: var(--l-accent);
+  color: var(--l-accent-foreground);
+}
+html[data-platform="linux"] .md-task-done .md-cb::after {
+  border-color: var(--l-accent-foreground);
+}
+html[data-platform="linux"] .md-task-done {
+  opacity: 1;
+  color: var(--l-text-muted);
+  text-decoration-color: color-mix(in oklab, var(--l-text-muted) 60%, transparent);
+}
+
+/* ---------- markdown ---------- */
+
+html[data-platform="linux"] .md-preview {
+  font-size: 13.5px;
+  line-height: 1.55;
+  color: color-mix(in oklab, var(--l-text) 88%, var(--l-text-muted));
+}
+html[data-platform="linux"] :is(.md-h1, .md-h2, .md-h3, .md-h4, .md-h5, .md-h6) {
+  color: var(--l-text);
+  line-height: 1.25;
+}
+html[data-platform="linux"] .md-h1 {
+  font-weight: 650;
+  letter-spacing: -0.022em;
+}
+html[data-platform="linux"] .md-h2 {
+  font-weight: 620;
+  letter-spacing: -0.016em;
+}
+html[data-platform="linux"] :is(.md-sub, .md-sup, .md-preview .md-sub, .md-preview .md-sup) {
+  color: inherit;
+}
+html[data-platform="linux"] .md-li::before,
+html[data-platform="linux"] .md-ol::before,
+html[data-platform="linux"] .md-dd::before {
+  color: var(--l-text-muted);
+}
+html[data-platform="linux"] .md-ol::before {
+  font-variant-numeric: tabular-nums;
+}
+html[data-platform="linux"] .md-dd {
+  color: var(--l-text-muted);
+}
+html[data-platform="linux"] .md-quote {
+  border-left-color: var(--line-strong);
+  color: var(--l-text-muted);
+}
+html[data-platform="linux"] .md-mark {
+  background-color: var(--l-search-match-background);
+  color: var(--l-search-match-foreground);
+  border: 0;
+  border-radius: 3px;
+  padding: 0.05em 0.25em;
+}
+html[data-platform="linux"] .md-link {
+  color: var(--l-accent);
+  text-decoration-color: color-mix(in oklab, var(--l-accent) 40%, transparent);
+  text-underline-offset: 3px;
+}
+html[data-platform="linux"] .md-link:hover {
+  text-decoration-color: var(--l-accent);
+  color: var(--l-accent);
+}
+html[data-platform="linux"] :is(.md-code, .md-pre) {
+  font-family: var(--font-mono);
+  font-variant-ligatures: none;
+  color: var(--l-code-foreground);
+  background-color: color-mix(in oklab, var(--l-text) 5%, var(--l-code-background));
+  border: 1px solid var(--l-border);
+}
+html[data-platform="linux"] .md-pre {
+  border-radius: 8px;
+}
+html[data-platform="linux"] .md-code {
+  border-radius: 4px;
+  padding: 0.1em 0.32em;
+}
+html[data-platform="linux"] :is(.md-tbl th, .md-tbl td) {
+  border-color: var(--l-border);
+}
+html[data-platform="linux"] .md-tbl th {
+  color: var(--l-text);
+  background-color: var(--l-surface-raised);
+}
+html[data-platform="linux"] .md-img {
+  border-color: var(--l-border);
+  border-radius: 8px;
+}
+html[data-platform="linux"] .md-hr hr {
+  border-top-color: var(--l-border);
+}
+html[data-platform="linux"] .md-footnote-def {
+  border-left-color: color-mix(in oklab, var(--l-accent) 50%, transparent);
+  color: var(--l-text-muted);
+}
+html[data-platform="linux"] :is(.md-fn-badge, .md-footnote-ref, .md-preview .md-footnote-ref) {
+  color: var(--l-accent);
+  font-family: var(--font-sans);
+}
+html[data-platform="linux"] .md-preview-raw {
+  color: var(--l-text-muted);
+}
+
+/* ---------- dock: pill and panel ---------- */
+
+html[data-platform="linux"] [data-slot="pill"] {
+  height: 36px;
+  border-radius: 10px;
+  border: 1px solid var(--line-strong);
+  background-color: var(--l-surface-overlay) !important;
+  box-shadow: 0 2px 6px -1px rgb(0 0 0 / 0.18) !important;
+  color: var(--l-text);
+}
+html[data-platform="linux"] [data-slot="pill"] span {
+  font-size: 13px;
+  font-weight: 600;
+  letter-spacing: -0.006em;
+  color: var(--l-text);
+}
+
+html[data-platform="linux"] [data-slot="dock-panel"] {
+  border-radius: 14px;
+  border: 1px solid var(--line-strong);
+  background-color: var(--l-canvas) !important;
+  box-shadow: none !important;
+}
+
+/* ---------- motion ---------- */
+
+@media (prefers-reduced-motion: reduce) {
+  html[data-platform="linux"] :is(.btn, .ghost, .icon-btn, [data-slot]):active {
+    transform: none;
+  }
+}
+
+html[data-platform="linux"] [data-slot="sheet-footer"] {
+  border-top: 1px solid var(--l-border);
+}
+
+/* The editor drawer snaps to its width (one reflow of the grid) while the sheet itself slides in on
+   a transform. Animating the width re-laid out every card on every frame. */
+html[data-platform="linux"] [data-slot="sheet-dock"] {
+  transition: none !important;
+}
+
+/* ---------- Linux-only components (LinuxSidebar, LinuxShelfDialog) ----------
+   The lx-* classes are rendered only on Linux, so they need no platform prefix. */
+
+html[data-platform="linux"] {
+  --lx-row-hover: color-mix(in oklab, var(--l-sidebar-foreground) 6%, transparent);
+  --lx-row-selected: color-mix(in oklab, var(--l-sidebar-foreground) 9%, transparent);
+  --lx-icon: color-mix(in oklab, var(--l-sidebar-muted-foreground) 85%, var(--l-sidebar));
+}
+
+.lx-sidebar {
+  position: relative;
+  z-index: 20;
+  display: flex;
+  flex-direction: column;
+  flex-shrink: 0;
+  width: 256px;
+  height: 100%;
+  padding: 0 8px 8px;
+  background-color: var(--l-sidebar);
+  border-right: 1px solid var(--l-sidebar-border);
+  color: var(--l-sidebar-foreground);
+  user-select: none;
+  transition: width 220ms var(--ease-drawer);
+}
+.lx-sidebar[data-open="false"] {
+  width: 52px;
+}
+.lx-sidebar-brand {
+  display: flex;
+  flex-shrink: 0;
+  align-items: center;
+  gap: 10px;
+  height: 48px;
+  padding: 0 0 0 6px;
+}
+.lx-sidebar[data-open="false"] .lx-sidebar-brand {
+  padding: 0;
+  justify-content: center;
+}
+.lx-sidebar[data-open="false"] .lx-sidebar-brand .lx-icon-button {
+  margin: 0;
+}
+.lx-sidebar-header {
+  display: flex;
+  align-items: center;
+  gap: 2px;
+  margin-bottom: 8px;
+}
+.lx-sidebar[data-open="false"] .lx-sidebar-header {
+  flex-direction: column;
+  gap: 4px;
+}
+
+.lx-icon-button {
+  margin: 0;
+}
+.lx-sidebar-header {
+  display: flex;
+  align-items: center;
+  gap: 2px;
+  margin-bottom: 8px;
+}
+.lx-sidebar[data-open="false"] .lx-sidebar-header {
+  flex-direction: column;
+  gap: 4px;
+}
+
+.lx-search {
+  display: flex;
+  flex: 1;
+  min-width: 0;
+  align-items: center;
+  gap: 8px;
+  height: 32px;
+  padding: 0 6px 0 10px;
+  border-radius: 8px;
+  color: var(--l-sidebar-muted-foreground);
+  font-size: 13.5px;
+  font-weight: 500;
+  cursor: text;
+  transition: background-color 120ms var(--ease-out);
+}
+.lx-search:hover,
+.lx-search:focus-within {
+  background-color: var(--lx-row-hover);
+}
+.lx-search:focus-within {
+  box-shadow: inset 0 0 0 1px color-mix(in oklab, var(--l-focus) 55%, transparent);
+}
+.lx-search input {
+  flex: 1;
+  min-width: 0;
+  border: 0;
+  background: transparent;
+  color: var(--l-sidebar-foreground);
+  font: inherit;
+}
+.lx-search input::placeholder {
+  color: var(--l-sidebar-muted-foreground);
+  opacity: 1;
+}
+html[data-platform="linux"] .lx-search-hint {
+  background: transparent;
+  border-color: transparent;
+}
+
+.lx-icon-button {
+  display: grid;
+  flex-shrink: 0;
+  place-items: center;
+  width: 28px;
+  height: 28px;
+  border-radius: 8px;
+  color: var(--l-text-muted);
+  transition:
+    background-color 120ms var(--ease-out),
+    color 120ms var(--ease-out),
+    transform 120ms var(--ease-out);
+}
+.lx-icon-button:hover {
+  background-color: var(--hover);
+  color: var(--l-text);
+}
+.lx-sidebar .lx-icon-button {
+  color: var(--lx-icon);
+}
+.lx-sidebar .lx-icon-button:hover {
+  background-color: var(--lx-row-hover);
+  color: var(--l-sidebar-foreground);
+}
+
+.lx-sidebar-list {
+  display: flex;
+  flex: 1;
+  flex-direction: column;
+  gap: 1px;
+  min-height: 0;
+  overflow-y: auto;
+  scrollbar-width: none;
+}
+.lx-row-wrap {
+  position: relative;
+}
+.lx-row {
+  position: relative;
+  isolation: isolate;
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  width: 100%;
+  height: 32px;
+  padding: 0 10px;
+  border-radius: 8px;
+  color: var(--l-sidebar-muted-foreground);
+  font-size: 13.5px;
+  font-weight: 500;
+  text-align: left;
+  transition:
+    background-color 120ms var(--ease-out),
+    color 120ms var(--ease-out);
+}
+.lx-row:hover {
+  background-color: var(--lx-row-hover);
+  color: var(--l-sidebar-foreground);
+}
+.lx-row[data-active] {
+  color: var(--l-sidebar-foreground);
+}
+.lx-row[data-active]:not(:has(.lx-row-selected)) {
+  background-color: var(--lx-row-selected);
+}
+.lx-row-selected {
+  position: absolute;
+  inset: 0;
+  z-index: -1;
+  border-radius: 8px;
+  background-color: var(--lx-row-selected);
+}
+.lx-row-icon {
+  display: grid;
+  flex-shrink: 0;
+  place-items: center;
+  width: 16px;
+  height: 16px;
+  color: var(--lx-icon);
+  transition: color 120ms var(--ease-out);
+}
+.lx-row:hover .lx-row-icon,
+.lx-row[data-active] .lx-row-icon {
+  color: var(--l-sidebar-foreground);
+}
+.lx-row-label {
+  flex: 1;
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.lx-row-count {
+  color: var(--l-sidebar-muted-foreground);
+  font-size: 12px;
+  font-variant-numeric: tabular-nums;
+  opacity: 0.75;
+}
+.lx-row-more {
+  position: absolute;
+  top: 4px;
+  right: 4px;
+  opacity: 0;
+}
+.lx-row-wrap:hover .lx-row-more,
+.lx-row-more:focus-visible {
+  opacity: 1;
+}
+.lx-row-wrap:hover .lx-row-count {
+  visibility: hidden;
+}
+.lx-row-input input {
+  flex: 1;
+  min-width: 0;
+  border: 0;
+  background: transparent;
+  color: var(--l-sidebar-foreground);
+  font: inherit;
+}
+.lx-row-input {
+  background-color: var(--lx-row-hover);
+  box-shadow: inset 0 0 0 1px color-mix(in oklab, var(--l-focus) 55%, transparent);
+}
+.lx-sidebar[data-open="false"] .lx-row {
+  justify-content: center;
+  padding: 0;
+}
+.lx-sidebar-footer {
+  display: flex;
+  flex-direction: column;
+  gap: 1px;
+  padding-top: 8px;
+}
+
+/* Small popover menu. Grows from where it is anchored. */
+.lx-menu {
+  position: absolute;
+  z-index: 50;
+  min-width: 200px;
+  padding: 4px;
+  border: 1px solid var(--l-border);
+  border-radius: 10px;
+  background-color: var(--l-surface-overlay);
+  box-shadow: var(--shadow-pop);
+  transform-origin: bottom left;
+  transition:
+    opacity 140ms var(--ease-out),
+    transform 140ms var(--ease-out);
+  @starting-style {
+    opacity: 0;
+    transform: scale(0.97) translateY(2px);
+  }
+}
+.lx-menu-item {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  width: 100%;
+  height: 32px;
+  padding: 0 8px;
+  border-radius: 6px;
+  color: var(--l-text);
+  font-size: 13.5px;
+  text-align: left;
+}
+.lx-menu-item svg {
+  color: var(--l-text-muted);
+}
+.lx-menu-item:hover {
+  background-color: var(--hover);
+}
+
+/* Dialogs: a quick fade and a slight scale, never from zero. */
+.lx-scrim {
+  position: fixed;
+  inset: 0;
+  z-index: 120;
+  background-color: rgb(0 0 0 / 0.4);
+  transition: opacity 160ms var(--ease-out);
+  @starting-style {
+    opacity: 0;
+  }
+}
+.lx-dialog {
+  pointer-events: auto;
+  padding: 20px;
+  border: 1px solid var(--l-border);
+  border-radius: 14px;
+  background-color: var(--l-surface-overlay);
+  box-shadow: var(--shadow-pop);
+  color: var(--l-text);
+  transition:
+    opacity 160ms var(--ease-out),
+    transform 160ms var(--ease-out);
+  @starting-style {
+    opacity: 0;
+    transform: scale(0.97);
+  }
+}
+.lx-input {
+  height: 36px;
+  padding: 0 12px;
+  border: 1px solid var(--l-border);
+  border-radius: 8px;
+  background-color: var(--l-canvas);
+  color: var(--l-text);
+  font-size: 14px;
+  transition: border-color 120ms var(--ease-out);
+}
+.lx-input:focus {
+  border-color: color-mix(in oklab, var(--l-focus) 60%, var(--l-border));
+}
+.lx-icon-choice {
+  display: grid;
+  place-items: center;
+  height: 36px;
+  border-radius: 8px;
+  color: var(--l-text-muted);
+  transition:
+    background-color 120ms var(--ease-out),
+    color 120ms var(--ease-out);
+}
+.lx-icon-choice:hover {
+  background-color: var(--hover);
+  color: var(--l-text);
+}
+.lx-icon-choice.is-on {
+  background-color: color-mix(in oklab, var(--l-accent) 14%, transparent);
+  box-shadow: inset 0 0 0 1px color-mix(in oklab, var(--l-accent) 55%, transparent);
+  color: var(--l-accent);
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .lx-sidebar,
+  .lx-menu,
+  .lx-dialog,
+  .lx-scrim {
+    transition: none;
+  }
+}
+
+/* ---------- cards, round two ---------- */
+
+/* Notes flow in columns at their natural height instead of a fixed bento grid with dead space. */
+html[data-platform="linux"] [data-slot="shelf-grid"] {
+  display: block;
+  columns: 3 260px;
+  column-gap: 12px;
+  padding-top: 4px;
+}
+/* inline-block keeps each card whole and stops a column break from carrying its margin to the
+   top of the next column. */
+html[data-platform="linux"] [data-slot="shelf-grid"] > * {
+  display: inline-block;
+  width: 100%;
+  margin: 0 0 12px;
+  vertical-align: top;
+  break-inside: avoid;
+}
+html[data-platform="linux"] [data-slot="shelf-grid"] > .card {
+  display: inline-flex;
+}
+/* The sidebar already creates shelves. */
+html[data-platform="linux"] [data-slot="button-outline"] {
+  display: none;
+}
+html[data-platform="linux"] [data-slot="shelf-grid"] > [data-slot="empty-shelf"] {
+  column-span: all;
+  width: 100%;
+}
+/* content-visibility:auto must go here: inside columns WebKit judges a card's visibility by its
+   place in the unsplit flow, so cards in the second and third columns went blank on repaint
+   (a hover was enough). */
+html[data-platform="linux"] .card {
+  height: auto;
+  min-height: 0 !important;
+  min-width: 0;
+  content-visibility: visible;
+  contain: none;
+}
+/* No decorative edge bar or sideways date: the footer already says when it was edited. */
+html[data-platform="linux"] .card .strip,
+html[data-platform="linux"] .card .strip-label {
+  display: none;
+}
+html[data-platform="linux"] .card .md-preview,
+html[data-platform="linux"] .card .md-preview-raw {
+  margin-top: 6px;
+  padding-top: 0;
+}
+html[data-platform="linux"] [data-slot="card-meta"] {
+  padding-top: 12px;
+}
+
+/* The note's shelf: just its name and a chevron. */
+html[data-platform="linux"] [data-slot="shelf-picker"] > span:first-child {
+  display: none;
+}
+html[data-platform="linux"] [data-slot="shelf-picker"] .fade-end {
+  max-width: 16rem;
+  -webkit-mask-image: none;
+  mask-image: none;
+  text-overflow: ellipsis;
+}
+html[data-platform="linux"] [data-slot="shelf-picker"] {
+  background-color: transparent;
+  font-weight: 500;
+  color: var(--l-text-muted);
+}
+html[data-platform="linux"] [data-slot="shelf-picker"]:hover {
+  background-color: var(--hover);
+  color: var(--l-text);
+}
+
+/* ---------- dock panel (LinuxDockHome) ---------- */
+
+html[data-platform="linux"] [data-slot="dock-panel"] {
+  padding: 8px;
+}
+html[data-platform="linux"] [data-slot="dock-panel"] > div:first-of-type {
+  height: 32px;
+  padding-inline: 6px 0;
+}
+html[data-platform="linux"] :is([data-slot="dock-canvas"], [data-slot="dock-close"]) {
+  width: 28px;
+  height: 28px;
+  border-radius: 8px;
+  color: var(--l-text-muted);
+}
+html[data-platform="linux"] :is([data-slot="dock-canvas"], [data-slot="dock-close"]):hover {
+  background-color: var(--hover);
+  color: var(--l-text);
+}
+html[data-platform="linux"] :is([data-slot="dock-canvas"], [data-slot="dock-close"]) svg {
+  width: 15px;
+  height: 15px;
+}
+.lx-dock-search {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  height: 36px;
+  padding: 0 4px 0 10px;
+  border: 1px solid var(--l-border);
+  border-radius: 10px;
+  background-color: var(--l-surface);
+  cursor: text;
+  transition: border-color 120ms var(--ease-out);
+}
+.lx-dock-search:focus-within {
+  border-color: color-mix(in oklab, var(--l-focus) 55%, var(--l-border));
+}
+.lx-dock-search input {
+  flex: 1;
+  min-width: 0;
+  border: 0;
+  background: transparent;
+  color: var(--l-text);
+  font-size: 13.5px;
+}
+.lx-chip {
+  height: 26px;
+  padding: 0 10px;
+  border: 1px solid var(--l-border);
+  border-radius: 999px;
+  color: var(--l-text-muted);
+  font-size: 12.5px;
+  font-weight: 500;
+  transition:
+    background-color 120ms var(--ease-out),
+    color 120ms var(--ease-out),
+    border-color 120ms var(--ease-out);
+}
+.lx-chip:hover {
+  color: var(--l-text);
+  background-color: var(--hover);
+}
+.lx-chip.is-on {
+  border-color: transparent;
+  background-color: var(--l-text);
+  color: var(--l-canvas);
+}
+.lx-dock-row {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  width: 100%;
+  padding: 7px 8px;
+  border-radius: 8px;
+  text-align: left;
+  transition: background-color 120ms var(--ease-out);
+}
+.lx-dock-row:hover,
+.lx-dock-row:focus-visible {
+  background-color: var(--hover);
+}
+
+/* Same as the cards: no decorative accent bar on the open note. */
+html[data-platform="linux"] [data-slot="note-sheet"] > [class~="h-[2px]"] {
+  display: none;
+}
+
+/* ---------- note sheet, round two ---------- */
+
+html[data-platform="linux"] .btn[data-variant="destructive"] {
+  background-color: var(--l-error);
+  border-color: var(--l-error);
+  color: #fff;
+}
+html[data-platform="linux"] .btn[data-variant="destructive"]:hover {
+  background-color: color-mix(in oklab, var(--l-error) 88%, #000);
+  color: #fff;
+}
+
+/* The resize edge is invisible until the pointer finds it. */
+html[data-platform="linux"] [data-slot="sheet-resize"] {
+  left: -4px;
+  width: 8px;
+  background: transparent;
+}
+html[data-platform="linux"] [data-slot="sheet-resize"] > * {
+  display: none;
+}
+html[data-platform="linux"] [data-slot="sheet-resize"]::after {
+  content: "";
+  position: absolute;
+  top: 14px;
+  bottom: 14px;
+  left: 3px;
+  width: 2px;
+  border-radius: 2px;
+  background-color: var(--l-focus);
+  opacity: 0;
+  transition: opacity 150ms var(--ease-out);
+}
+html[data-platform="linux"] [data-slot="sheet-resize"]:hover::after {
+  opacity: 0.6;
+}
+
+html[data-platform="linux"] [data-slot="sheet-toolbar"] {
+  padding-block: 6px 8px;
+  border-bottom-color: var(--l-border);
+}
+/* Zoom stays on Ctrl +/-/0, and the footer shows it whenever it is not 100%. */
+html[data-platform="linux"] :is([data-slot="zoom"], span:has(+ [data-slot="zoom"]), [data-slot="zoom"] + span) {
+  display: none;
+}
+
+html[data-platform="linux"] [data-slot="mode-toggle"] {
+  gap: 2px;
+  padding: 2px;
+  border: 1px solid var(--l-border);
+  border-radius: 8px;
+  background-color: var(--l-canvas);
+}
+html[data-platform="linux"] [data-slot="mode-toggle"] button {
+  height: 24px;
+  padding: 0 8px;
+  gap: 5px;
+  border-radius: 6px;
+  background-color: transparent;
+  color: var(--l-text-muted);
+  font-size: 12.5px;
+  font-weight: 500;
+  line-height: 1;
+}
+html[data-platform="linux"] [data-slot="mode-toggle"] button:hover {
+  color: var(--l-text);
+  background-color: transparent;
+}
+html[data-platform="linux"] [data-slot="mode-toggle"] button[aria-pressed="true"] {
+  background-color: var(--l-surface);
+  color: var(--l-text);
+  box-shadow: inset 0 0 0 1px var(--l-border), var(--shadow-xs);
+}
+html[data-platform="linux"] [data-slot="mode-toggle"] button > span > span {
+  display: none;
+}
+
+html[data-platform="linux"] [data-slot="note-title"] {
+  margin-top: 16px;
+  font-size: 24px;
+  font-weight: 600 !important;
+  line-height: 1.25;
+  letter-spacing: -0.022em;
+}
+html[data-platform="linux"] [data-slot="title-rule"] {
+  display: none;
+}
+html[data-platform="linux"] [data-slot="title-rule"] + * {
+  margin-top: 14px;
+}
+
+/* ---------- Glass: a toggle over any palette ----------
+   The window turns translucent and grainy. Nothing is blurred: WebKitGTK cannot blur the desktop,
+   and backdrop-filter over a translucent window brightens into a band. For the same reason headers
+   do not pin in Glass: any fill that hides the cards under them doubles up over the translucent
+   window. */
+
+html[data-platform="linux"][data-glass] {
+  --glass-canvas: 78%;
+}
+/* Light glass reads as grey wash at the dark-glass opacity. */
+html[data-platform="linux"][data-glass][data-appearance="light"] {
+  --glass-canvas: 88%;
+}
+html[data-platform="linux"][data-glass] .chassis {
+  background-color: color-mix(in oklab, var(--l-canvas) var(--glass-canvas), transparent);
+}
+html[data-platform="linux"][data-glass] .lx-sidebar {
+  background-color: color-mix(in oklab, var(--l-sidebar) 62%, transparent);
+}
+html[data-platform="linux"][data-glass] :is(.card, .card:hover) {
+  background-color: color-mix(in oklab, var(--l-surface) 55%, transparent);
+}
+html[data-platform="linux"][data-glass] [data-slot="note-sheet"] {
+  background-color: color-mix(in oklab, var(--l-surface) 86%, transparent);
+}
+html[data-platform="linux"][data-glass] :is([data-slot="shelf-head"], .lx-page-header) {
+  position: relative;
+  background-color: transparent;
+}
+html[data-platform="linux"][data-glass] [data-slot="dock-panel"] {
+  background-color: color-mix(in oklab, var(--l-canvas) 84%, transparent) !important;
+}
+html[data-platform="linux"][data-glass] [data-slot="pill"] {
+  background-color: color-mix(in oklab, var(--l-surface-overlay) 84%, transparent) !important;
+}
+/* The grain was drawn for dark glass; on light glass it stays faint. */
+html[data-platform="linux"][data-glass][data-appearance="light"] .chassis::after {
+  opacity: 0.12;
+}
+
+/* ---------- dock note editor ---------- */
+
+html[data-platform="linux"] [data-slot="dock-toolbar"] {
+  flex-wrap: nowrap;
+  gap: 4px;
+  padding-bottom: 8px;
+  border-bottom-color: var(--l-border);
+}
+html[data-platform="linux"] [data-slot="dock-toolbar"] [data-slot="shelf-picker"] {
+  height: 28px;
+  padding-inline: 8px;
+  border-radius: 6px;
+}
+html[data-platform="linux"] [data-slot="dock-toolbar"] [data-slot="shelf-picker"] > span:nth-child(2) {
+  max-width: 10rem;
+}
+html[data-platform="linux"] [data-slot="dock-note-title"] {
+  margin-top: 4px;
+  font-size: 18px;
+  font-weight: 600;
+  letter-spacing: -0.015em;
+}
+html[data-platform="linux"] [data-slot="dock-panel"] [contenteditable="true"] {
+  color: var(--l-text);
+  font-size: 14px;
+  line-height: 1.6;
+}
+
+/* ---------- create row, title-bar search, palette ---------- */
+
+.lx-sidebar-header {
+  gap: 6px;
+}
+.lx-create {
+  display: flex;
+  flex: 1;
+  align-items: center;
+  justify-content: center;
+  gap: 7px;
+  height: 32px;
+  min-width: 0;
+  border: 1px solid var(--l-border);
+  border-radius: 8px;
+  background-color: var(--l-surface);
+  box-shadow: var(--shadow-xs);
+  color: var(--l-text);
+  font-size: 13px;
+  font-weight: 500;
+  white-space: nowrap;
+  transition:
+    background-color 120ms var(--ease-out),
+    border-color 120ms var(--ease-out),
+    transform 120ms var(--ease-out);
+}
+.lx-create svg {
+  flex-shrink: 0;
+  color: var(--l-text-muted);
+}
+.lx-create:hover {
+  border-color: var(--line-strong);
+  background-color: color-mix(in oklab, var(--l-text) 4%, var(--l-surface));
+}
+.lx-create:active {
+  transform: scale(0.97);
+}
+.lx-sidebar[data-open="false"] .lx-create {
+  flex: none;
+  width: 36px;
+  height: 36px;
+  border-color: transparent;
+  background: transparent;
+  box-shadow: none;
+}
+.lx-sidebar[data-open="false"] .lx-create:hover {
+  background-color: var(--lx-row-hover);
+}
+
+/* Centred in the title bar; looks like a field, opens the palette. */
+.lx-search-trigger {
+  position: absolute;
+  left: 50%;
+  top: 50%;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  width: min(360px, 40%);
+  height: 32px;
+  padding: 0 6px 0 10px;
+  border: 1px solid var(--l-border);
+  border-radius: 8px;
+  background-color: var(--l-surface);
+  box-shadow: var(--shadow-xs);
+  color: var(--l-placeholder);
+  font-size: 13px;
+  transform: translate(-50%, -50%);
+  transition: border-color 120ms var(--ease-out);
+}
+.lx-search-trigger:hover {
+  border-color: var(--line-strong);
+}
+.lx-search-trigger span {
+  flex: 1;
+  text-align: left;
+}
+html[data-platform="linux"] .lx-search-trigger kbd {
+  border-color: transparent;
+  background: transparent;
+}
+
+.lx-palette {
+  pointer-events: auto;
+  display: flex;
+  flex-direction: column;
+  width: 100%;
+  max-width: 620px;
+  overflow: hidden;
+  border: 1px solid var(--l-border);
+  border-radius: 14px;
+  background-color: var(--l-surface-overlay);
+  box-shadow: var(--shadow-pop);
+  transform-origin: top center;
+  transition:
+    opacity 150ms var(--ease-out),
+    transform 150ms var(--ease-out);
+  @starting-style {
+    opacity: 0;
+    transform: scale(0.98) translateY(-4px);
+  }
+}
+.lx-palette-list {
+  max-height: min(400px, 56vh);
+  overflow-y: auto;
+  padding: 6px;
+  border-top: 1px solid var(--l-border);
+  scrollbar-width: thin;
+}
+.lx-palette-section {
+  padding: 8px 10px 4px;
+  color: var(--l-text-muted);
+  font-size: 12px;
+  font-weight: 500;
+}
+.lx-palette-item {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  height: 38px;
+  padding: 0 10px;
+  border-radius: 8px;
+  font-size: 14px;
+  cursor: default;
+}
+.lx-palette-item.is-active {
+  background-color: var(--press);
+}
+.lx-palette-icon {
+  display: grid;
+  flex-shrink: 0;
+  place-items: center;
+  width: 16px;
+  color: var(--l-text-muted);
+}
+.lx-palette-item.is-active .lx-palette-icon {
+  color: var(--l-text);
+}
+.lx-palette-footer {
+  display: flex;
+  align-items: center;
+  gap: 14px;
+  height: 38px;
+  padding: 0 12px;
+  border-top: 1px solid var(--l-border);
+  color: var(--l-text-muted);
+  font-size: 12px;
+}
+.lx-palette-action {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  height: 26px;
+  padding: 0 8px;
+  border-radius: 6px;
+  color: var(--l-text);
+  font-size: 12.5px;
+  font-weight: 500;
+}
+.lx-palette-action:hover {
+  background-color: var(--hover);
+}
+.lx-palette-action:disabled {
+  opacity: 0.5;
+}
+.lx-hl {
+  border-radius: 3px;
+  background-color: var(--l-search-match-background);
+  color: var(--l-search-match-foreground);
+}
+@media (prefers-reduced-motion: reduce) {
+  .lx-palette {
+    transition: none;
+  }
+}
+
+html[data-platform="linux"] :is(.btn, .lx-create):disabled {
+  opacity: 0.5;
+  pointer-events: none;
+}
+
+.lx-icon-pick {
+  display: grid;
+  flex-shrink: 0;
+  place-items: center;
+  width: 36px;
+  height: 36px;
+  border: 1px solid var(--l-border);
+  border-radius: 8px;
+  background-color: var(--l-canvas);
+  color: var(--l-text);
+  transition: border-color 120ms var(--ease-out), background-color 120ms var(--ease-out);
+}
+.lx-icon-pick:hover {
+  border-color: var(--line-strong);
+  background-color: var(--hover);
+}

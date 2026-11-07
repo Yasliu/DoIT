@@ -1,5 +1,6 @@
 import { invoke } from "@tauri-apps/api/core";
 import { getCurrentWindow } from "@tauri-apps/api/window";
+import { pick } from "../platform";
 
 export interface GridCoordinates {
   x: number;
@@ -43,6 +44,16 @@ export interface CategoryInfo {
   color_accent?: string;
 }
 
+/** A folder imported as one shelf (see `importFolderAsShelf`). */
+export interface FolderImport {
+  shelf: string;
+  total_scanned: number;
+  imported_count: number;
+  skipped_count: number;
+  /** Every note in the workspace afterwards. */
+  notes: NoteItem[];
+}
+
 export interface ScanSummary {
   total_scanned: number;
   imported_count: number;
@@ -84,6 +95,10 @@ export interface AppSettings {
   dock_on_close?: boolean;
   last_seen_version?: string;
   category_icons?: Record<string, string>;
+  /** Linux only: colour theme and light/dark choice (see src/platform/linux/theme.ts). */
+  palette?: string;
+  appearance?: string;
+  glass?: boolean;
 }
 
 export const DEFAULT_SETTINGS: AppSettings = {
@@ -107,6 +122,8 @@ export const DEFAULT_SETTINGS: AppSettings = {
 };
 
 export const NOTE_FONTS: Array<{ name: string; label: string; stack: string }> = [
+  // Linux's interface typeface, offered for notes too.
+  ...pick([], [{ name: "Inter", label: "Inter", stack: '"Inter Variable", "Inter", system-ui, sans-serif' }]),
   { name: "Instrument Sans", label: "Instrument Sans", stack: '"Instrument Sans", "DoIT_Default", "Segoe UI Variable Text", "Segoe UI", system-ui, sans-serif' },
   { name: "Instrument Serif", label: "Instrument Serif", stack: '"Instrument Serif", "DoIT_Default", Georgia, serif' },
   { name: "Newsreader", label: "Newsreader", stack: '"Newsreader", "Instrument Serif", "DoIT_Default", Georgia, serif' },
@@ -421,6 +438,31 @@ export const tauriApi = {
     }
   },
 
+  /**
+   * Drags the dock window (pill or panel), grabbed at (`grabX`, `grabY`) px from its top-left, and
+   * resolves when the drag is over. Where the app runs the drag (Linux under X11) it follows the
+   * cursor, never leaving the screen, until the button is released; elsewhere the OS move loop has
+   * already finished when `begin_dock_drag` returns.
+   */
+  async dragDockWindow(grabX: number, grabY: number): Promise<void> {
+    if (!isTauri()) return;
+    // Listen before asking: a quick flick can release the button while the call is in flight.
+    let release = () => {};
+    const released = new Promise<void>((resolve) => (release = resolve));
+    const events = ["pointerup", "pointercancel", "blur"] as const;
+    events.forEach((name) => window.addEventListener(name, release));
+    try {
+      if (await invoke<boolean>("begin_dock_drag", { grabX, grabY })) {
+        await released;
+        await invoke("end_dock_drag");
+      }
+    } catch {
+      await this.beginDrag();
+    } finally {
+      events.forEach((name) => window.removeEventListener(name, release));
+    }
+  },
+
   async saveTrayPosition(): Promise<void> {
     if (!isTauri()) return;
     try {
@@ -461,6 +503,11 @@ export const tauriApi = {
       return { total_scanned: 0, imported_count: 0, skipped_count: 0, imported_notes: [] };
     }
     return await invoke<ScanSummary>("pick_and_scan_folder");
+  },
+
+  /** Picks a folder and imports its notes as one shelf, named `shelf` or after the folder. */
+  async importFolderAsShelf(shelf?: string): Promise<FolderImport> {
+    return await invoke<FolderImport>("import_folder_as_shelf", { shelf: shelf ?? null });
   },
 
   async restartApp(): Promise<void> {
