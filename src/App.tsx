@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
-import { X } from "lucide-react";
+import { Copy, FolderInput, X } from "lucide-react";
 import type { NoteItem } from "./api/tauriBridge";
 import { tauriApi } from "./api/tauriBridge";
 import { BentoCanvas } from "./components/BentoCanvas";
@@ -8,7 +8,8 @@ import { CategoryMenu } from "./components/CategoryMenu";
 import { IconPickerModal } from "./components/IconPickerModal";
 import { setMarkdownBaseDir } from "./lib/format";
 import { applyShortcutSettings } from "./lib/shortcuts";
-import { initCategoryIcons } from "./lib/categoryIcons";
+import { initCategoryIcons, setCategoryIcon } from "./lib/categoryIcons";
+import { suggestShelfIcon } from "./platform/modern/ShelfIcons";
 import { NoteSheet } from "./components/NoteSheet";
 import { SettingsPanel } from "./components/SettingsPanel";
 import { Sidebar } from "./components/Sidebar";
@@ -16,7 +17,16 @@ import { TitleBar } from "./components/TitleBar";
 import { UpdateInfo, UpdateModal } from "./components/UpdateModal";
 import { ReleaseLogModal } from "./components/ReleaseLogModal";
 import { useWorkspace } from "./hooks/useWorkspace";
-import { accentFor, cx } from "./lib/text";
+import { accentFor, cleanText, cx } from "./lib/text";
+import { applyThemeSettings, isLinux, isModern } from "./platform";
+import { ModernSettings } from "./platform/modern/ModernSettings";
+import { ModernShelfDialog } from "./platform/modern/ModernShelfDialog";
+import { ModernSidebar } from "./platform/modern/ModernSidebar";
+import { ModernSpotlight } from "./platform/modern/ModernSpotlight";
+import { ModernNewNoteDialog } from "./platform/modern/ModernNewNoteDialog";
+import { ModernNewShelfDialog } from "./platform/modern/ModernNewShelfDialog";
+import { ModernNoteMenu } from "./platform/modern/ModernNoteMenu";
+import { ModernShelfPicker } from "./platform/modern/ModernShelfPicker";
 
 interface OpenNote {
   note: NoteItem;
@@ -84,12 +94,25 @@ export default function App() {
   const canvasRef = useRef<HTMLElement | null>(null);
   const deletedRef = useRef<NoteItem[]>([]);
   const [query, setQuery] = useState("");
+  /** The modern design's Spotlight and create dialogs; only one is open at a time. */
+  const [modernDialog, setModernDialog] = useState<null | "search" | "new-note" | "new-shelf">(null);
+  /** Modern design: a note on its way to another shelf, by Move to… or Copy to…. */
+  const [shelfAction, setShelfAction] = useState<{ kind: "move" | "copy"; note: NoteItem } | null>(null);
   const [active, setActive] = useState<string | null>(null);
   const [openNote, setOpenNote] = useState<OpenNote | null>(null);
   const [isNoteMaximized, setIsNoteMaximized] = useState(false);
   const [isVerticalScreen, setIsVerticalScreen] = useState(() => window.innerHeight > window.innerWidth);
   const [isResizingSheet, setIsResizingSheet] = useState(false);
   const [drawerWidth, setDrawerWidth] = useState<number>(getStoredDrawerWidth);
+
+  // The page can mount before GTK has given the window its real size, which left the editor drawer
+  // sized for a ~850px window. Re-fit the default (a width the user dragged stays) as the window sizes.
+  useEffect(() => {
+    if (!isLinux) return;
+    const fit = () => setDrawerWidth(getStoredDrawerWidth());
+    window.addEventListener("resize", fit);
+    return () => window.removeEventListener("resize", fit);
+  }, []);
   const [contextMenu, setContextMenu] = useState<{ x: number; y: number; note: NoteItem } | null>(null);
   const [categoryMenu, setCategoryMenu] = useState<{ x: number; y: number; shelf: string } | null>(null);
   const [iconPickerShelf, setIconPickerShelf] = useState<string | null>(null);
@@ -108,7 +131,7 @@ export default function App() {
 
   // Background update check. It never blocks the UI, but GitHub's release CDN sometimes needs 10s+ for the
   // TLS handshake: one 3s attempt silently missed updates for 6 hours. So retry with growing patience.
-  const checkForUpdate = useCallback(async (timeoutMs: number): Promise<"found" | "none" | "error"> => {
+  const checkForUpdate = useCallback(async (timeoutMs: number): Promise<"found" | "none" | "unsupported" | "error"> => {
     if (typeof navigator !== "undefined" && navigator.onLine === false) return "error";
     try {
       const { check } = await import("@tauri-apps/plugin-updater");
@@ -140,7 +163,10 @@ export default function App() {
         return "found";
       }
       return "none";
-    } catch {
+    } catch (err) {
+      // A newer release exists but ships no package for this OS/bundle (e.g. Linux before its
+      // assets are published): retrying would only fail the same way.
+      if (/platforms?` object/.test(String(err))) return "unsupported";
       return "error";
     }
   }, []);
@@ -234,6 +260,7 @@ export default function App() {
     void tauriApi.getSettings().then((s) => {
       setMarkdownBaseDir(s.storage_path);
       applyShortcutSettings(s);
+      applyThemeSettings(s);
       if (s.theme_mode) {
         setThemeMode(s.theme_mode as "glass" | "monochrome");
         document.documentElement.dataset.theme = s.theme_mode;
@@ -305,6 +332,7 @@ export default function App() {
     const onManualCheck = async () => {
       const result = await checkForUpdate(30000);
       if (result === "none") notify("You are on the latest version.");
+      else if (result === "unsupported") notify("A newer DoIT is out, but there is no update package for this system yet.");
       else if (result === "error") notify("Could not reach the update server. Try again in a moment.");
     };
     window.addEventListener("doit:check-updates", onManualCheck);
@@ -337,8 +365,10 @@ export default function App() {
         else unlisten = fn;
       }),
     ).catch(() => undefined);
+    // Taking the path consumes it, so open it even if this effect was already cleaned up
+    // (StrictMode's dev double-mount): the re-run would only get null.
     void tauriApi.takeLaunchFile().then((path) => {
-      if (path && !cancelled) void openExternal(path);
+      if (path) void openExternal(path);
     });
     return () => {
       cancelled = true;
@@ -370,6 +400,16 @@ export default function App() {
       if (shelf) setActive(shelf);
     },
     [active, create, shelves, originFromCanvas],
+  );
+
+  /** The modern design asks which shelf a new note goes on; a given shelf, or the classic design, creates it directly. */
+  const requestNewNote = useCallback(
+    (shelf?: string) => {
+      setIsSettings(false);
+      if (!shelf && isModern) setModernDialog("new-note");
+      else newNote(shelf);
+    },
+    [newNote],
   );
 
   const closeSheet = useCallback(() => {
@@ -471,7 +511,11 @@ export default function App() {
       if (meta && event.key.toLowerCase() === "n") {
         event.preventDefault();
         if (isSettings) setIsSettings(false);
-        if (!openNote) newNote();
+        if (!openNote) requestNewNote();
+      }
+      if (isModern && meta && event.key.toLowerCase() === "k") {
+        event.preventDefault();
+        setModernDialog((d) => (d === "search" ? null : "search"));
       }
       if (meta && event.key.toLowerCase() === "o") {
         event.preventDefault();
@@ -488,7 +532,46 @@ export default function App() {
     };
     window.addEventListener("keydown", onKey);
     return () => window.removeEventListener("keydown", onKey);
-  }, [newNote, openNote, toggleMini, isSettings, handleImportNote]);
+  }, [requestNewNote, openNote, toggleMini, isSettings, handleImportNote]);
+
+  /** Modern design: import one file onto `shelf` (made first when `created`), then open it. */
+  const importFileInto = useCallback(
+    async (shelf: string, created: boolean) => {
+      setModernDialog(null);
+      try {
+        const imported = await workspace.importNoteFile();
+        if (created) await createCategory(shelf);
+        if (imported.category !== shelf) await moveCategory(imported.id, shelf);
+        notify(`Imported “${imported.title || "Untitled"}” into ${shelf}.`);
+        setIsSettings(false);
+        setSheetClosing(false);
+        setOpenNote({ note: { ...imported, category: shelf }, origin: originFromCanvas() });
+      } catch (err: any) {
+        const msg = typeof err === "string" ? err : err?.message || "";
+        if (msg && !msg.toLowerCase().includes("cancelled")) notify(msg);
+      }
+    },
+    [workspace, createCategory, moveCategory, notify, originFromCanvas],
+  );
+
+  /** Modern design: import a folder as a shelf, named `name` or after the folder. */
+  const importFolderShelf = useCallback(
+    async (name: string, icon: string | null) => {
+      setModernDialog(null);
+      try {
+        const result = await workspace.importFolderAsShelf(name || undefined);
+        setCategoryIcon(result.shelf, icon ?? suggestShelfIcon(result.shelf));
+        setIsSettings(false);
+        setActive(result.shelf);
+        const n = result.imported_count;
+        notify(`Imported ${n} note${n === 1 ? "" : "s"} into ${result.shelf}.`);
+      } catch (err: any) {
+        const msg = typeof err === "string" ? err : err?.message || "";
+        if (msg && !msg.toLowerCase().includes("cancelled")) notify(msg);
+      }
+    },
+    [workspace, notify],
+  );
 
   useEffect(() => () => window.clearTimeout(toastTimer.current), []);
 
@@ -496,7 +579,29 @@ export default function App() {
 
   return (
     <div data-theme={themeMode} className="chassis flex h-full w-full overflow-hidden">
-      {!mini && (
+      {!mini && isModern && (
+        <ModernSidebar
+          shelves={shelves}
+          counts={counts}
+          total={notes.length}
+          active={active}
+          isSettings={isSettings}
+          open={railOpen}
+          onSelect={(shelf) => {
+            setIsSettings(false);
+            setActive(shelf);
+          }}
+          onNewNote={() => requestNewNote()}
+          onNewShelf={() => setModernDialog("new-shelf")}
+          onReorderShelves={workspace.reorderShelves}
+          onOpenSettings={() => setIsSettings((v) => !v)}
+          onShelfMenu={(event, shelf) => {
+            const r = (event.currentTarget as HTMLElement).getBoundingClientRect();
+            setCategoryMenu({ x: event.clientX || r.right, y: event.clientY || r.bottom, shelf });
+          }}
+        />
+      )}
+      {!mini && !isModern && (
         <Sidebar
           shelves={shelves}
           counts={counts}
@@ -534,6 +639,9 @@ export default function App() {
           onToggleMini={toggleMini}
           onOpenSettings={() => setIsSettings((v) => !v)}
           isSettings={isSettings}
+          sidebarOpen={railOpen}
+          onToggleSidebar={() => setRailOpen((prev) => !prev)}
+          onOpenSearch={() => setModernDialog("search")}
         />
 
         {(() => {
@@ -559,11 +667,15 @@ export default function App() {
                 <div className="relative z-10 h-full">
                 {isSettings ? (
                   <div className="scroll relative h-full overflow-y-scroll" style={{ scrollbarGutter: "stable" }}>
-                    <SettingsPanel
-                      onBack={() => setIsSettings(false)}
-                      onStoragePathChanged={() => void workspace.reload()}
-                      onThemeChanged={(mode) => setThemeMode(mode)}
-                    />
+                    {isModern ? (
+                      <ModernSettings onBack={() => setIsSettings(false)} onStoragePathChanged={() => void workspace.reload()} />
+                    ) : (
+                      <SettingsPanel
+                        onBack={() => setIsSettings(false)}
+                        onStoragePathChanged={() => void workspace.reload()}
+                        onThemeChanged={(mode) => setThemeMode(mode)}
+                      />
+                    )}
                   </div>
                 ) : state === "error" ? (
                   <div className="flex h-full flex-col items-start justify-center px-10">
@@ -580,19 +692,27 @@ export default function App() {
                     notes={notes}
                     shelves={shelves}
                     active={active}
-                    query={query}
+                    query={isModern ? "" : query}
                     loading={state === "loading"}
                     locked={false}
                     collapsed={collapsed}
                     onToggleCollapse={toggleCollapse}
                     onOpen={openTile}
-                    onNewNote={newNote}
+                    onNewNote={requestNewNote}
                     onNewCategory={(name) => {
                       void createCategory(name);
                       setActive(name);
                     }}
                     onToggleItem={toggleItem}
                     onMoveCategory={(id, shelf) => void moveCategory(id, shelf)}
+                    onCopyToShelf={
+                      isModern
+                        ? (note, shelf) => {
+                            workspace.copyNote(note, shelf);
+                            notify(`Copied to ${shelf}.`);
+                          }
+                        : undefined
+                    }
                     onDeleteCategory={(cat) => void deleteCategory(cat)}
                     onCategoryContextMenu={(event, shelf) => setCategoryMenu({ x: event.clientX, y: event.clientY, shelf })}
                     onOpenIconPicker={(shelf) => setIconPickerShelf(shelf)}
@@ -605,6 +725,7 @@ export default function App() {
 
               {/* Sliding editor drawer: reserves space so the dashboard stays visible + interactive */}
               <aside
+                data-slot="sheet-dock"
                 className={cx(
                   isMaxClosing
                     ? "absolute top-0 bottom-3 left-3 right-3 z-30 min-h-0 min-w-0 overflow-hidden pointer-events-none"
@@ -670,7 +791,49 @@ export default function App() {
         })()}
       </div>
 
-      {contextMenu && (
+      {contextMenu && isModern && (
+        <ModernNoteMenu
+          x={contextMenu.x}
+          y={contextMenu.y}
+          onClose={() => setContextMenu(null)}
+          onOpen={() => openTile(contextMenu.note, originFromCanvas())}
+          onMove={() => setShelfAction({ kind: "move", note: contextMenu.note })}
+          onCopy={() => setShelfAction({ kind: "copy", note: contextMenu.note })}
+          onDelete={() => {
+            const note = contextMenu.note;
+            remove(note.id);
+            deletedRef.current = [...deletedRef.current, note];
+            notify("Note deleted.", note);
+          }}
+        />
+      )}
+      {isModern && shelfAction && (
+        <ModernShelfPicker
+          label={shelfAction.kind === "move" ? "Move note" : "Copy note"}
+          placeholder={`${shelfAction.kind === "move" ? "Move" : "Copy"} “${cleanText(shelfAction.note.title) || "Untitled"}” to…`}
+          icon={shelfAction.kind === "move" ? <FolderInput size={17} /> : <Copy size={17} />}
+          enterLabel={shelfAction.kind}
+          shelves={shelves}
+          current={active}
+          exclude={shelfAction.kind === "move" ? shelfAction.note.category || "Uncategorized" : undefined}
+          onClose={() => setShelfAction(null)}
+          onPick={({ shelf, created }) => {
+            const { kind, note } = shelfAction;
+            setShelfAction(null);
+            void (async () => {
+              if (created) await createCategory(shelf);
+              if (kind === "move") {
+                await moveCategory(note.id, shelf);
+                notify(`Moved to ${shelf}.`);
+              } else {
+                workspace.copyNote(note, shelf);
+                notify(`Copied to ${shelf}.`);
+              }
+            })();
+          }}
+        />
+      )}
+      {contextMenu && !isModern && (
         <ContextMenu
           x={contextMenu.x}
           y={contextMenu.y}
@@ -719,7 +882,22 @@ export default function App() {
         />
       )}
 
-      {iconPickerShelf && (
+      {iconPickerShelf && isModern && (
+        <ModernShelfDialog
+          shelf={iconPickerShelf}
+          onClose={() => setIconPickerShelf(null)}
+          onRename={async (shelf, newName) => {
+            const err = await renameCategory(shelf, newName);
+            if (!err && active === shelf) setActive(newName);
+            return err;
+          }}
+          onDelete={(shelf) => {
+            setIconPickerShelf(null);
+            void deleteCategory(shelf);
+          }}
+        />
+      )}
+      {iconPickerShelf && !isModern && (
         <IconPickerModal
           shelf={iconPickerShelf}
           accent={accentFor(iconPickerShelf, shelves)}
@@ -771,6 +949,55 @@ export default function App() {
             />
           </div>
         </div>
+      )}
+
+      {isModern && modernDialog === "search" && (
+        <ModernSpotlight
+          notes={notes}
+          shelves={shelves}
+          onClose={() => setModernDialog(null)}
+          onOpenNote={(note) => {
+            setIsSettings(false);
+            openTile(note, originFromCanvas());
+          }}
+          onOpenShelf={(shelf) => {
+            setIsSettings(false);
+            setActive(shelf);
+          }}
+          onNewNote={() => setModernDialog("new-note")}
+          onNewShelf={() => setModernDialog("new-shelf")}
+          onSettings={() => setIsSettings(true)}
+          onDock={toggleMini}
+        />
+      )}
+      {isModern && modernDialog === "new-note" && (
+        <ModernNewNoteDialog
+          shelves={shelves}
+          current={active}
+          onClose={() => setModernDialog(null)}
+          onCreate={(shelf, created) => {
+            setModernDialog(null);
+            void (async () => {
+              if (created) await createCategory(shelf);
+              newNote(shelf);
+            })();
+          }}
+          onImportFile={(shelf, created) => void importFileInto(shelf, created)}
+        />
+      )}
+      {isModern && modernDialog === "new-shelf" && (
+        <ModernNewShelfDialog
+          shelves={shelves}
+          onClose={() => setModernDialog(null)}
+          onCreate={(name, icon) => {
+            setModernDialog(null);
+            setIsSettings(false);
+            setCategoryIcon(name, icon);
+            void createCategory(name);
+            setActive(name);
+          }}
+          onImportFolder={(name, icon) => void importFolderShelf(name, icon)}
+        />
       )}
 
       {availableUpdate && <UpdateModal info={availableUpdate} />}

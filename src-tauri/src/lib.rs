@@ -1,9 +1,15 @@
-pub mod models;
-pub mod storage;
+pub mod actions;
 pub mod commands;
+pub mod models;
+pub mod platform;
+pub mod storage;
+pub mod window;
 
-use commands::*;
+use actions::Action;
+use commands::files::{file_from_args, LaunchFile};
+use commands::window::{open_canvas_mode, open_tray_mode};
 use storage::StorageManager;
+use window::state::{MainWindowState, SAVED_MAIN_WINDOW_STATE};
 use tauri::{
     image::Image,
     menu::{Menu, MenuItem},
@@ -15,13 +21,21 @@ const TRAY_ICON_BYTES: &[u8] = include_bytes!("../icons/tray_rgba.bin");
 
 #[cfg_attr(mobile, tauri::mobile_entry_point)]
 pub fn run() {
+    platform::init();
+
     let storage_manager = StorageManager::new();
 
-    let launch_file = file_from_args(&std::env::args().collect::<Vec<_>>());
+    let argv = std::env::args().collect::<Vec<_>>();
+    let launch_file = file_from_args(&argv);
+    let launch_action = Action::from_args(&argv);
 
     tauri::Builder::default()
         // Must be first: a second launch (e.g. double-clicking another .md) is forwarded to this instance
         .plugin(tauri_plugin_single_instance::init(|app, argv, _cwd| {
+            if let Some(action) = Action::from_args(&argv) {
+                action.perform(app);
+                return;
+            }
             let main_visible = app
                 .get_webview_window("main")
                 .map(|w| w.is_visible().unwrap_or(false))
@@ -38,7 +52,7 @@ pub fn run() {
             } else {
                 if let Some(main) = app.get_webview_window("main") {
                     let _ = main.unminimize();
-                    let _ = main.set_focus();
+                    platform::focus_window(&main);
                 }
                 if let Some(p) = path {
                     let _ = app.emit("open-external-file", p);
@@ -54,7 +68,7 @@ pub fn run() {
 
             if let tauri::WindowEvent::Moved(pos) = event {
                 if label == "tray" {
-                    crate::commands::track_tray_window_moved(window, *pos);
+                    commands::window::track_tray_window_moved(window, *pos);
                 }
             }
 
@@ -112,11 +126,16 @@ pub fn run() {
                         } else {
                             app.exit(0);
                         }
-                    } else {
-                        // X button on tray companion / pill → just hide it
+                    } else if platform::has_tray() {
+                        // Window-manager close (Alt+F4, the dock's Quit) on the pill/panel: hide it;
+                        // the tray icon brings it back.
                         if let Some(win) = app.get_webview_window(&label) {
                             let _ = win.hide();
                         }
+                    } else {
+                        // No tray icon to come back from (stock GNOME): hiding would leave an
+                        // invisible process, so quit as the user asked.
+                        commands::window::quit_app(app.clone());
                     }
                 });
             }
@@ -138,10 +157,16 @@ pub fn run() {
                 _ => {}
             }
         })
-        .setup(|app| {
+        .setup(move |app| {
+            // Reaching setup means no instance was running, so there is nothing to quit.
+            if launch_action == Some(Action::Quit) {
+                app.handle().exit(0);
+                return Ok(());
+            }
             // Force absolute transparency on window background wrapper layer
             // Launch Window State Persistence Engine: Restore maximize state
             if let Some(main_win) = app.get_webview_window("main") {
+                platform::prepare_webview(&main_win);
                 let _ = main_win.set_decorations(false);
                 let storage = app.state::<StorageManager>();
                 if storage.get_is_maximized() {
@@ -179,18 +204,7 @@ pub fn run() {
                         ..
                     } = event
                     {
-                        let app = tray.app_handle().clone();
-                        // Toggle: if main is visible → go to tray, else → go to canvas
-                        let main_visible = app
-                            .get_webview_window("main")
-                            .map(|w| w.is_visible().unwrap_or(false))
-                            .unwrap_or(false);
-
-                        if main_visible {
-                            let _ = open_tray_mode(app, None, None);
-                        } else {
-                            let _ = open_canvas_mode(app);
-                        }
+                        Action::Toggle.perform(tray.app_handle());
                     }
                 })
                 .build(app)?;
@@ -198,42 +212,45 @@ pub fn run() {
             Ok(())
         })
         .invoke_handler(tauri::generate_handler![
-            get_notes,
-            save_note,
-            update_note_category,
-            update_note_coordinates,
-            delete_note,
-            get_categories,
-            add_category,
-            delete_category,
-            rename_category,
-            take_launch_file,
-            open_external_file,
-            save_external_file,
-            toggle_category_collapse,
-            get_settings,
-            get_default_storage_path,
-            update_settings,
-            select_storage_directory,
-            export_data,
-            import_data,
-            import_single_markdown_file,
-            scan_markdown_folder,
-            pick_and_scan_folder,
-            toggle_window_minimize,
-            set_mini_window_mode,
-            open_tray_mode,
-            open_canvas_mode,
-            tray_ready,
-            set_tray_mode,
-            canvas_ready,
-            set_external_dirty,
-            start_drag,
-            save_tray_position,
-            restart_app,
-            quit_app,
-            show_tray_context_menu,
-            get_system_fonts
+            commands::notes::get_notes,
+            commands::notes::save_note,
+            commands::notes::update_note_category,
+            commands::notes::update_note_coordinates,
+            commands::notes::delete_note,
+            commands::notes::get_categories,
+            commands::notes::add_category,
+            commands::notes::delete_category,
+            commands::notes::rename_category,
+            commands::notes::toggle_category_collapse,
+            commands::files::take_launch_file,
+            commands::files::open_external_file,
+            commands::files::save_external_file,
+            commands::files::select_storage_directory,
+            commands::files::export_data,
+            commands::files::import_data,
+            commands::files::import_single_markdown_file,
+            commands::files::scan_markdown_folder,
+            commands::files::pick_and_scan_folder,
+            commands::files::import_folder_as_shelf,
+            commands::settings::get_settings,
+            commands::settings::get_default_storage_path,
+            commands::settings::update_settings,
+            commands::settings::get_system_fonts,
+            commands::window::toggle_window_minimize,
+            commands::window::set_mini_window_mode,
+            commands::window::open_tray_mode,
+            commands::window::open_canvas_mode,
+            commands::window::tray_ready,
+            commands::window::set_tray_mode,
+            commands::window::canvas_ready,
+            commands::window::set_external_dirty,
+            commands::window::start_drag,
+            commands::window::begin_dock_drag,
+            commands::window::end_dock_drag,
+            commands::window::save_tray_position,
+            commands::window::restart_app,
+            commands::window::quit_app,
+            commands::window::show_tray_context_menu
         ])
         .run(tauri::generate_context!())
         .expect("error while running DoIT tauri application");

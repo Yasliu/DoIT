@@ -3,6 +3,11 @@ import ReactDOM from "react-dom/client";
 import App from "./App";
 import { TrayCompanion } from "./components/TrayCompanion";
 import "./styles/globals.css";
+import "./platform/modern/modern.css";
+import { MotionConfig } from "motion/react";
+import { markPlatform, pick } from "./platform";
+
+markPlatform();
 
 // Force absolute transparency on root elements
 document.documentElement.style.background = "transparent";
@@ -19,6 +24,9 @@ const isTrayWindow = window.location.search.includes("window=tray");
 
 ReactDOM.createRoot(document.getElementById("root") as HTMLElement).render(
   <React.StrictMode>
-    {isTrayWindow ? <TrayCompanion /> : <App />}
+    {/* The modern design honours the system's reduced-motion setting for spring animations too. */}
+    <MotionConfig reducedMotion={pick("never", "user")}>
+      {isTrayWindow ? <TrayCompanion /> : <App />}
+    </MotionConfig>
   </React.StrictMode>,
 );

@@ -23,6 +23,7 @@ import {
   ChevronDown,
   Italic,
   Minus,
+  SquarePen,
   Plus,
   Search,
   Smile,
@@ -76,6 +77,8 @@ import {
   fixCheckboxCaret,
   openExternalUrl,
 } from "../lib/format";
+import { applyThemeSettings, isModern, pick } from "../platform";
+import { ModernDockHome } from "../platform/modern/ModernDockHome";
 import { accentFor, cleanText, cx, relativeShort, uid } from "../lib/text";
 
 const NO_CONTENT: ContentItem[] = [];
@@ -92,7 +95,7 @@ export function TrayCompanion() {
     modeRef.current = next;
     setMode(next);
   }, []);
-  const [drawerOpen, setDrawerOpen] = useState(true);
+  const [drawerOpen, setDrawerOpen] = useState(pick(true, false));
   const [filter, setFilter] = useState("");
   const [selectedShelf, setSelectedShelf] = useState<string | null>(null);
   const [activeNoteId, setActiveNoteId] = useState<string | null>(null);
@@ -359,6 +362,7 @@ export function TrayCompanion() {
   // Load theme mode for tray window
   useEffect(() => {
     void tauriApi.getSettings().then((s) => {
+      applyThemeSettings(s);
       if (s.theme_mode) {
         document.documentElement.dataset.theme = s.theme_mode;
       }
@@ -674,6 +678,8 @@ export function TrayCompanion() {
     if (Date.now() < visibilityLockRef.current) return;
     const startX = e.screenX;
     const startY = e.screenY;
+    const grabX = e.clientX;
+    const grabY = e.clientY;
     let isDragging = false;
 
     const onPointerMove = (moveEv: PointerEvent) => {
@@ -684,7 +690,7 @@ export function TrayCompanion() {
         isDragging = true;
         window.removeEventListener("pointermove", onPointerMove);
         window.removeEventListener("pointerup", onPointerUp);
-        void tauriApi.beginDrag().then(() => {
+        void tauriApi.dragDockWindow(grabX, grabY).then(() => {
           void tauriApi.saveTrayPosition();
         });
       }
@@ -722,6 +728,7 @@ export function TrayCompanion() {
     >
       <motion.div
         ref={panelRef}
+        data-slot="dock-panel"
         initial={{
           x: quadrant.grow_x === "right" ? -24 : quadrant.grow_x === "left" ? 24 : 0,
           y: quadrant.grow_y === "down" ? -24 : 24,
@@ -782,7 +789,7 @@ export function TrayCompanion() {
                 activeNote ? "font-mono text-[9.5px] uppercase tracking-[0.14em]" : "text-[13px] tracking-[0.02em]",
               )}
             >
-              {activeNote ? "EDIT NOTE" : "DoIT"}
+              {activeNote ? pick("EDIT NOTE", "") : "DoIT"}
             </span>
           </div>
 
@@ -791,9 +798,20 @@ export function TrayCompanion() {
             onPointerDown={(e) => e.stopPropagation()}
             onClick={(e) => e.stopPropagation()}
           >
+            {isModern && !activeNote && (
+              <button type="button" onClick={handleCreate} className="ui-icon-button size-7!" title="New note" aria-label="New note">
+                <SquarePen size={15} />
+              </button>
+            )}
+            {isModern && (
+              <button type="button" onClick={() => toggleMinimize()} className="ui-icon-button size-7!" title="Minimize to the pill" aria-label="Minimize">
+                <Minus size={15} />
+              </button>
+            )}
             {(
               <button
                 type="button"
+                data-slot="dock-canvas"
                 onPointerDown={(e) => e.stopPropagation()}
                 onClick={(e) => {
                   e.stopPropagation();
@@ -809,12 +827,13 @@ export function TrayCompanion() {
             <button
               type="button"
               onPointerDown={(e) => e.stopPropagation()}
+              data-slot="dock-close"
               onClick={(e) => {
                 e.stopPropagation();
                 closeTray();
               }}
               className="grid size-5 place-items-center rounded text-white/50 hover:bg-white/10 hover:text-white transition-colors cursor-pointer"
-              title="Hide to System Tray (âœ•)"
+              title="Hide to System Tray (✕)"
               aria-label="Hide to System Tray"
             >
               <X size={12} strokeWidth={1.8} />
@@ -831,12 +850,13 @@ export function TrayCompanion() {
             className="flex flex-1 flex-col overflow-hidden min-h-0 px-1 scale-100 animate-in fade-in duration-150"
           >
             {/* Note Toolbar: Type, Bold, Italic, Tasks/Text Mode, Image, Delete */}
-            <div className="flex flex-wrap items-center justify-between gap-x-1 gap-y-1 pb-2 border-b border-white/[0.07] overflow-visible pointer-events-auto shrink-0">
+            <div data-slot="dock-toolbar" className="flex flex-wrap items-center justify-between gap-x-1 gap-y-1 pb-2 border-b border-white/[0.07] overflow-visible pointer-events-auto shrink-0">
             {/* Shelf/Category selector */}
             <div className="relative">
               <button
                 type="button"
                 onClick={() => setShelfOpen((v) => !v)}
+                data-slot="shelf-picker"
                 className="flex h-6 items-center gap-1.5 rounded-md px-1.5 font-mono text-[9.5px] uppercase tracking-[0.11em] text-ink-3 hover:bg-white/[0.08] hover:text-ink-1 transition-colors pointer-events-auto"
               >
                 <span
@@ -1075,6 +1095,7 @@ export function TrayCompanion() {
               <div
                 className="flex items-center rounded-md bg-white/[0.04] border border-white/10 shrink-0 h-6 gap-0.5 px-0.5 select-none"
                 title="Dock note zoom: Ctrl+ to zoom in, Ctrl- to zoom out, Ctrl 0 to reset"
+                data-slot="zoom"
               >
                 <button
                   type="button"
@@ -1201,6 +1222,7 @@ export function TrayCompanion() {
               }}
               data-undo="title"
               placeholder="Untitled"
+              data-slot="dock-note-title"
               className="w-full bg-transparent text-[16px] font-semibold text-ink-1 outline-none placeholder:text-ink-4/60 shrink-0"
               style={{
                 fontFamily: fontStack(activeNote.font_family),
@@ -1362,6 +1384,18 @@ export function TrayCompanion() {
             </div>
           </div>
         </div>
+      ) : isModern ? (
+        <ModernDockHome
+          notes={filteredNotes}
+          shelves={shelves}
+          filter={filter}
+          onFilter={setFilter}
+          shelf={selectedShelf}
+          onShelf={setSelectedShelf}
+          shelvesOpen={drawerOpen}
+          onToggleShelves={() => setDrawerOpen((v) => !v)}
+          onOpen={openNoteById}
+        />
       ) : (
         /* ---- DESK TRAY MAIN MENU (SCREENSHOT 3: CLEAN, UNCLUTTERED, OPEN PROFILE) ---- */
         <div

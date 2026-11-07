@@ -1,0 +1,65 @@
+name: Linux Release Build
+
+# Runs once the Windows release ("Production Release Build") has published a version tag, and adds
+# the Linux packages to that same release:
+#   - DoIT-<version>-1.x86_64.rpm  for Fedora; updates itself in the app like the Windows build
+#   - DoIT_<version>_amd64.AppImage  for any other distro (untested there, offered as experimental)
+# tauri-action merges their entries ("linux-x86_64-rpm", "linux-x86_64") into the release's
+# existing latest.json, so the Windows entries are kept. Waiting for the Windows run avoids two
+# jobs racing to create the release and its latest.json.
+on:
+  workflow_run:
+    workflows: ["Production Release Build"]
+    types: [completed]
+  workflow_dispatch:
+    inputs:
+      tag:
+        description: "Existing release tag to attach the Linux packages to (e.g. v1.2.0)"
+        required: true
+
+jobs:
+  linux:
+    if: github.event_name == 'workflow_dispatch' || github.event.workflow_run.conclusion == 'success'
+    permissions:
+      contents: write
+    # The oldest supported Ubuntu: an AppImage only runs on systems at least as new as its builder.
+    runs-on: ubuntu-22.04
+    env:
+      TAG: ${{ github.event.inputs.tag || github.event.workflow_run.head_branch }}
+    steps:
+      - name: Checkout the release tag
+        uses: actions/checkout@v4
+        with:
+          ref: ${{ env.TAG }}
+
+      - name: Install WebKitGTK and packaging tools
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y libwebkit2gtk-4.1-dev libappindicator3-dev librsvg2-dev patchelf
+
+      - name: Setup Node.js Environment
+        uses: actions/setup-node@v4
+        with:
+          node-version: lts/*
+
+      - name: Install Stable Rust Engine
+        uses: dtolnay/rust-toolchain@stable
+
+      - name: Install Frontend Dependencies
+        run: npm ci
+
+      - name: Find the release to attach to
+        id: release
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: echo "id=$(gh api "repos/$GITHUB_REPOSITORY/releases/tags/$TAG" --jq .id)" >> "$GITHUB_OUTPUT"
+
+      - name: Build the rpm and AppImage and upload them
+        uses: tauri-apps/tauri-action@v0
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          TAURI_SIGNING_PRIVATE_KEY: ${{ secrets.TAURI_SIGNING_PRIVATE_KEY }}
+          TAURI_SIGNING_PRIVATE_KEY_PASSWORD: ${{ secrets.TAURI_SIGNING_PRIVATE_KEY_PASSWORD }}
+        with:
+          releaseId: ${{ steps.release.outputs.id }}
+          includeUpdaterJson: true

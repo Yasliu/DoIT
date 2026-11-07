@@ -64,6 +64,8 @@ import {
   fixCheckboxCaret,
   openExternalUrl,
 } from "../lib/format";
+import { isModern } from "../platform";
+import { ModernConfirm } from "../platform/modern/ModernConfirm";
 import { accentFor, cleanText, cx, fullStamp, uid } from "../lib/text";
 
 interface NoteSheetProps {
@@ -557,14 +559,27 @@ export function NoteSheet({
   };
 
   // ---- Right-side drawer slide-in: single spring-like curve, transform only ----
+  // Decided once, at mount: App flips `instant` to true on the very next render, and re-running this
+  // effect then cancelled the pending start. A hidden window (a file opened while DoIT was in the
+  // background) gets no animation frames, so it always lost that race and the sheet stayed parked
+  // off-screen. The timer covers the missing frames.
+  const animateIn = useRef(!instant);
   useLayoutEffect(() => {
-    if (instant) return;
-    const id = requestAnimationFrame(() => {
+    if (!animateIn.current) return;
+    let started = false;
+    const start = () => {
+      if (started) return;
+      started = true;
       setPhase("in");
       onOpening?.();
-    });
-    return () => cancelAnimationFrame(id);
-  }, [instant]);
+    };
+    const id = requestAnimationFrame(start);
+    const timer = window.setTimeout(start, 120);
+    return () => {
+      cancelAnimationFrame(id);
+      window.clearTimeout(timer);
+    };
+  }, []);
   useEffect(() => {
     const el = frame.current;
     el?.focus({ preventScroll: true });
@@ -683,10 +698,16 @@ export function NoteSheet({
 
   const body = draft.content;
 
+  const tasks = {
+    total: body.filter((item) => item.is_todo).length,
+    done: body.filter((item) => item.is_todo && item.completed).length,
+  };
+
   return (
     <>
       <div
         ref={frame}
+        data-slot="note-sheet"
         role="complementary"
         aria-label={cleanText(draft.title) || "Untitled note"}
         tabIndex={-1}
@@ -730,6 +751,7 @@ export function NoteSheet({
         {!isMaximized && !isBottomMode && (
           <div
             onMouseDown={handleResizeMouseDown}
+            data-slot="sheet-resize"
             className="w-1 hover:w-1.5 cursor-col-resize bg-white/10 hover:bg-white/30 transition-all absolute top-0 left-0 h-full z-40 select-none group/resize"
             title="Drag to resize editor panel"
           >
@@ -763,6 +785,7 @@ export function NoteSheet({
               <button
                 type="button"
                 onClick={() => setShelfOpen((v) => !v)}
+                data-slot="shelf-picker"
                 className={cx(
                   "flex items-center gap-1.5 rounded-lg font-mono uppercase tracking-[0.11em] text-ink-3 transition-colors hover:bg-white/[0.08] hover:text-ink-1 shrink-0 bg-white/[0.04] cursor-pointer",
                   isMaximized ? "h-8 px-3 text-[11px]" : "h-6.5 px-2 text-[9.5px]",
@@ -870,6 +893,7 @@ export function NoteSheet({
         {/* Row 2: Mode Toggle & Formatting Tools */}
         <div
           ref={toolbarRef}
+          data-slot="sheet-toolbar"
           className={cx(
             "flex w-full shrink-0 items-center justify-between pb-2 pt-1 overflow-x-auto scrollbar-none pointer-events-auto border-b border-white/[0.06] transition-all duration-150",
             isMaximized ? "px-6 gap-2" : (isVeryTight ? "px-2.5 gap-1" : "px-3 sm:px-4 gap-1.5"),
@@ -1192,6 +1216,7 @@ export function NoteSheet({
                 isMaximized ? "h-8.5 gap-1 px-1.5" : (isVeryTight ? "h-6.5 gap-0.5 px-0.5" : "h-7 gap-0.5 px-1"),
               )}
               title="Note zoom: Ctrl+ to zoom in, Ctrl- to zoom out, Ctrl 0 to reset"
+              data-slot="zoom"
             >
               <button
                 type="button"
@@ -1275,6 +1300,7 @@ export function NoteSheet({
                 handleUndoKeys(e);
               }}
               data-undo="title"
+              data-slot="note-title"
               placeholder="Untitled"
               aria-label="Note title"
               className={cx(
@@ -1331,7 +1357,7 @@ export function NoteSheet({
               );
             })()}
 
-            <div className="rule my-5" />
+            <div data-slot="title-rule" className="rule my-5" />
 
             <div data-undo="body">
               {rawMode ? (
@@ -1445,7 +1471,7 @@ export function NoteSheet({
           </div>
         </div>
 
-        <div className="flex h-10 shrink-0 items-center justify-between gap-6 px-6 shadow-[inset_0_1px_0_rgba(255,255,255,0.06)]">
+        <div data-slot="sheet-footer" className="flex h-10 shrink-0 items-center justify-between gap-6 px-6 shadow-[inset_0_1px_0_rgba(255,255,255,0.06)]">
           <span className="truncate font-mono text-[9px] uppercase tracking-[0.1em] text-ink-4">
             Last edited {fullStamp(draft.last_edited)}
           </span>
@@ -1463,13 +1489,18 @@ export function NoteSheet({
                 <span className="h-3 w-px bg-white/10" />
               </>
             )}
-            <span>
-              {body.filter((item) => item.is_todo).filter((item) => item.completed).length}/
-              {body.filter((item) => item.is_todo).length} closed
-            </span>
-            <span className="mx-1 h-3 w-px bg-white/10" />
-            <CornerDownLeft size={10} strokeWidth={1.8} />
-            new line | esc
+            {isModern ? (
+              tasks.total > 0 && <span>{tasks.done} of {tasks.total} done</span>
+            ) : (
+              <>
+                <span>
+                  {tasks.done}/{tasks.total} closed
+                </span>
+                <span className="mx-1 h-3 w-px bg-white/10" />
+                <CornerDownLeft size={10} strokeWidth={1.8} />
+                new line | esc
+              </>
+            )}
           </div>
         </div>
       </div>
@@ -1563,7 +1594,20 @@ export function NoteSheet({
       {previewImage && <ImageLightbox src={previewImage} onClose={() => setPreviewImage(null)} />}
 
       {/* Theme-matched destructive action confirmation modal */}
-      {showDeleteConfirm && (
+      {showDeleteConfirm && isModern && (
+        <ModernConfirm
+          title={`Delete “${cleanText(draft.title) || "Untitled"}”?`}
+          body="This removes its file from your notes folder. You can undo right after."
+          confirmLabel="Delete"
+          onCancel={() => setShowDeleteConfirm(false)}
+          onConfirm={() => {
+            setShowDeleteConfirm(false);
+            deleted.current = true;
+            onDelete(draftRef.current);
+          }}
+        />
+      )}
+      {showDeleteConfirm && !isModern && (
         <div
           className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 backdrop-blur-sm p-4 animate-in fade-in duration-150"
           onPointerDown={(e) => e.stopPropagation()}

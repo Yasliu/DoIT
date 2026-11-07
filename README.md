@@ -57,6 +57,15 @@ DoIT lives in the system tray as a floating companion — one click expands it i
 
 File handling stays sandboxed: imports are capped at 30 MB and path operations are isolated from administrative elevation.
 
+### On Linux
+
+DoIT for Linux is built and tested on **Fedora with GNOME**. Download it from the [latest release](https://github.com/Yasliu/DoIT/releases/latest):
+
+- **Fedora (recommended):** the `.rpm`, installed with `sudo dnf install ./DoIT-*.x86_64.rpm`. It updates itself like on Windows.
+- **Any other distribution (experimental):** the `.AppImage`. Make it executable (`chmod +x DoIT_*.AppImage`) and run it.
+
+Linux uses DoIT's new design: seven themes in light and dark, optional Glass and Boxy looks, and Ctrl+K search. **[The Linux guide](docs/install-linux.md)** covers installing, updating and removing DoIT, where notes are kept, the tray and keyboard shortcut on GNOME, Wayland, and how to report a problem.
+
 ## External files: open, edit, sync
 
 DoIT doubles as your external Markdown editor. Right-click any `.md` or `.txt` in Explorer, choose **Open with → DoIT**, and the file opens in place — it is not copied into your DoIT shelf. Edit in MD mode or text mode, then hit **Save** to write it back to the same file. DoIT's own notes autosave as always.
@@ -162,6 +171,8 @@ The full history lives in the release log below.
 **Stack:** Rust + Tauri v2 · TypeScript · Tailwind CSS
 
 **Prerequisites:** C++ build tools, Rust (Cargo), Node.js (npm)
+
+On Linux you also need the WebKitGTK and GTK development packages (Fedora: `webkit2gtk4.1-devel gtk3-devel libappindicator-gtk3-devel librsvg2-devel`; Debian/Ubuntu: `libwebkit2gtk-4.1-dev libgtk-3-dev libayatana-appindicator3-dev librsvg2-dev`).
 
 ```bash
 git clone https://github.com/Yasliu/DoIT.git

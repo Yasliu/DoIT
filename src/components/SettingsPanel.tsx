@@ -26,6 +26,7 @@ import { AppSettings, DEFAULT_SETTINGS, tauriApi } from "../api/tauriBridge";
 import { applyShortcutSettings, DEFAULT_MD_SHORTCUTS } from "../lib/shortcuts";
 import { ShortcutField } from "./ShortcutField";
 import { cx } from "../lib/text";
+import { NewDesignOptIn } from "../platform/DesignSwitch";
 
 interface SettingsPanelProps {
   onBack: () => void;
@@ -35,13 +36,13 @@ interface SettingsPanelProps {
 
 const GENERAL_SHORTCUT_ROWS = [
   { key: "hotkey_new_note", label: "Create New Note", hint: "Spawns a new note in current view", def: "Ctrl+N" },
-  { key: "hotkey_toggle_tray", label: "Toggle Docking Mode", hint: "Switch between Canvas and Dock", def: "Ctrl+D" },
+  { key: "hotkey_toggle_tray", label: "Toggle Docking Mode", hint: "Switch between Canvas and Dock", def: "Ctrl+J" },
   { key: "hotkey_search", label: "Global Search", hint: "Focus search query input", def: "Ctrl+F" },
   { key: "hotkey_settings", label: "Open Settings", hint: "Toggles this settings panel", def: "Ctrl+," },
   { key: "hotkey_open_file", label: "Open / Ingest File", hint: "Native file picker to import note", def: "Ctrl+O" },
 ] as const;
 
-const TEXT_MARKS_SHORTCUT_ROWS = [
+export const TEXT_MARKS_SHORTCUT_ROWS = [
   { key: "hotkey_bold", label: "Bold", hint: "Wrap selection in **bold**", def: DEFAULT_MD_SHORTCUTS.bold },
   { key: "hotkey_italic", label: "Italic", hint: "Wrap selection in *italic*", def: DEFAULT_MD_SHORTCUTS.italic },
   { key: "hotkey_strikethrough", label: "Strikethrough", hint: "Wrap selection in ~~strikethrough~~", def: DEFAULT_MD_SHORTCUTS.strikethrough },
@@ -52,7 +53,7 @@ const TEXT_MARKS_SHORTCUT_ROWS = [
   { key: "hotkey_link", label: "Insert Link", hint: "Wrap selection in [title](url)", def: DEFAULT_MD_SHORTCUTS.link },
 ] as const;
 
-const BLOCKS_STRUCTURE_SHORTCUT_ROWS = [
+export const BLOCKS_STRUCTURE_SHORTCUT_ROWS = [
   { key: "hotkey_h1", label: "Heading 1 (H1)", hint: "Toggle # H1 heading on the current line", def: DEFAULT_MD_SHORTCUTS.h1 },
   { key: "hotkey_h2", label: "Heading 2 (H2)", hint: "Toggle ## H2 heading on the current line", def: DEFAULT_MD_SHORTCUTS.h2 },
   { key: "hotkey_h3", label: "Heading 3 (H3)", hint: "Toggle ### H3 heading on the current line", def: DEFAULT_MD_SHORTCUTS.h3 },
@@ -415,6 +416,8 @@ export function SettingsPanel({ onBack, onStoragePathChanged, onThemeChanged }: 
             </button>
           </div>
         </section>
+
+        <NewDesignOptIn />
 
         {/* SECTION 2: Local Markdown Repository */}
         <section className="glass rounded-[20px] p-5 shadow-[0_20px_50px_-20px_rgba(0,0,0,0.8)] border border-white/10">

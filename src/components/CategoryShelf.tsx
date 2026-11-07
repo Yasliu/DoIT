@@ -4,6 +4,7 @@ import React, { useEffect, useState } from "react";
 import type { NoteItem } from "../api/tauriBridge";
 import { accentFor, cleanText, cx } from "../lib/text";
 import { CATEGORY_ICONS, getCategoryIconName } from "../lib/categoryIcons";
+import { pick, text } from "../platform";
 import { NoteTile } from "./NoteTile";
 
 interface CategoryShelfProps {
@@ -73,7 +74,7 @@ function CategoryShelfComponent({
         animationDelay: `${Math.min(index, 8) * 55}ms`,
       }}
     >
-      <div className="flex items-center gap-3">
+      <div data-slot="shelf-head" className="flex items-center gap-3">
         <button
           type="button"
           onClick={onToggleCollapse}
@@ -115,8 +116,8 @@ function CategoryShelfComponent({
           <h2 className="truncate text-[14px] font-medium tracking-[-0.008em] text-ink-1 transition-colors group-hover/head:text-white">
             {cleanText(shelf)}
           </h2>
-          <span className="font-mono text-[9.5px] tabular-nums tracking-[0.08em] text-ink-4">
-            {String(notes.length).padStart(2, "0")}
+          <span data-slot="shelf-count" className="font-mono text-[9.5px] tabular-nums tracking-[0.08em] text-ink-4">
+            {pick(String(notes.length).padStart(2, "0"), String(notes.length))}
           </span>
         </button>
 
@@ -188,11 +189,12 @@ function CategoryShelfComponent({
         }}
       >
         <div className="min-h-0 overflow-hidden @container">
-          <div className="grid grid-cols-12 grid-flow-row-dense gap-3.5 auto-rows-[minmax(130px,auto)] pb-1 pt-3.5">
+          <div data-slot="shelf-grid" className="grid grid-cols-12 grid-flow-row-dense gap-3.5 auto-rows-[minmax(130px,auto)] pb-1 pt-3.5">
             {notes.length === 0 ? (
               <button
                 type="button"
                 onClick={() => onNewNote(shelf)}
+                data-slot="empty-shelf"
                 className={cx(
                   "col-span-12 rounded-[18px] px-5 py-7 text-left transition-colors duration-200",
                   "shadow-[inset_0_0_0_1px_rgba(255,255,255,0.07)] hover:shadow-[inset_0_0_0_1px_rgba(255,255,255,0.16)]",
@@ -200,10 +202,10 @@ function CategoryShelfComponent({
                 )}
               >
                 <p className="text-[12.5px] text-ink-3">
-                  {dropActive ? "Release to move this note here." : "Nothing on this shelf yet."}
+                  {dropActive ? "Release to move this note here." : text.emptyShelf}
                 </p>
                 <p className="mt-1 font-mono text-[9.5px] uppercase tracking-[0.1em] text-ink-4">
-                  Click to write the first one
+                  {text.emptyShelfAction}
                 </p>
               </button>
             ) : (
