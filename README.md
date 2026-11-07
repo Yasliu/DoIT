@@ -61,15 +61,10 @@ File handling stays sandboxed: imports are capped at 30 MB and path operations a
 
 DoIT for Linux is built and tested on **Fedora with GNOME**. Download it from the [latest release](https://github.com/Yasliu/DoIT/releases/latest):
 
-- **Fedora (recommended):** the `.rpm` file. Install it with `sudo dnf install ./DoIT-*.x86_64.rpm`. DoIT then updates itself like on Windows; installing an update asks for your password once. To remove it: `sudo dnf remove do-it`.
-- **Any other distribution (experimental):** the `.AppImage` file. Make it executable (`chmod +x DoIT_*.AppImage`) and run it. It has not been tested beyond Fedora, so some things may not work yet; please [report what breaks](https://github.com/Yasliu/DoIT/issues). Some distributions need `libfuse2` to run AppImages, and GNOME only shows its icon once it is integrated with Gear Lever or AppImageLauncher.
+- **Fedora (recommended):** the `.rpm`, installed with `sudo dnf install ./DoIT-*.x86_64.rpm`. It updates itself like on Windows.
+- **Any other distribution (experimental):** the `.AppImage`. Make it executable (`chmod +x DoIT_*.AppImage`) and run it.
 
-Good to know:
-
-- **No tray icon?** Stock GNOME shows none, so DoIT stays in your dock instead: right-click it for **Open Canvas**, **Switch to Docking Mode** and **Quit DoIT**. Closing the docking pill (Alt+F4, or Quit from the dock) quits DoIT. On desktops with a tray (KDE, GNOME with the AppIndicator extension) it hides to the tray as on Windows.
-- **Keyboard shortcut:** bind `doit --toggle` to a system shortcut (GNOME: Settings → Keyboard → Custom Shortcuts) to flip between the canvas and the dock from anywhere. `--canvas`, `--dock` and `--quit` also work.
-- **Look:** Linux has its own interface: seven themes in light and dark (Monochrome by default, following GNOME's style), an optional Glass look, Ctrl+K search, and shelves you can drag into your own order. Pick a theme in Settings → Appearance.
-- **Wayland:** DoIT runs through XWayland so the docking pill can place itself and stay on top. With fractional scaling that can look slightly soft; `DOIT_NATIVE_WAYLAND=1 doit` runs natively and sharp, but GNOME then decides where the pill goes and won't keep it on top.
+Linux uses DoIT's new design: seven themes in light and dark, optional Glass and Boxy looks, and Ctrl+K search. **[The Linux guide](docs/install-linux.md)** covers installing, updating and removing DoIT, where notes are kept, the tray and keyboard shortcut on GNOME, Wayland, and how to report a problem.
 
 ## External files: open, edit, sync
 
