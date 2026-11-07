@@ -13,9 +13,31 @@ export type LoadState = "loading" | "ready" | "error";
  * path re-creates it from the in-memory snapshot. Deferring the IPC delete would
  * resurrect the note if the app closed inside the undo window.
  */
+/**
+ * Shelves in display order: the saved order first, any others alphabetically after them, and
+ * Uncategorized always last. With no saved order this is plain alphabetical order.
+ */
+export function sortShelves(names: string[], order: string[]): string[] {
+  const rank = new Map(order.map((name, i) => [name.toLowerCase(), i]));
+  const place = (name: string) =>
+    name.toLowerCase() === "uncategorized" ? Number.MAX_SAFE_INTEGER : (rank.get(name.toLowerCase()) ?? order.length);
+  return [...names].sort((a, b) => place(a) - place(b) || a.localeCompare(b, undefined, { sensitivity: "base" }));
+}
+
 export function useWorkspace() {
   const [notes, setNotes] = useState<NoteItem[]>([]);
   const [categories, setCategories] = useState<CategoryInfo[]>([]);
+  // The order the user dragged shelves into (Linux sidebar). Without one, shelves stay alphabetical.
+  const [shelfOrder, setShelfOrder] = useState<string[]>([]);
+  useEffect(() => {
+    void tauriApi.getSettings().then((s) => setShelfOrder(s.shelf_order ?? []));
+  }, []);
+
+  const saveShelfOrder = useCallback((order: string[]) => {
+    setShelfOrder(order);
+    void tauriApi.getSettings().then((s) => tauriApi.updateSettings({ ...s, shelf_order: order }));
+  }, []);
+
   const [state, setState] = useState<LoadState>("loading");
 
   const saveTimers = useRef(new Map<string, number>());
@@ -225,11 +247,14 @@ export function useWorkspace() {
       const updated = await tauriApi.renameCategory(category, newName);
       setNotes((prev) => prev.map((n) => updated.find((u) => u.id === n.id) ?? n));
       setCategories(await tauriApi.getCategories());
+      if (shelfOrder.some((s) => s.toLowerCase() === category.toLowerCase())) {
+        saveShelfOrder(shelfOrder.map((s) => (s.toLowerCase() === category.toLowerCase() ? newName : s)));
+      }
       return null;
     } catch (err) {
       return typeof err === "string" ? err : "Could not rename category.";
     }
-  }, [persist]);
+  }, [persist, shelfOrder, saveShelfOrder]);
 
   const createCategory = useCallback(
     async (category: string) => {
@@ -246,6 +271,25 @@ export function useWorkspace() {
       }
     },
     [],
+  );
+
+  /** A copy of `note` on `shelf`, saved as a note of its own. */
+  const copyNote = useCallback(
+    (note: NoteItem, shelf: string): NoteItem => {
+      const copy: NoteItem = {
+        ...note,
+        id: uid("note"),
+        category: shelf,
+        last_edited: Date.now(),
+        grid_coordinates: { x: 0, y: 0, w: 0, h: 0 },
+        source_path: undefined,
+        external_header: undefined,
+      };
+      setNotes((prev) => [copy, ...prev]);
+      persist(copy, true);
+      return copy;
+    },
+    [persist],
   );
 
   const reorderNote = useCallback(
@@ -312,14 +356,8 @@ export function useWorkspace() {
       const name = (note.category || "Uncategorized").trim();
       if (name) names.add(name);
     });
-    return [...names].sort((a, b) => {
-      const aUn = a.toLowerCase() === "uncategorized";
-      const bUn = b.toLowerCase() === "uncategorized";
-      if (aUn && !bUn) return 1;
-      if (!aUn && bUn) return -1;
-      return a.localeCompare(b, undefined, { sensitivity: "base" });
-    });
-  }, [categories, notes]);
+    return sortShelves([...names], shelfOrder);
+  }, [categories, notes, shelfOrder]);
 
   useEffect(() => {
     const flush = () => {
@@ -403,6 +441,8 @@ export function useWorkspace() {
     scanFolder,
     pickAndScan,
     importFolderAsShelf,
+    reorderShelves: saveShelfOrder,
+    copyNote,
   };
 }
 

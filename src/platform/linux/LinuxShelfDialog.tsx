@@ -1,4 +1,5 @@
 import { useEffect, useState } from "react";
+import { useDialogPlacement } from "./LinuxPalette";
 import { X } from "lucide-react";
 import { getCategoryIconName, renameCategoryIcon, removeCategoryIcon, setCategoryIcon } from "../../lib/categoryIcons";
 import { cleanText } from "../../lib/text";
@@ -13,6 +14,7 @@ interface LinuxShelfDialogProps {
 
 /** Rename a shelf and pick its icon. Linux's take on the Edit Category dialog. */
 export function LinuxShelfDialog({ shelf, onClose, onRename, onDelete }: LinuxShelfDialogProps) {
+  const frame = useDialogPlacement(372);
   const [name, setName] = useState(cleanText(shelf));
   const [icon, setIcon] = useState<string>(() => getCategoryIconName(shelf));
   const [error, setError] = useState<string | null>(null);
@@ -51,7 +53,7 @@ export function LinuxShelfDialog({ shelf, onClose, onRename, onDelete }: LinuxSh
   return (
     <>
       <div className="lx-scrim" onClick={onClose} />
-      <div className="pointer-events-none fixed inset-0 z-[125] grid place-items-center p-4">
+      <div {...frame}>
         <div role="dialog" aria-modal="true" aria-labelledby="shelf-dialog-title" className="lx-dialog w-full max-w-[372px]">
           <div className="flex items-center justify-between">
             <h2 id="shelf-dialog-title" className="text-[15px] font-semibold text-ink-1">

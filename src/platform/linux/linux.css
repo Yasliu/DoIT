@@ -1478,3 +1478,41 @@ html[data-platform="linux"] :is(.btn, .lx-create):disabled {
   border-color: var(--line-strong);
   background-color: var(--hover);
 }
+
+/* A shelf being dragged lifts above the others. */
+.lx-row-wrap[data-sortable] {
+  position: relative;
+}
+.lx-row-wrap[data-dragging] {
+  z-index: 10;
+  border-radius: 8px;
+  background-color: var(--l-surface-overlay);
+  box-shadow: var(--shadow-pop);
+  cursor: grabbing;
+}
+.lx-row-wrap[data-dragging] .lx-row {
+  color: var(--l-sidebar-foreground);
+}
+
+/* A note dragged from the canvas over a sidebar shelf: that is where it will land. */
+.lx-row-wrap[data-drop-over] .lx-row {
+  background-color: color-mix(in oklab, var(--l-accent) 14%, transparent);
+  box-shadow: inset 0 0 0 1px color-mix(in oklab, var(--l-accent) 55%, transparent);
+  color: var(--l-sidebar-foreground);
+}
+.lx-menu-danger,
+.lx-menu-danger svg {
+  color: var(--l-error-foreground);
+}
+.lx-menu-danger:hover {
+  background-color: var(--l-error-surface);
+}
+
+/* WebKitGTK only knows the prefixed user-select, so the app's `user-select: none` never applied on
+   Linux: dragging a note selected text across the whole page. Mirror the rules with the prefix. */
+html[data-platform="linux"] body {
+  -webkit-user-select: none;
+}
+html[data-platform="linux"] :is(input, textarea, [contenteditable="true"], [contenteditable=""], .md-tablewrap) {
+  -webkit-user-select: text;
+}

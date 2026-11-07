@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
-import { X } from "lucide-react";
+import { Copy, FolderInput, X } from "lucide-react";
 import type { NoteItem } from "./api/tauriBridge";
 import { tauriApi } from "./api/tauriBridge";
 import { BentoCanvas } from "./components/BentoCanvas";
@@ -17,7 +17,7 @@ import { TitleBar } from "./components/TitleBar";
 import { UpdateInfo, UpdateModal } from "./components/UpdateModal";
 import { ReleaseLogModal } from "./components/ReleaseLogModal";
 import { useWorkspace } from "./hooks/useWorkspace";
-import { accentFor, cx } from "./lib/text";
+import { accentFor, cleanText, cx } from "./lib/text";
 import { applyThemeSettings, isLinux } from "./platform";
 import { LinuxSettings } from "./platform/linux/LinuxSettings";
 import { LinuxShelfDialog } from "./platform/linux/LinuxShelfDialog";
@@ -25,6 +25,8 @@ import { LinuxSidebar } from "./platform/linux/LinuxSidebar";
 import { LinuxSpotlight } from "./platform/linux/LinuxSpotlight";
 import { LinuxNewNoteDialog } from "./platform/linux/LinuxNewNoteDialog";
 import { LinuxNewShelfDialog } from "./platform/linux/LinuxNewShelfDialog";
+import { LinuxNoteMenu } from "./platform/linux/LinuxNoteMenu";
+import { LinuxShelfPicker } from "./platform/linux/LinuxShelfPicker";
 
 interface OpenNote {
   note: NoteItem;
@@ -94,6 +96,8 @@ export default function App() {
   const [query, setQuery] = useState("");
   /** Linux's Spotlight and create dialogs; only one is open at a time. */
   const [linuxDialog, setLinuxDialog] = useState<null | "search" | "new-note" | "new-shelf">(null);
+  /** Linux: a note on its way to another shelf, by Move to… or Copy to…. */
+  const [shelfAction, setShelfAction] = useState<{ kind: "move" | "copy"; note: NoteItem } | null>(null);
   const [active, setActive] = useState<string | null>(null);
   const [openNote, setOpenNote] = useState<OpenNote | null>(null);
   const [isNoteMaximized, setIsNoteMaximized] = useState(false);
@@ -589,6 +593,7 @@ export default function App() {
           }}
           onNewNote={() => requestNewNote()}
           onNewShelf={() => setLinuxDialog("new-shelf")}
+          onReorderShelves={workspace.reorderShelves}
           onOpenSettings={() => setIsSettings((v) => !v)}
           onShelfMenu={(event, shelf) => {
             const r = (event.currentTarget as HTMLElement).getBoundingClientRect();
@@ -700,6 +705,14 @@ export default function App() {
                     }}
                     onToggleItem={toggleItem}
                     onMoveCategory={(id, shelf) => void moveCategory(id, shelf)}
+                    onCopyToShelf={
+                      isLinux
+                        ? (note, shelf) => {
+                            workspace.copyNote(note, shelf);
+                            notify(`Copied to ${shelf}.`);
+                          }
+                        : undefined
+                    }
                     onDeleteCategory={(cat) => void deleteCategory(cat)}
                     onCategoryContextMenu={(event, shelf) => setCategoryMenu({ x: event.clientX, y: event.clientY, shelf })}
                     onOpenIconPicker={(shelf) => setIconPickerShelf(shelf)}
@@ -778,7 +791,49 @@ export default function App() {
         })()}
       </div>
 
-      {contextMenu && (
+      {contextMenu && isLinux && (
+        <LinuxNoteMenu
+          x={contextMenu.x}
+          y={contextMenu.y}
+          onClose={() => setContextMenu(null)}
+          onOpen={() => openTile(contextMenu.note, originFromCanvas())}
+          onMove={() => setShelfAction({ kind: "move", note: contextMenu.note })}
+          onCopy={() => setShelfAction({ kind: "copy", note: contextMenu.note })}
+          onDelete={() => {
+            const note = contextMenu.note;
+            remove(note.id);
+            deletedRef.current = [...deletedRef.current, note];
+            notify("Note deleted.", note);
+          }}
+        />
+      )}
+      {isLinux && shelfAction && (
+        <LinuxShelfPicker
+          label={shelfAction.kind === "move" ? "Move note" : "Copy note"}
+          placeholder={`${shelfAction.kind === "move" ? "Move" : "Copy"} “${cleanText(shelfAction.note.title) || "Untitled"}” to…`}
+          icon={shelfAction.kind === "move" ? <FolderInput size={17} /> : <Copy size={17} />}
+          enterLabel={shelfAction.kind}
+          shelves={shelves}
+          current={active}
+          exclude={shelfAction.kind === "move" ? shelfAction.note.category || "Uncategorized" : undefined}
+          onClose={() => setShelfAction(null)}
+          onPick={({ shelf, created }) => {
+            const { kind, note } = shelfAction;
+            setShelfAction(null);
+            void (async () => {
+              if (created) await createCategory(shelf);
+              if (kind === "move") {
+                await moveCategory(note.id, shelf);
+                notify(`Moved to ${shelf}.`);
+              } else {
+                workspace.copyNote(note, shelf);
+                notify(`Copied to ${shelf}.`);
+              }
+            })();
+          }}
+        />
+      )}
+      {contextMenu && !isLinux && (
         <ContextMenu
           x={contextMenu.x}
           y={contextMenu.y}

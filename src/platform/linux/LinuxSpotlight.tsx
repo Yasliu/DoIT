@@ -118,6 +118,7 @@ export function LinuxSpotlight(props: LinuxSpotlightProps) {
       label="Search notes"
       placeholder="Search notes, shelves and actions"
       anchorSelector=".lx-search-trigger"
+      topSelector='[data-slot="shelf-head"]'
       query={query}
       onQuery={setQuery}
       items={items}

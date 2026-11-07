@@ -31,20 +31,46 @@ interface LinuxPaletteProps {
   /** The field's icon (a magnifier by default) and what Enter does, for the hint. */
   icon?: ReactNode;
   enterLabel?: string;
-  /** Grow from this element (the title-bar search field): same centre, input over it. */
+  /** Centre on this element (the title-bar search field)... */
   anchorSelector?: string;
+  /** ...and open with the top edge just above this one (the first shelf's divider). */
+  topSelector?: string;
 }
+
+/** The title-bar search field and the first shelf's divider: dialogs line up with both. */
+export const SEARCH_FIELD = ".lx-search-trigger";
+export const FIRST_SHELF_LINE = '[data-slot="shelf-head"]';
 
 const PALETTE_WIDTH = 620;
 
-/** Where the palette sits: over its anchor when there is one, else centred near the top. */
-function placement(selector: string | undefined): React.CSSProperties | null {
-  const rect = selector ? document.querySelector(selector)?.getBoundingClientRect() : null;
+/**
+ * Wrapper props for a dialog `width` wide, lined up with the search field like the palettes; centred
+ * on the window when the field is not on screen.
+ */
+export function useDialogPlacement(width: number): { className: string; style?: React.CSSProperties } {
+  const [style] = useState(() => placement(SEARCH_FIELD, FIRST_SHELF_LINE, width));
+  return style
+    ? { className: "pointer-events-none fixed z-[125]", style }
+    : { className: "pointer-events-none fixed inset-x-0 top-[16vh] z-[125] flex justify-center px-4" };
+}
+
+/** Below the field, where the first shelf's divider sits on an unscrolled canvas. */
+const DEFAULT_DROP = 128;
+
+
+/**
+ * Where a dialog `width` wide sits: centred on the anchor (the search field) and opening just above
+ * the `below` line. Null when the anchor is not on screen; then the caller centres on the window.
+ */
+export function placement(anchor: string | undefined, below: string | undefined, width = PALETTE_WIDTH): React.CSSProperties | null {
+  const rect = anchor ? document.querySelector(anchor)?.getBoundingClientRect() : null;
   if (!rect) return null;
-  const half = Math.min(PALETTE_WIDTH, window.innerWidth - 32) / 2;
+  const half = Math.min(width, window.innerWidth - 32) / 2;
   const x = Math.min(Math.max(rect.left + rect.width / 2, half + 16), window.innerWidth - half - 16);
-  // The input row is 48px high; centre it on the anchor.
-  return { left: x, top: Math.max(8, rect.top + rect.height / 2 - 24), width: half * 2, transform: "translateX(-50%)" };
+  const line = below ? document.querySelector(below)?.getBoundingClientRect() : null;
+  // Just above the line while it is in view below the field; else the usual drop.
+  const top = line && line.top > rect.bottom + 24 ? line.top - 12 : rect.bottom + DEFAULT_DROP;
+  return { left: x, top: Math.min(top, window.innerHeight * 0.3), width: half * 2, transform: "translateX(-50%)" };
 }
 
 /**
@@ -55,7 +81,7 @@ export function LinuxPalette(props: LinuxPaletteProps) {
   const { items, query } = props;
   const [index, setIndex] = useState(0);
   const listRef = useRef<HTMLDivElement | null>(null);
-  const [anchored] = useState(() => placement(props.anchorSelector));
+  const [anchored] = useState(() => placement(props.anchorSelector, props.topSelector));
 
   // A new list (typing) starts from the preferred item, or the top.
   useLayoutEffect(() => {

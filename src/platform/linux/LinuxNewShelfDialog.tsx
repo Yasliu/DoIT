@@ -1,5 +1,6 @@
 import { useEffect, useState } from "react";
 import { createPortal } from "react-dom";
+import { useDialogPlacement } from "./LinuxPalette";
 import { FolderInput, X } from "lucide-react";
 import { CATEGORY_ICONS } from "../../lib/categoryIcons";
 import { ShelfIconGrid, suggestShelfIcon } from "./ShelfIcons";
@@ -15,6 +16,7 @@ interface LinuxNewShelfDialogProps {
 
 /** New shelf: name an empty one, or bring in a folder of Markdown and text files as a shelf. */
 export function LinuxNewShelfDialog({ shelves, onClose, onCreate, onImportFolder }: LinuxNewShelfDialogProps) {
+  const frame = useDialogPlacement(400);
   const [name, setName] = useState("");
   // The icon follows the name until it is picked by hand.
   const [picked, setPicked] = useState<string | null>(null);
@@ -43,7 +45,7 @@ export function LinuxNewShelfDialog({ shelves, onClose, onCreate, onImportFolder
   return createPortal(
     <>
       <div className="lx-scrim" onMouseDown={onClose} />
-      <div className="pointer-events-none fixed inset-x-0 top-[16vh] z-[125] flex justify-center px-4">
+      <div {...frame}>
         <div role="dialog" aria-modal="true" aria-labelledby="new-shelf-title" className="lx-dialog w-full max-w-[400px]">
           <div className="flex items-center justify-between">
             <h2 id="new-shelf-title" className="text-[15px] font-semibold text-ink-1">

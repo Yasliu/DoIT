@@ -1,5 +1,6 @@
 import { useEffect } from "react";
 import { createPortal } from "react-dom";
+import { useDialogPlacement } from "./LinuxPalette";
 
 interface LinuxConfirmProps {
   title: string;
@@ -14,6 +15,7 @@ interface LinuxConfirmProps {
  * cannot trap it. Cancel has focus; Escape cancels.
  */
 export function LinuxConfirm({ title, body, confirmLabel, onConfirm, onCancel }: LinuxConfirmProps) {
+  const frame = useDialogPlacement(360);
   useEffect(() => {
     const onKey = (e: KeyboardEvent) => {
       if (e.key === "Escape") {
@@ -28,7 +30,7 @@ export function LinuxConfirm({ title, body, confirmLabel, onConfirm, onCancel }:
   return createPortal(
     <>
       <div className="lx-scrim" onPointerDown={(e) => e.stopPropagation()} onClick={onCancel} />
-      <div className="pointer-events-none fixed inset-0 z-[125] grid place-items-center p-4">
+      <div {...frame}>
         <div
           role="alertdialog"
           aria-modal="true"

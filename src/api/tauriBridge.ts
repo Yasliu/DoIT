@@ -99,6 +99,8 @@ export interface AppSettings {
   palette?: string;
   appearance?: string;
   glass?: boolean;
+  /** Shelves in the order the user dragged them into; others follow alphabetically. */
+  shelf_order?: string[];
 }
 
 export const DEFAULT_SETTINGS: AppSettings = {

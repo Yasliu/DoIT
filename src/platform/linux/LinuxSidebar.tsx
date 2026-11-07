@@ -1,5 +1,5 @@
-import { useEffect, useState } from "react";
-import { motion } from "motion/react";
+import { useEffect, useRef, useState } from "react";
+import { motion, Reorder } from "motion/react";
 import { FolderPlus, MoreHorizontal, Settings, SquarePen } from "lucide-react";
 import { Mark } from "../../components/Mark";
 import { cleanText, cx } from "../../lib/text";
@@ -18,6 +18,8 @@ interface LinuxSidebarProps {
   onNewShelf: () => void;
   onOpenSettings: () => void;
   onShelfMenu: (event: React.MouseEvent, shelf: string) => void;
+  /** The shelves (without Uncategorized, which stays last) in their new order. */
+  onReorderShelves: (order: string[]) => void;
 }
 
 const isUncategorized = (shelf: string) => shelf.toLowerCase() === "uncategorized";
@@ -33,10 +35,80 @@ export function LinuxSidebar(props: LinuxSidebarProps) {
     return () => window.removeEventListener("category-icons-changed", bump);
   }, []);
 
-  const rows: Array<{ key: string | null; label: string; count: number }> = [
-    { key: null, label: "All notes", count: total },
-    ...shelves.map((shelf) => ({ key: shelf, label: cleanText(shelf), count: counts[shelf] ?? 0 })),
-  ];
+  // Shelves the user can drag; All notes stays first and Uncategorized last.
+  const movable = shelves.filter((shelf) => !isUncategorized(shelf));
+  const [order, setOrder] = useState(movable);
+  const dragging = useRef(false);
+  const [lifted, setLifted] = useState<string | null>(null);
+  const justDragged = useRef(false);
+  useEffect(() => {
+    if (!dragging.current) setOrder(movable);
+  }, [movable.join("\u0000")]);
+
+  const commit = (next: string[]) => {
+    if (next.join("\u0000") !== movable.join("\u0000")) props.onReorderShelves(next);
+  };
+
+  const move = (shelf: string, by: number) => {
+    const from = order.indexOf(shelf);
+    const to = from + by;
+    if (from < 0 || to < 0 || to >= order.length) return;
+    const next = [...order];
+    next.splice(to, 0, ...next.splice(from, 1));
+    setOrder(next);
+    commit(next);
+  };
+
+  const row = (key: string | null, label: string, count: number, sortable: boolean) => {
+    const selected = !isSettings && active === key;
+    const editable = key !== null && !isUncategorized(key);
+    return (
+      <>
+        <button
+          type="button"
+          className="lx-row"
+          data-active={selected || undefined}
+          onClick={() => {
+            // A drag ends with a pointer release over the row; that is not a click.
+            if (justDragged.current) {
+              justDragged.current = false;
+              return;
+            }
+            props.onSelect(key);
+          }}
+          onKeyDown={(e) => {
+            if (!sortable || !e.altKey || (e.key !== "ArrowUp" && e.key !== "ArrowDown")) return;
+            e.preventDefault();
+            move(key!, e.key === "ArrowUp" ? -1 : 1);
+          }}
+          onContextMenu={(e) => {
+            if (!editable) return;
+            e.preventDefault();
+            props.onShelfMenu(e, key!);
+          }}
+          title={open ? undefined : label}
+          aria-description={sortable ? "Drag, or press Alt+Up or Alt+Down, to reorder" : undefined}
+        >
+          {selected && (
+            <motion.span layoutId="lx-selected-row" className="lx-row-selected" transition={{ type: "spring", duration: 0.3, bounce: 0.1 }} />
+          )}
+          <span className="lx-row-icon">{shelfIcon(key)}</span>
+          {open && <span className="lx-row-label">{label}</span>}
+          {open && <span className="lx-row-count">{count}</span>}
+        </button>
+        {open && editable && (
+          <button
+            type="button"
+            className="lx-row-more lx-icon-button size-6!"
+            aria-label={`${label} options`}
+            onClick={(e) => props.onShelfMenu(e, key!)}
+          >
+            <MoreHorizontal size={14} />
+          </button>
+        )}
+      </>
+    );
+  };
 
   return (
     <aside data-slot="sidebar" data-open={open} className="lx-sidebar">
@@ -57,50 +129,45 @@ export function LinuxSidebar(props: LinuxSidebarProps) {
       </div>
 
       <nav className="lx-sidebar-list" aria-label="Shelves">
-        {rows.map((row) => {
-          const selected = !isSettings && active === row.key;
-          const editable = row.key !== null && !isUncategorized(row.key);
-          return (
-            <div key={row.key ?? "__all__"} className="lx-row-wrap">
-              <button
-                type="button"
-                className="lx-row"
-                data-active={selected || undefined}
-                onClick={() => props.onSelect(row.key)}
-                onContextMenu={(e) => {
-                  if (!editable) return;
-                  e.preventDefault();
-                  props.onShelfMenu(e, row.key!);
-                }}
-                title={open ? undefined : row.label}
-              >
-                {selected && (
-                  <motion.span
-                    layoutId="lx-selected-row"
-                    className="lx-row-selected"
-                    transition={{ type: "spring", duration: 0.3, bounce: 0.1 }}
-                  />
-                )}
-                <span className="lx-row-icon">{shelfIcon(row.key)}</span>
-                {open && <span className="lx-row-label">{row.label}</span>}
-                {open && <span className="lx-row-count">{row.count}</span>}
-              </button>
-              {open && editable && (
-                <button
-                  type="button"
-                  className="lx-row-more lx-icon-button size-6!"
-                  aria-label={`${row.label} options`}
-                  onClick={(e) => props.onShelfMenu(e, row.key!)}
-                >
-                  <MoreHorizontal size={14} />
-                </button>
-              )}
-            </div>
-          );
-        })}
+        <div className="lx-row-wrap">{row(null, "All notes", total, false)}</div>
+        <Reorder.Group as="div" axis="y" values={order} onReorder={setOrder} className="flex flex-col gap-px">
+          {order.map((shelf) => (
+            <Reorder.Item
+              key={shelf}
+              as="div"
+              value={shelf}
+              className="lx-row-wrap"
+              data-shelf={shelf}
+              onDragStart={() => {
+                dragging.current = true;
+                justDragged.current = true;
+                setLifted(shelf);
+              }}
+              onDragEnd={() => {
+                dragging.current = false;
+                setLifted(null);
+                commit(order);
+                // A release outside the row produces no click to swallow.
+                window.setTimeout(() => (justDragged.current = false), 0);
+              }}
+              data-dragging={lifted === shelf || undefined}
+              whileDrag={{ scale: 1.02 }}
+              transition={{ type: "spring", duration: 0.25, bounce: 0.15 }}
+              data-sortable
+            >
+              {row(shelf, cleanText(shelf), counts[shelf] ?? 0, true)}
+            </Reorder.Item>
+          ))}
+        </Reorder.Group>
       </nav>
 
       <div className="lx-sidebar-footer">
+        {/* Uncategorized sits apart from the sortable shelves, just above Settings. */}
+        {shelves.filter(isUncategorized).map((shelf) => (
+          <div key={shelf} className="lx-row-wrap" data-shelf={shelf}>
+            {row(shelf, cleanText(shelf), counts[shelf] ?? 0, false)}
+          </div>
+        ))}
         <button
           type="button"
           className={cx("lx-row")}

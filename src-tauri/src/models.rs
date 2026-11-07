@@ -124,6 +124,9 @@ pub struct AppSettings {
     /// Linux: translucent, grainy window on top of the palette.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub glass: Option<bool>,
+    /// Shelves in the order the user dragged them into (others follow alphabetically).
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub shelf_order: Option<Vec<String>>,
 }
 
 fn default_dock_on_close() -> bool {
@@ -206,6 +209,7 @@ impl Default for AppSettings {
             palette: None,
             appearance: None,
             glass: None,
+            shelf_order: None,
         }
     }
 }

@@ -21,6 +21,8 @@ interface BentoCanvasProps {
   onNewCategory?: (name: string) => void;
   onToggleItem: (note: NoteItem, itemId: string) => void;
   onMoveCategory: (id: string, category: string) => void;
+  /** When given, holding Ctrl while dropping a note on another shelf copies it there instead. */
+  onCopyToShelf?: (note: NoteItem, category: string) => void;
   onDeleteCategory?: (shelf: string) => void;
   onCategoryContextMenu?: (event: React.MouseEvent, shelf: string) => void;
   onOpenIconPicker?: (shelf: string) => void;
@@ -64,6 +66,7 @@ export function BentoCanvas({
   onNewCategory,
   onToggleItem,
   onMoveCategory,
+  onCopyToShelf,
   onDeleteCategory,
   onCategoryContextMenu,
   onOpenIconPicker,
@@ -154,6 +157,14 @@ export function BentoCanvas({
       return shelfEl?.dataset.shelf ?? null;
     };
 
+    // Drop targets outside the canvas (the sidebar's shelf rows) style themselves off this.
+    let dropTarget: HTMLElement | null = null;
+    const markDropTarget = (clientX: number, clientY: number) => {
+      dropTarget?.removeAttribute("data-drop-over");
+      dropTarget = (document.elementFromPoint(clientX, clientY)?.closest("[data-shelf]") as HTMLElement | null) ?? null;
+      dropTarget?.setAttribute("data-drop-over", "");
+    };
+
     const readNoteId = (clientX: number, clientY: number) => {
       const under = document.elementFromPoint(clientX, clientY);
       const noteEl = under?.closest("[data-note-id]") as HTMLElement | null;
@@ -168,6 +179,8 @@ export function BentoCanvas({
       if (!moved) {
         moved = true;
         setPressed(null);
+        // A drag is not a text selection; drop any the press began.
+        window.getSelection()?.removeAllRanges();
         const ghostWidth = Math.min(Math.max(rect.width, 220), 320);
         // Anchor the compact ghost pill directly under the pointer:
         // Clamping dx keeps the pointer naturally within the pill bounds,
@@ -194,6 +207,7 @@ export function BentoCanvas({
       if (name !== overRef.current) {
         overRef.current = name;
         setOver(name);
+        markDropTarget(pointer.clientX, pointer.clientY);
       }
 
       const currentOverNote = readNoteId(pointer.clientX, pointer.clientY);
@@ -225,6 +239,7 @@ export function BentoCanvas({
 
       const target = readShelf(pointer.clientX, pointer.clientY);
       const targetNote = readNoteId(pointer.clientX, pointer.clientY);
+      dropTarget?.removeAttribute("data-drop-over");
       detach();
       setDrag(null);
       setOver(null);
@@ -236,8 +251,12 @@ export function BentoCanvas({
 
       if (target && target.toLowerCase() !== currentCategory.toLowerCase()) {
         if (collapsed[target]) onToggleCollapse(target);
-        onMoveCategory(note.id, target);
-        flash(note.id);
+        if (onCopyToShelf && pointer.ctrlKey) {
+          onCopyToShelf(note, target);
+        } else {
+          onMoveCategory(note.id, target);
+          flash(note.id);
+        }
       } else if (targetNote && targetNote !== note.id) {
         if (onReorderNotes) {
           onReorderNotes(currentCategory, note.id, targetNote);
@@ -249,6 +268,7 @@ export function BentoCanvas({
     const onCancel = () => {
       if (done) return;
       done = true;
+      dropTarget?.removeAttribute("data-drop-over");
       detach();
       setDrag(null);
       setOver(null);
