@@ -424,6 +424,7 @@ export function markdownToHtml(md: string): string {
   }
 
   const out: string[] = [];
+  let currentOlNumber = 0;
 
   for (let i = 0; i < lines.length; i++) {
     const line = lines[i];
@@ -434,8 +435,15 @@ export function markdownToHtml(md: string): string {
       continue;
     }
 
+    if (!t) {
+      currentOlNumber = 0;
+      out.push("<div><br></div>");
+      continue;
+    }
+
     const fence = t.match(/^(`{3,}|~{3,})\s*([^\s`]*)\s*$/);
     if (fence) {
+      currentOlNumber = 0;
       const marker = fence[1];
       let j = i + 1;
       while (j < lines.length) {
@@ -449,6 +457,7 @@ export function markdownToHtml(md: string): string {
     }
 
     if (isTableRow(line) && i + 1 < lines.length && isSeparator(lines[i + 1])) {
+      currentOlNumber = 0;
       const header = parseRow(line);
       const aligns = parseRow(lines[i + 1]).map(alignOf);
       const rows: string[][] = [];
@@ -463,21 +472,36 @@ export function markdownToHtml(md: string): string {
     }
 
     if (t && HR_RE.test(line)) {
+      currentOlNumber = 0;
       out.push(`<div class="md-hr" data-raw="${escapeAttr(t)}" contenteditable="false"><hr></div>`);
       continue;
     }
 
     const info = blockPrefix(line);
     if (info) {
+      let prefix = info.prefix;
+      if (info.cls === "md-ol") {
+        const leadSpace = info.prefix.match(/^\s*/)?.[0] || "";
+        if (currentOlNumber === 0) {
+          const m = info.prefix.match(/\d+/);
+          currentOlNumber = m ? parseInt(m[0], 10) : 1;
+        } else {
+          currentOlNumber += 1;
+        }
+        prefix = `${leadSpace}${currentOlNumber}. `;
+      } else {
+        currentOlNumber = 0;
+      }
       const rest = line.slice(info.consumed);
       const cb = info.cls.startsWith("md-task") ? CHECKBOX_HTML : "";
-      const fnBadge = info.cls === "md-footnote-def" ? `<span class="md-fn-badge" contenteditable="false">${escapeHtml(info.prefix)}</span>` : "";
+      const fnBadge = info.cls === "md-footnote-def" ? `<span class="md-fn-badge" contenteditable="false">${escapeHtml(prefix)}</span>` : "";
       out.push(
-        `<div class="${info.cls}" data-p="${escapeAttr(info.prefix)}">${cb}${fnBadge}${rest ? inlineMarkdownToHtml(rest, refMap) : "<br>"}</div>`,
+        `<div class="${info.cls}" data-p="${escapeAttr(prefix)}">${cb}${fnBadge}${rest ? inlineMarkdownToHtml(rest, refMap) : "<br>"}</div>`,
       );
       continue;
     }
 
+    currentOlNumber = 0;
     out.push(line ? `<div>${inlineMarkdownToHtml(line, refMap)}</div>` : "<div><br></div>");
   }
 
@@ -996,6 +1020,8 @@ function convertInlineInTextNodes(container: HTMLElement): void {
     if (info.cls.startsWith("md-task")) ensureCheckbox(child, child === caretBlock);
   }
 
+  renumberOrderedLists(editor);
+
   // Typed table: header row line directly above a just-typed separator line
   if (caretBlock && caretBlock.tagName === "DIV" && !isSpecialBlock(caretBlock) && !caretBlock.hasAttribute("data-p")) {
     const text = caretBlock.textContent || "";
@@ -1467,6 +1493,7 @@ export function handleRichEditorKeyDown(
       // Empty bullet / task / quote / heading line: exit to normal text paragraph!
       e.preventDefault();
       clearPrefix(block);
+      renumberOrderedLists(editor);
       placeCaretStart(block);
       onInput();
       return true;
@@ -1501,17 +1528,36 @@ export function handleRichEditorKeyDown(
       return true;
     }
 
-    if (isOl && caretAtEnd(block, range)) {
+    if (isOl) {
       e.preventDefault();
-      const currentPrefix = block.getAttribute("data-p") || "1. ";
-      const numMatch = currentPrefix.match(/\d+/);
-      const nextNum = numMatch ? parseInt(numMatch[0], 10) + 1 : 1;
-      const nextPrefix = `${nextNum}. `;
       const next = document.createElement("div");
-      next.setAttribute("data-p", nextPrefix);
       next.className = "md-ol";
-      next.appendChild(document.createElement("br"));
+
+      const atEnd = caretAtEnd(block, range);
+      if (atEnd) {
+        next.appendChild(document.createElement("br"));
+      } else {
+        try {
+          const postRange = document.createRange();
+          postRange.selectNodeContents(block);
+          postRange.setStart(range.endContainer, range.endOffset);
+          const frag = postRange.extractContents();
+          if (!frag.textContent && !frag.querySelector("img, svg, a, span")) {
+            next.appendChild(document.createElement("br"));
+          } else {
+            next.appendChild(frag);
+          }
+        } catch {
+          next.appendChild(document.createElement("br"));
+        }
+      }
+
+      if (!block.textContent && !block.querySelector("img, svg, a, span, br")) {
+        block.appendChild(document.createElement("br"));
+      }
+
       block.after(next);
+      renumberOrderedLists(editor);
       placeCaretStart(next);
       onInput();
       return true;
@@ -1563,6 +1609,7 @@ export function handleRichEditorKeyDown(
     if (isList || isTask || isHeading || hasPrefix || isOl || isDd || isFnDef) {
       e.preventDefault();
       clearPrefix(block);
+      renumberOrderedLists(editor);
       placeCaretStart(block);
       onInput();
       return true;
@@ -1671,10 +1718,47 @@ function caretOffsetIn(block: HTMLElement, range: Range): number {
 }
 
 function caretAtEnd(block: HTMLElement, range: Range): boolean {
-  const post = document.createRange();
-  post.selectNodeContents(block);
-  post.setStart(range.endContainer, range.endOffset);
-  return post.toString() === "";
+  try {
+    const post = document.createRange();
+    post.selectNodeContents(block);
+    post.setStart(range.endContainer, range.endOffset);
+    if (post.toString().replace(/[\u200B\u00A0\r\n\s]/g, "") !== "") return false;
+    const frag = post.cloneContents();
+    if (frag.querySelector("img, svg, table, pre")) return false;
+    return true;
+  } catch {
+    return false;
+  }
+}
+
+/**
+ * Scans top-level editor blocks and ensures contiguous groups of ordered list items (.md-ol)
+ * are sequentially numbered (1., 2., 3., ...), preserving any leading indentation.
+ */
+export function renumberOrderedLists(editor: HTMLElement): void {
+  let expectedNum = 0;
+  for (const child of Array.from(editor.children)) {
+    if (!(child instanceof HTMLElement) || child.tagName !== "DIV" || isSpecialBlock(child)) {
+      expectedNum = 0;
+      continue;
+    }
+    if (child.classList.contains("md-ol")) {
+      const curP = child.getAttribute("data-p") || "";
+      const leadSpace = curP.match(/^\s*/)?.[0] || "";
+      if (expectedNum === 0) {
+        const m = curP.match(/\d+/);
+        expectedNum = m ? parseInt(m[0], 10) : 1;
+      } else {
+        expectedNum += 1;
+      }
+      const targetP = `${leadSpace}${expectedNum}. `;
+      if (curP !== targetP) {
+        child.setAttribute("data-p", targetP);
+      }
+    } else {
+      expectedNum = 0;
+    }
+  }
 }
 
 function clearPrefix(block: HTMLElement): void {
@@ -2182,11 +2266,13 @@ export function applyOrderedList(editor: HTMLElement): void {
 
   if (block.classList.contains("md-ol")) {
     clearPrefix(block);
+    renumberOrderedLists(editor);
     return;
   }
   block.querySelectorAll(".md-cb, .md-fn-badge").forEach((b) => b.remove());
   block.setAttribute("data-p", "1. ");
   block.className = "md-ol";
+  renumberOrderedLists(editor);
 }
 
 export function applyBlockquote(editor: HTMLElement): void {
