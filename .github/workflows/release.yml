@@ -33,7 +33,7 @@ jobs:
         with:
           tagName: ${{ github.ref_name }}
           releaseName: 'DoIT Desktop Core ${{ github.ref_name }}'
-          releaseBody: 'DoIT v1.1.8 - Bento card drag alignment, scoped editor zoom in sheet and dock mode, animated insert tools burger menu, category menu cleanup, blurred glass mode fix, and bug report tile.'
+          releaseBody: 'DoIT v1.1.9 - Expanded Markdown Engine (inline code, links, footnotes, definitions, strikethrough, highlights, sub/superscript, emoji shortcodes), inline image reference folding & copy utility, smooth alt-text slider drawer, bottom-pinned uncategorized category, and animated shortcut settings tiles.'
           releaseDraft: false
           prerelease: false
           includeUpdaterJson: true
