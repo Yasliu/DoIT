@@ -49,7 +49,7 @@ export function ShelfIconGrid({ value, onChange, columns = 8 }: { value: string;
             aria-label={choice === "dot" ? "No icon" : choice}
             title={choice === "dot" ? "No icon" : choice}
             onClick={() => onChange(choice)}
-            className={cx("lx-icon-choice", on && "is-on")}
+            className={cx("ui-icon-choice", on && "is-on")}
           >
             {Icon ? <Icon size={16} /> : <span className="size-1.5 rounded-full bg-current" />}
           </button>

@@ -1,8 +1,8 @@
 import { useEffect } from "react";
 import { createPortal } from "react-dom";
-import { useDialogPlacement } from "./LinuxPalette";
+import { useDialogPlacement } from "./ModernPalette";
 
-interface LinuxConfirmProps {
+interface ModernConfirmProps {
   title: string;
   body: string;
   confirmLabel: string;
@@ -14,7 +14,7 @@ interface LinuxConfirmProps {
  * A destructive confirmation, rendered on <body> so a transformed parent (the sliding note sheet)
  * cannot trap it. Cancel has focus; Escape cancels.
  */
-export function LinuxConfirm({ title, body, confirmLabel, onConfirm, onCancel }: LinuxConfirmProps) {
+export function ModernConfirm({ title, body, confirmLabel, onConfirm, onCancel }: ModernConfirmProps) {
   const frame = useDialogPlacement(360);
   useEffect(() => {
     const onKey = (e: KeyboardEvent) => {
@@ -29,20 +29,20 @@ export function LinuxConfirm({ title, body, confirmLabel, onConfirm, onCancel }:
 
   return createPortal(
     <>
-      <div className="lx-scrim" onPointerDown={(e) => e.stopPropagation()} onClick={onCancel} />
+      <div className="ui-scrim" onPointerDown={(e) => e.stopPropagation()} onClick={onCancel} />
       <div {...frame}>
         <div
           role="alertdialog"
           aria-modal="true"
-          aria-labelledby="lx-confirm-title"
-          aria-describedby="lx-confirm-body"
+          aria-labelledby="ui-confirm-title"
+          aria-describedby="ui-confirm-body"
           onPointerDown={(e) => e.stopPropagation()}
-          className="lx-dialog w-full max-w-[360px]"
+          className="ui-dialog w-full max-w-[360px]"
         >
-          <h2 id="lx-confirm-title" className="text-[15px] font-semibold text-ink-1 [overflow-wrap:anywhere]">
+          <h2 id="ui-confirm-title" className="text-[15px] font-semibold text-ink-1 [overflow-wrap:anywhere]">
             {title}
           </h2>
-          <p id="lx-confirm-body" className="mt-1.5 text-[13.5px] leading-[20px] text-ink-3">
+          <p id="ui-confirm-body" className="mt-1.5 text-[13.5px] leading-[20px] text-ink-3">
             {body}
           </p>
           <div className="mt-5 flex justify-end gap-2">

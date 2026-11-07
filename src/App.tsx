@@ -9,7 +9,7 @@ import { IconPickerModal } from "./components/IconPickerModal";
 import { setMarkdownBaseDir } from "./lib/format";
 import { applyShortcutSettings } from "./lib/shortcuts";
 import { initCategoryIcons, setCategoryIcon } from "./lib/categoryIcons";
-import { suggestShelfIcon } from "./platform/linux/ShelfIcons";
+import { suggestShelfIcon } from "./platform/modern/ShelfIcons";
 import { NoteSheet } from "./components/NoteSheet";
 import { SettingsPanel } from "./components/SettingsPanel";
 import { Sidebar } from "./components/Sidebar";
@@ -19,14 +19,14 @@ import { ReleaseLogModal } from "./components/ReleaseLogModal";
 import { useWorkspace } from "./hooks/useWorkspace";
 import { accentFor, cleanText, cx } from "./lib/text";
 import { applyThemeSettings, isLinux } from "./platform";
-import { LinuxSettings } from "./platform/linux/LinuxSettings";
-import { LinuxShelfDialog } from "./platform/linux/LinuxShelfDialog";
-import { LinuxSidebar } from "./platform/linux/LinuxSidebar";
-import { LinuxSpotlight } from "./platform/linux/LinuxSpotlight";
-import { LinuxNewNoteDialog } from "./platform/linux/LinuxNewNoteDialog";
-import { LinuxNewShelfDialog } from "./platform/linux/LinuxNewShelfDialog";
-import { LinuxNoteMenu } from "./platform/linux/LinuxNoteMenu";
-import { LinuxShelfPicker } from "./platform/linux/LinuxShelfPicker";
+import { ModernSettings } from "./platform/modern/ModernSettings";
+import { ModernShelfDialog } from "./platform/modern/ModernShelfDialog";
+import { ModernSidebar } from "./platform/modern/ModernSidebar";
+import { ModernSpotlight } from "./platform/modern/ModernSpotlight";
+import { ModernNewNoteDialog } from "./platform/modern/ModernNewNoteDialog";
+import { ModernNewShelfDialog } from "./platform/modern/ModernNewShelfDialog";
+import { ModernNoteMenu } from "./platform/modern/ModernNoteMenu";
+import { ModernShelfPicker } from "./platform/modern/ModernShelfPicker";
 
 interface OpenNote {
   note: NoteItem;
@@ -95,7 +95,7 @@ export default function App() {
   const deletedRef = useRef<NoteItem[]>([]);
   const [query, setQuery] = useState("");
   /** Linux's Spotlight and create dialogs; only one is open at a time. */
-  const [linuxDialog, setLinuxDialog] = useState<null | "search" | "new-note" | "new-shelf">(null);
+  const [modernDialog, setModernDialog] = useState<null | "search" | "new-note" | "new-shelf">(null);
   /** Linux: a note on its way to another shelf, by Move to… or Copy to…. */
   const [shelfAction, setShelfAction] = useState<{ kind: "move" | "copy"; note: NoteItem } | null>(null);
   const [active, setActive] = useState<string | null>(null);
@@ -406,7 +406,7 @@ export default function App() {
   const requestNewNote = useCallback(
     (shelf?: string) => {
       setIsSettings(false);
-      if (!shelf && isLinux) setLinuxDialog("new-note");
+      if (!shelf && isLinux) setModernDialog("new-note");
       else newNote(shelf);
     },
     [newNote],
@@ -515,7 +515,7 @@ export default function App() {
       }
       if (isLinux && meta && event.key.toLowerCase() === "k") {
         event.preventDefault();
-        setLinuxDialog((d) => (d === "search" ? null : "search"));
+        setModernDialog((d) => (d === "search" ? null : "search"));
       }
       if (meta && event.key.toLowerCase() === "o") {
         event.preventDefault();
@@ -537,7 +537,7 @@ export default function App() {
   /** Linux: import one file onto `shelf` (made first when `created`), then open it. */
   const importFileInto = useCallback(
     async (shelf: string, created: boolean) => {
-      setLinuxDialog(null);
+      setModernDialog(null);
       try {
         const imported = await workspace.importNoteFile();
         if (created) await createCategory(shelf);
@@ -557,7 +557,7 @@ export default function App() {
   /** Linux: import a folder as a shelf, named `name` or after the folder. */
   const importFolderShelf = useCallback(
     async (name: string, icon: string | null) => {
-      setLinuxDialog(null);
+      setModernDialog(null);
       try {
         const result = await workspace.importFolderAsShelf(name || undefined);
         setCategoryIcon(result.shelf, icon ?? suggestShelfIcon(result.shelf));
@@ -580,7 +580,7 @@ export default function App() {
   return (
     <div data-theme={themeMode} className="chassis flex h-full w-full overflow-hidden">
       {!mini && isLinux && (
-        <LinuxSidebar
+        <ModernSidebar
           shelves={shelves}
           counts={counts}
           total={notes.length}
@@ -592,7 +592,7 @@ export default function App() {
             setActive(shelf);
           }}
           onNewNote={() => requestNewNote()}
-          onNewShelf={() => setLinuxDialog("new-shelf")}
+          onNewShelf={() => setModernDialog("new-shelf")}
           onReorderShelves={workspace.reorderShelves}
           onOpenSettings={() => setIsSettings((v) => !v)}
           onShelfMenu={(event, shelf) => {
@@ -641,7 +641,7 @@ export default function App() {
           isSettings={isSettings}
           sidebarOpen={railOpen}
           onToggleSidebar={() => setRailOpen((prev) => !prev)}
-          onOpenSearch={() => setLinuxDialog("search")}
+          onOpenSearch={() => setModernDialog("search")}
         />
 
         {(() => {
@@ -668,7 +668,7 @@ export default function App() {
                 {isSettings ? (
                   <div className="scroll relative h-full overflow-y-scroll" style={{ scrollbarGutter: "stable" }}>
                     {isLinux ? (
-                      <LinuxSettings onBack={() => setIsSettings(false)} onStoragePathChanged={() => void workspace.reload()} />
+                      <ModernSettings onBack={() => setIsSettings(false)} onStoragePathChanged={() => void workspace.reload()} />
                     ) : (
                       <SettingsPanel
                         onBack={() => setIsSettings(false)}
@@ -792,7 +792,7 @@ export default function App() {
       </div>
 
       {contextMenu && isLinux && (
-        <LinuxNoteMenu
+        <ModernNoteMenu
           x={contextMenu.x}
           y={contextMenu.y}
           onClose={() => setContextMenu(null)}
@@ -808,7 +808,7 @@ export default function App() {
         />
       )}
       {isLinux && shelfAction && (
-        <LinuxShelfPicker
+        <ModernShelfPicker
           label={shelfAction.kind === "move" ? "Move note" : "Copy note"}
           placeholder={`${shelfAction.kind === "move" ? "Move" : "Copy"} “${cleanText(shelfAction.note.title) || "Untitled"}” to…`}
           icon={shelfAction.kind === "move" ? <FolderInput size={17} /> : <Copy size={17} />}
@@ -883,7 +883,7 @@ export default function App() {
       )}
 
       {iconPickerShelf && isLinux && (
-        <LinuxShelfDialog
+        <ModernShelfDialog
           shelf={iconPickerShelf}
           onClose={() => setIconPickerShelf(null)}
           onRename={async (shelf, newName) => {
@@ -951,11 +951,11 @@ export default function App() {
         </div>
       )}
 
-      {isLinux && linuxDialog === "search" && (
-        <LinuxSpotlight
+      {isLinux && modernDialog === "search" && (
+        <ModernSpotlight
           notes={notes}
           shelves={shelves}
-          onClose={() => setLinuxDialog(null)}
+          onClose={() => setModernDialog(null)}
           onOpenNote={(note) => {
             setIsSettings(false);
             openTile(note, originFromCanvas());
@@ -964,19 +964,19 @@ export default function App() {
             setIsSettings(false);
             setActive(shelf);
           }}
-          onNewNote={() => setLinuxDialog("new-note")}
-          onNewShelf={() => setLinuxDialog("new-shelf")}
+          onNewNote={() => setModernDialog("new-note")}
+          onNewShelf={() => setModernDialog("new-shelf")}
           onSettings={() => setIsSettings(true)}
           onDock={toggleMini}
         />
       )}
-      {isLinux && linuxDialog === "new-note" && (
-        <LinuxNewNoteDialog
+      {isLinux && modernDialog === "new-note" && (
+        <ModernNewNoteDialog
           shelves={shelves}
           current={active}
-          onClose={() => setLinuxDialog(null)}
+          onClose={() => setModernDialog(null)}
           onCreate={(shelf, created) => {
-            setLinuxDialog(null);
+            setModernDialog(null);
             void (async () => {
               if (created) await createCategory(shelf);
               newNote(shelf);
@@ -985,12 +985,12 @@ export default function App() {
           onImportFile={(shelf, created) => void importFileInto(shelf, created)}
         />
       )}
-      {isLinux && linuxDialog === "new-shelf" && (
-        <LinuxNewShelfDialog
+      {isLinux && modernDialog === "new-shelf" && (
+        <ModernNewShelfDialog
           shelves={shelves}
-          onClose={() => setLinuxDialog(null)}
+          onClose={() => setModernDialog(null)}
           onCreate={(name, icon) => {
-            setLinuxDialog(null);
+            setModernDialog(null);
             setIsSettings(false);
             setCategoryIcon(name, icon);
             void createCategory(name);

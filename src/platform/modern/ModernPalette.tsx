@@ -15,7 +15,7 @@ export interface PaletteItem {
   run: () => void;
 }
 
-interface LinuxPaletteProps {
+interface ModernPaletteProps {
   label: string;
   placeholder: string;
   query: string;
@@ -38,7 +38,7 @@ interface LinuxPaletteProps {
 }
 
 /** The title-bar search field and the first shelf's divider: dialogs line up with both. */
-export const SEARCH_FIELD = ".lx-search-trigger";
+export const SEARCH_FIELD = ".ui-search-trigger";
 export const FIRST_SHELF_LINE = '[data-slot="shelf-head"]';
 
 const PALETTE_WIDTH = 620;
@@ -77,7 +77,7 @@ export function placement(anchor: string | undefined, below: string | undefined,
  * A Raycast-style palette: a search field over a keyboard-driven list, centred near the top of the
  * window. Up and Down move, Enter runs the active item, Escape closes.
  */
-export function LinuxPalette(props: LinuxPaletteProps) {
+export function ModernPalette(props: ModernPaletteProps) {
   const { items, query } = props;
   const [index, setIndex] = useState(0);
   const listRef = useRef<HTMLDivElement | null>(null);
@@ -116,12 +116,12 @@ export function LinuxPalette(props: LinuxPaletteProps) {
   let lastSection: string | undefined;
   return createPortal(
     <>
-      <div className="lx-scrim" onMouseDown={props.onClose} />
+      <div className="ui-scrim" onMouseDown={props.onClose} />
       <div
         className={anchored ? "pointer-events-none fixed z-[125]" : "pointer-events-none fixed inset-x-0 top-[12vh] z-[125] flex justify-center px-4"}
         style={anchored ?? undefined}
       >
-        <div role="dialog" aria-modal="true" aria-label={props.label} className="lx-palette">
+        <div role="dialog" aria-modal="true" aria-label={props.label} className="ui-palette">
           <div className="flex h-12 items-center gap-3 px-4">
             <span className="grid shrink-0 place-items-center text-ink-3">{props.icon ?? <Search size={17} />}</span>
             <input
@@ -131,32 +131,32 @@ export function LinuxPalette(props: LinuxPaletteProps) {
               onKeyDown={onKeyDown}
               placeholder={props.placeholder}
               aria-label={props.label}
-              aria-controls="lx-palette-list"
-              aria-activedescendant={active ? `lx-palette-${active.key}` : undefined}
+              aria-controls="ui-palette-list"
+              aria-activedescendant={active ? `ui-palette-${active.key}` : undefined}
               role="combobox"
               aria-expanded
               spellCheck={false}
               className="h-full min-w-0 flex-1 bg-transparent text-[15px] text-ink-1 placeholder:text-[var(--l-placeholder)]"
             />
           </div>
-          <div ref={listRef} id="lx-palette-list" role="listbox" className="lx-palette-list">
+          <div ref={listRef} id="ui-palette-list" role="listbox" className="ui-palette-list">
             {items.length === 0 && <div className="px-4 py-8 text-center text-[13px] text-ink-3">{props.empty ?? "No results"}</div>}
             {items.map((item, i) => {
               const heading = item.section && item.section !== lastSection ? item.section : null;
               lastSection = item.section;
               return (
                 <div key={item.key}>
-                  {heading && <div className="lx-palette-section">{heading}</div>}
+                  {heading && <div className="ui-palette-section">{heading}</div>}
                   <div
-                    id={`lx-palette-${item.key}`}
+                    id={`ui-palette-${item.key}`}
                     role="option"
                     aria-selected={i === index}
                     data-index={i}
                     onMouseMove={() => i !== index && setIndex(i)}
                     onClick={() => item.run()}
-                    className={cx("lx-palette-item", i === index && "is-active")}
+                    className={cx("ui-palette-item", i === index && "is-active")}
                   >
-                    <span className="lx-palette-icon">{item.icon}</span>
+                    <span className="ui-palette-icon">{item.icon}</span>
                     <span className="min-w-0 flex-1 truncate">
                       <span className="text-ink-1">{item.label}</span>
                       {item.detail && <span className="ml-2 text-ink-3">{item.detail}</span>}
@@ -167,7 +167,7 @@ export function LinuxPalette(props: LinuxPaletteProps) {
               );
             })}
           </div>
-          <div className="lx-palette-footer">
+          <div className="ui-palette-footer">
             <span>
               <kbd>↑</kbd> <kbd>↓</kbd> to move
             </span>

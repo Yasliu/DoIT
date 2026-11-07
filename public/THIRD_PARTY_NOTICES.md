@@ -5,7 +5,7 @@ DoIT includes material from the projects below. This file ships inside every bui
 
 ## T3 Code
 
-The Linux colour themes in `src/platform/linux/theme.ts` (the Neutral, Orchid, Grove, Ocean,
+The Linux colour themes in `src/platform/modern/theme.ts` (the Neutral, Orchid, Grove, Ocean,
 Ember and Iris palettes) are adapted from T3 Code, https://github.com/pingdotgg/t3code
 (`packages/shared/src/themePalettes.ts`).
 

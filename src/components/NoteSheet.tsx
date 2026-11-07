@@ -65,7 +65,7 @@ import {
   openExternalUrl,
 } from "../lib/format";
 import { isLinux } from "../platform";
-import { LinuxConfirm } from "../platform/linux/LinuxConfirm";
+import { ModernConfirm } from "../platform/modern/ModernConfirm";
 import { accentFor, cleanText, cx, fullStamp, uid } from "../lib/text";
 
 interface NoteSheetProps {
@@ -1595,7 +1595,7 @@ export function NoteSheet({
 
       {/* Theme-matched destructive action confirmation modal */}
       {showDeleteConfirm && isLinux && (
-        <LinuxConfirm
+        <ModernConfirm
           title={`Delete “${cleanText(draft.title) || "Untitled"}”?`}
           body="This removes its file from your notes folder. You can undo right after."
           confirmLabel="Delete"

@@ -92,7 +92,7 @@
     background: transparent !important;
     background-color: transparent !important;
   }
-  /* Linux draws its own focus rings and shadows (src/platform/linux/linux.css). */
+  /* Linux draws its own focus rings and shadows (src/platform/modern/modern.css). */
   html:not([data-platform="linux"]) *,
   html:not([data-platform="linux"]) *::before,
   html:not([data-platform="linux"]) *::after {

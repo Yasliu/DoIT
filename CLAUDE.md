@@ -8,7 +8,7 @@ React + TypeScript frontend, Rust backend. Shipped for Windows; a Linux port is 
 - `src/`: React frontend. `api/tauriBridge.ts` is the only place that calls `invoke`; `components/`,
   `hooks/` (`useWorkspace` owns app state), `lib/` (pure helpers), `styles/`.
   - `platform/`: the frontend's OS seam. `index.ts` sets `data-platform` on `<html>` and exports
-    `isLinux`, `pick` and Linux copy; `linux/` holds Linux's own look (`linux.css`, themes) and the
+    `isLinux`, `pick` and Linux copy; `modern/` holds Linux's own look (`modern.css`, themes) and the
     components Linux swaps in (sidebar, settings, Spotlight search, create and shelf dialogs, dock list),
     chosen in `App`/`TrayCompanion`.
 - `src-tauri/src/`: Rust backend.
@@ -29,7 +29,7 @@ React + TypeScript frontend, Rust backend. Shipped for Windows; a Linux port is 
 
 - No `#[cfg(windows)]` outside `platform/`. A new OS behaviour is a new function in `platform/mod.rs`
   with an implementation in each adapter.
-- Windows' UI must not change with Linux work: Linux styles live in `src/platform/linux/linux.css`
+- Windows' UI must not change with Linux work: Linux styles live in `src/platform/modern/modern.css`
   under `html[data-platform="linux"]`, hooked to `data-slot` attributes; components read OS
   differences only from `src/platform`. Linux theme settings use `palette`/`appearance`, never `theme_mode`.
 - New IPC command: add it to the matching `commands/` file, register it in `lib.rs`, and wrap it

@@ -10,7 +10,7 @@ import { applyThemeSettings } from "..";
 import {
   APPEARANCES,
   type Appearance,
-  type LinuxTheme,
+  type ModernTheme,
   PALETTE_IDS,
   type PaletteId,
   paletteLabel,
@@ -18,7 +18,7 @@ import {
   themeFromSettings,
 } from "./theme";
 
-interface LinuxSettingsProps {
+interface ModernSettingsProps {
   onBack: () => void;
   onStoragePathChanged: () => void;
 }
@@ -132,7 +132,7 @@ function ThemeCard({ id, selected, appearance, onSelect }: { id: PaletteId; sele
   );
 }
 
-export function LinuxSettings({ onBack, onStoragePathChanged }: LinuxSettingsProps) {
+export function ModernSettings({ onBack, onStoragePathChanged }: ModernSettingsProps) {
   const [settings, setSettings] = useState<AppSettings>(DEFAULT_SETTINGS);
   const [pathInput, setPathInput] = useState("");
   const [version, setVersion] = useState("");
@@ -162,7 +162,7 @@ export function LinuxSettings({ onBack, onStoragePathChanged }: LinuxSettingsPro
 
   const theme = themeFromSettings(settings);
   const { palette, appearance } = theme;
-  const setTheme = (next: Partial<LinuxTheme>) => {
+  const setTheme = (next: Partial<ModernTheme>) => {
     const updated = { ...settings, ...theme, ...next };
     applyThemeSettings(updated);
     save(updated);
@@ -204,7 +204,7 @@ export function LinuxSettings({ onBack, onStoragePathChanged }: LinuxSettingsPro
 
   return (
     <div className="mx-auto w-full max-w-[680px] px-6 pb-24">
-      <header className="lx-page-header sticky top-0 z-20 -mx-6 flex h-14 items-center gap-2 bg-[var(--l-canvas)] px-6">
+      <header className="ui-page-header sticky top-0 z-20 -mx-6 flex h-14 items-center gap-2 bg-[var(--l-canvas)] px-6">
         <button type="button" onClick={onBack} className="ghost -ml-2" aria-label="Back to notes">
           <ArrowLeft size={16} />
           Notes

@@ -1,8 +1,8 @@
 import { useMemo, useState, type ReactNode } from "react";
 import { FolderPlus } from "lucide-react";
 import { cleanText } from "../../lib/text";
-import { FIRST_SHELF_LINE, LinuxPalette, SEARCH_FIELD, type PaletteItem } from "./LinuxPalette";
-import { shelfIcon } from "./LinuxSpotlight";
+import { FIRST_SHELF_LINE, ModernPalette, SEARCH_FIELD, type PaletteItem } from "./ModernPalette";
+import { shelfIcon } from "./ModernSpotlight";
 
 /** A shelf the user chose; `created` when it is a new shelf that has to be made first. */
 export interface ShelfChoice {
@@ -10,7 +10,7 @@ export interface ShelfChoice {
   created: boolean;
 }
 
-interface LinuxShelfPickerProps {
+interface ModernShelfPickerProps {
   label: string;
   placeholder: string;
   icon: ReactNode;
@@ -28,7 +28,7 @@ interface LinuxShelfPickerProps {
 }
 
 /** Pick a shelf from the keyboard: type to filter, or type a new name to make that shelf. */
-export function LinuxShelfPicker(props: LinuxShelfPickerProps) {
+export function ModernShelfPicker(props: ModernShelfPickerProps) {
   const { shelves, exclude, onPick, secondary } = props;
   const [query, setQuery] = useState("");
   const q = query.trim();
@@ -63,7 +63,7 @@ export function LinuxShelfPicker(props: LinuxShelfPickerProps) {
     active ? (active.key.startsWith("new:") ? { shelf: q, created: true } : { shelf: active.key, created: false }) : null;
 
   return (
-    <LinuxPalette
+    <ModernPalette
       label={props.label}
       placeholder={props.placeholder}
       icon={props.icon}
@@ -87,7 +87,7 @@ export function LinuxShelfPicker(props: LinuxShelfPickerProps) {
         if (!secondary) return null;
         const choice = choiceOf(active);
         return (
-          <button type="button" disabled={!choice} onClick={() => choice && secondary.run(choice)} className="lx-palette-action">
+          <button type="button" disabled={!choice} onClick={() => choice && secondary.run(choice)} className="ui-palette-action">
             {secondary.icon}
             {secondary.label}
             <kbd>Ctrl {secondary.key.toUpperCase()}</kbd>

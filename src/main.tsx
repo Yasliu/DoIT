@@ -3,7 +3,7 @@ import ReactDOM from "react-dom/client";
 import App from "./App";
 import { TrayCompanion } from "./components/TrayCompanion";
 import "./styles/globals.css";
-import "./platform/linux/linux.css";
+import "./platform/modern/modern.css";
 import { MotionConfig } from "motion/react";
 import { markPlatform, pick } from "./platform";
 

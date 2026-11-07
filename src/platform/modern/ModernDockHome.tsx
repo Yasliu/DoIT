@@ -2,7 +2,7 @@ import { ListFilter, Search, X } from "lucide-react";
 import type { NoteItem } from "../../api/tauriBridge";
 import { cleanText, cx, relativeShort } from "../../lib/text";
 
-interface LinuxDockHomeProps {
+interface ModernDockHomeProps {
   notes: NoteItem[];
   shelves: string[];
   filter: string;
@@ -15,11 +15,11 @@ interface LinuxDockHomeProps {
 }
 
 /** The dock panel's note list on Linux: search, an optional shelf filter, and the notes. */
-export function LinuxDockHome(props: LinuxDockHomeProps) {
+export function ModernDockHome(props: ModernDockHomeProps) {
   const { notes, shelves, filter, shelf } = props;
   return (
     <div className="flex min-h-0 flex-1 flex-col gap-2 px-1">
-      <label className="lx-dock-search">
+      <label className="ui-dock-search">
         <Search size={15} className="shrink-0 text-ink-3" />
         <input
           autoFocus
@@ -34,13 +34,13 @@ export function LinuxDockHome(props: LinuxDockHomeProps) {
           spellCheck={false}
         />
         {filter && (
-          <button type="button" className="lx-icon-button size-6!" onClick={() => props.onFilter("")} aria-label="Clear search">
+          <button type="button" className="ui-icon-button size-6!" onClick={() => props.onFilter("")} aria-label="Clear search">
             <X size={13} />
           </button>
         )}
         <button
           type="button"
-          className={cx("lx-icon-button size-7!", (props.shelvesOpen || shelf) && "text-ink-1! bg-[var(--hover)]")}
+          className={cx("ui-icon-button size-7!", (props.shelvesOpen || shelf) && "text-ink-1! bg-[var(--hover)]")}
           onClick={props.onToggleShelves}
           aria-expanded={props.shelvesOpen}
           aria-label="Filter by shelf"
@@ -61,7 +61,7 @@ export function LinuxDockHome(props: LinuxDockHomeProps) {
                 role="radio"
                 aria-checked={on}
                 onClick={() => props.onShelf(name)}
-                className={cx("lx-chip", on && "is-on")}
+                className={cx("ui-chip", on && "is-on")}
               >
                 {name === null ? "All" : cleanText(name)}
               </button>
@@ -75,7 +75,7 @@ export function LinuxDockHome(props: LinuxDockHomeProps) {
           <p className="px-2 py-8 text-center text-[13px] text-ink-3">{filter ? "No matches" : "No notes yet"}</p>
         ) : (
           notes.map((note) => (
-            <button key={note.id} type="button" onClick={() => props.onOpen(note.id)} className="lx-dock-row">
+            <button key={note.id} type="button" onClick={() => props.onOpen(note.id)} className="ui-dock-row">
               <span className="min-w-0 flex-1">
                 <span className="block truncate text-[13.5px] font-medium text-ink-1">{cleanText(note.title) || "Untitled"}</span>
                 <span className="block truncate text-[12px] text-ink-3">{cleanText(note.category)}</span>

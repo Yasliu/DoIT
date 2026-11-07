@@ -78,7 +78,7 @@ import {
   openExternalUrl,
 } from "../lib/format";
 import { applyThemeSettings, isLinux, pick } from "../platform";
-import { LinuxDockHome } from "../platform/linux/LinuxDockHome";
+import { ModernDockHome } from "../platform/modern/ModernDockHome";
 import { accentFor, cleanText, cx, relativeShort, uid } from "../lib/text";
 
 const NO_CONTENT: ContentItem[] = [];
@@ -799,12 +799,12 @@ export function TrayCompanion() {
             onClick={(e) => e.stopPropagation()}
           >
             {isLinux && !activeNote && (
-              <button type="button" onClick={handleCreate} className="lx-icon-button size-7!" title="New note" aria-label="New note">
+              <button type="button" onClick={handleCreate} className="ui-icon-button size-7!" title="New note" aria-label="New note">
                 <SquarePen size={15} />
               </button>
             )}
             {isLinux && (
-              <button type="button" onClick={() => toggleMinimize()} className="lx-icon-button size-7!" title="Minimize to the pill" aria-label="Minimize">
+              <button type="button" onClick={() => toggleMinimize()} className="ui-icon-button size-7!" title="Minimize to the pill" aria-label="Minimize">
                 <Minus size={15} />
               </button>
             )}
@@ -1385,7 +1385,7 @@ export function TrayCompanion() {
           </div>
         </div>
       ) : isLinux ? (
-        <LinuxDockHome
+        <ModernDockHome
           notes={filteredNotes}
           shelves={shelves}
           filter={filter}

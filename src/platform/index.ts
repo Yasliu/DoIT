@@ -5,8 +5,8 @@
  * `data-platform="linux"` attribute that `markPlatform` puts on <html>.
  */
 
-import { trackWindowFrame } from "./linux/frame";
-import { applyLinuxTheme, restoreLinuxTheme, themeFromSettings, type ThemeSettings } from "./linux/theme";
+import { trackWindowFrame } from "./modern/frame";
+import { applyModernTheme, restoreModernTheme, themeFromSettings, type ThemeSettings } from "./modern/theme";
 
 export type Platform = "windows" | "linux" | "macos" | "other";
 
@@ -31,13 +31,13 @@ export function pick<T>(original: T, linux: T): T {
 export function markPlatform(): void {
   document.documentElement.dataset.platform = platform;
   if (!isLinux) return;
-  restoreLinuxTheme();
+  restoreModernTheme();
   if (!window.location.search.includes("window=tray")) trackWindowFrame();
 }
 
 /** Applies the saved theme. Windows themes itself through `theme_mode`; Linux ignores that field. */
 export function applyThemeSettings(settings: ThemeSettings): void {
-  if (isLinux) applyLinuxTheme(themeFromSettings(settings));
+  if (isLinux) applyModernTheme(themeFromSettings(settings));
 }
 
 /** UI copy that Linux words differently. */

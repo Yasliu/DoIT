@@ -3,9 +3,9 @@ import { motion, Reorder } from "motion/react";
 import { FolderPlus, MoreHorizontal, Settings, SquarePen } from "lucide-react";
 import { Mark } from "../../components/Mark";
 import { cleanText, cx } from "../../lib/text";
-import { shelfIcon } from "./LinuxSpotlight";
+import { shelfIcon } from "./ModernSpotlight";
 
-interface LinuxSidebarProps {
+interface ModernSidebarProps {
   shelves: string[];
   counts: Record<string, number>;
   total: number;
@@ -25,7 +25,7 @@ interface LinuxSidebarProps {
 const isUncategorized = (shelf: string) => shelf.toLowerCase() === "uncategorized";
 
 /** Linux's sidebar, laid out like T3 Code's: create on top, the shelves, then Settings. */
-export function LinuxSidebar(props: LinuxSidebarProps) {
+export function ModernSidebar(props: ModernSidebarProps) {
   const { shelves, counts, total, active, isSettings, open } = props;
   const [, setIconsVersion] = useState(0);
 
@@ -66,7 +66,7 @@ export function LinuxSidebar(props: LinuxSidebarProps) {
       <>
         <button
           type="button"
-          className="lx-row"
+          className="ui-row"
           data-active={selected || undefined}
           onClick={() => {
             // A drag ends with a pointer release over the row; that is not a click.
@@ -90,16 +90,16 @@ export function LinuxSidebar(props: LinuxSidebarProps) {
           aria-description={sortable ? "Drag, or press Alt+Up or Alt+Down, to reorder" : undefined}
         >
           {selected && (
-            <motion.span layoutId="lx-selected-row" className="lx-row-selected" transition={{ type: "spring", duration: 0.3, bounce: 0.1 }} />
+            <motion.span layoutId="ui-selected-row" className="ui-row-selected" transition={{ type: "spring", duration: 0.3, bounce: 0.1 }} />
           )}
-          <span className="lx-row-icon">{shelfIcon(key)}</span>
-          {open && <span className="lx-row-label">{label}</span>}
-          {open && <span className="lx-row-count">{count}</span>}
+          <span className="ui-row-icon">{shelfIcon(key)}</span>
+          {open && <span className="ui-row-label">{label}</span>}
+          {open && <span className="ui-row-count">{count}</span>}
         </button>
         {open && editable && (
           <button
             type="button"
-            className="lx-row-more lx-icon-button size-6!"
+            className="ui-row-more ui-icon-button size-6!"
             aria-label={`${label} options`}
             onClick={(e) => props.onShelfMenu(e, key!)}
           >
@@ -111,32 +111,32 @@ export function LinuxSidebar(props: LinuxSidebarProps) {
   };
 
   return (
-    <aside data-slot="sidebar" data-open={open} className="lx-sidebar">
-      <div className="lx-sidebar-brand" data-tauri-drag-region>
+    <aside data-slot="sidebar" data-open={open} className="ui-sidebar">
+      <div className="ui-sidebar-brand" data-tauri-drag-region>
         <Mark size={open ? 26 : 24} className="pointer-events-none shrink-0" />
         {open && <span className="pointer-events-none truncate text-[17px] font-semibold tracking-[-0.02em] text-ink-1">DoIT</span>}
       </div>
 
-      <div className="lx-sidebar-header">
-        <button type="button" className="lx-create" onClick={props.onNewNote} title="New note (Ctrl N)" aria-label="New note">
+      <div className="ui-sidebar-header">
+        <button type="button" className="ui-create" onClick={props.onNewNote} title="New note (Ctrl N)" aria-label="New note">
           <SquarePen size={16} />
           {open && <span>New note</span>}
         </button>
-        <button type="button" className="lx-create" onClick={props.onNewShelf} title="New shelf" aria-label="New shelf">
+        <button type="button" className="ui-create" onClick={props.onNewShelf} title="New shelf" aria-label="New shelf">
           <FolderPlus size={16} />
           {open && <span>New shelf</span>}
         </button>
       </div>
 
-      <nav className="lx-sidebar-list" aria-label="Shelves">
-        <div className="lx-row-wrap">{row(null, "All notes", total, false)}</div>
+      <nav className="ui-sidebar-list" aria-label="Shelves">
+        <div className="ui-row-wrap">{row(null, "All notes", total, false)}</div>
         <Reorder.Group as="div" axis="y" values={order} onReorder={setOrder} className="flex flex-col gap-px">
           {order.map((shelf) => (
             <Reorder.Item
               key={shelf}
               as="div"
               value={shelf}
-              className="lx-row-wrap"
+              className="ui-row-wrap"
               data-shelf={shelf}
               onDragStart={() => {
                 dragging.current = true;
@@ -161,24 +161,24 @@ export function LinuxSidebar(props: LinuxSidebarProps) {
         </Reorder.Group>
       </nav>
 
-      <div className="lx-sidebar-footer">
+      <div className="ui-sidebar-footer">
         {/* Uncategorized sits apart from the sortable shelves, just above Settings. */}
         {shelves.filter(isUncategorized).map((shelf) => (
-          <div key={shelf} className="lx-row-wrap" data-shelf={shelf}>
+          <div key={shelf} className="ui-row-wrap" data-shelf={shelf}>
             {row(shelf, cleanText(shelf), counts[shelf] ?? 0, false)}
           </div>
         ))}
         <button
           type="button"
-          className={cx("lx-row")}
+          className={cx("ui-row")}
           data-active={isSettings || undefined}
           onClick={props.onOpenSettings}
           title={open ? undefined : "Settings"}
         >
-          <span className="lx-row-icon">
+          <span className="ui-row-icon">
             <Settings size={16} />
           </span>
-          {open && <span className="lx-row-label">Settings</span>}
+          {open && <span className="ui-row-label">Settings</span>}
         </button>
       </div>
     </aside>

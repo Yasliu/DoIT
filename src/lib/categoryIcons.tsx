@@ -101,7 +101,7 @@ export const CATEGORY_ICONS: Record<
 };
 
 /** Icons Linux adds to the picker. Windows can draw them (a shelf named on Linux) but does not offer them. */
-const LINUX_EXTRA_ICONS = {
+const MODERN_EXTRA_ICONS = {
   ChefHat,
   Plane,
   Dumbbell,
@@ -122,8 +122,8 @@ const LINUX_EXTRA_ICONS = {
   Landmark,
 };
 const PICKER_ICON_NAMES = Object.keys(CATEGORY_ICONS);
-Object.assign(CATEGORY_ICONS, LINUX_EXTRA_ICONS);
-export const CATEGORY_ICON_NAMES = pick(PICKER_ICON_NAMES, [...PICKER_ICON_NAMES, ...Object.keys(LINUX_EXTRA_ICONS)]);
+Object.assign(CATEGORY_ICONS, MODERN_EXTRA_ICONS);
+export const CATEGORY_ICON_NAMES = pick(PICKER_ICON_NAMES, [...PICKER_ICON_NAMES, ...Object.keys(MODERN_EXTRA_ICONS)]);
 
 const STORAGE_KEY = "doit.category_icons";
 

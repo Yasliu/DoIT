@@ -1,11 +1,11 @@
 import { useEffect, useState } from "react";
 import { createPortal } from "react-dom";
-import { useDialogPlacement } from "./LinuxPalette";
+import { useDialogPlacement } from "./ModernPalette";
 import { FolderInput, X } from "lucide-react";
 import { CATEGORY_ICONS } from "../../lib/categoryIcons";
 import { ShelfIconGrid, suggestShelfIcon } from "./ShelfIcons";
 
-interface LinuxNewShelfDialogProps {
+interface ModernNewShelfDialogProps {
   shelves: string[];
   onClose: () => void;
   onCreate: (name: string, icon: string) => void;
@@ -15,7 +15,7 @@ interface LinuxNewShelfDialogProps {
 }
 
 /** New shelf: name an empty one, or bring in a folder of Markdown and text files as a shelf. */
-export function LinuxNewShelfDialog({ shelves, onClose, onCreate, onImportFolder }: LinuxNewShelfDialogProps) {
+export function ModernNewShelfDialog({ shelves, onClose, onCreate, onImportFolder }: ModernNewShelfDialogProps) {
   const frame = useDialogPlacement(400);
   const [name, setName] = useState("");
   // The icon follows the name until it is picked by hand.
@@ -44,14 +44,14 @@ export function LinuxNewShelfDialog({ shelves, onClose, onCreate, onImportFolder
 
   return createPortal(
     <>
-      <div className="lx-scrim" onMouseDown={onClose} />
+      <div className="ui-scrim" onMouseDown={onClose} />
       <div {...frame}>
-        <div role="dialog" aria-modal="true" aria-labelledby="new-shelf-title" className="lx-dialog w-full max-w-[400px]">
+        <div role="dialog" aria-modal="true" aria-labelledby="new-shelf-title" className="ui-dialog w-full max-w-[400px]">
           <div className="flex items-center justify-between">
             <h2 id="new-shelf-title" className="text-[15px] font-semibold text-ink-1">
               New shelf
             </h2>
-            <button type="button" className="lx-icon-button -mr-1.5" onClick={onClose} aria-label="Close">
+            <button type="button" className="ui-icon-button -mr-1.5" onClick={onClose} aria-label="Close">
               <X size={16} />
             </button>
           </div>
@@ -62,7 +62,7 @@ export function LinuxNewShelfDialog({ shelves, onClose, onCreate, onImportFolder
             aria-expanded={gridOpen}
             aria-label="Choose an icon"
             title={picked ? "Icon" : "Icon (suggested from the name)"}
-            className="lx-icon-pick"
+            className="ui-icon-pick"
           >
             {Icon ? <Icon size={18} /> : <span className="size-1.5 rounded-full bg-current" />}
           </button>
@@ -81,7 +81,7 @@ export function LinuxNewShelfDialog({ shelves, onClose, onCreate, onImportFolder
                 onImportFolder(trimmed, picked);
               }
             }}
-            className="lx-input min-w-0 flex-1"
+            className="ui-input min-w-0 flex-1"
           />
           </div>
           <div className="grid transition-[grid-template-rows] duration-200 ease-[var(--ease-out)]" style={{ gridTemplateRows: gridOpen ? "1fr" : "0fr" }}>

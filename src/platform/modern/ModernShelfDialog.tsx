@@ -1,11 +1,11 @@
 import { useEffect, useState } from "react";
-import { useDialogPlacement } from "./LinuxPalette";
+import { useDialogPlacement } from "./ModernPalette";
 import { X } from "lucide-react";
 import { getCategoryIconName, renameCategoryIcon, removeCategoryIcon, setCategoryIcon } from "../../lib/categoryIcons";
 import { cleanText } from "../../lib/text";
 import { ShelfIconGrid } from "./ShelfIcons";
 
-interface LinuxShelfDialogProps {
+interface ModernShelfDialogProps {
   shelf: string;
   onClose: () => void;
   onRename: (oldName: string, newName: string) => Promise<string | null>;
@@ -13,7 +13,7 @@ interface LinuxShelfDialogProps {
 }
 
 /** Rename a shelf and pick its icon. Linux's take on the Edit Category dialog. */
-export function LinuxShelfDialog({ shelf, onClose, onRename, onDelete }: LinuxShelfDialogProps) {
+export function ModernShelfDialog({ shelf, onClose, onRename, onDelete }: ModernShelfDialogProps) {
   const frame = useDialogPlacement(372);
   const [name, setName] = useState(cleanText(shelf));
   const [icon, setIcon] = useState<string>(() => getCategoryIconName(shelf));
@@ -52,14 +52,14 @@ export function LinuxShelfDialog({ shelf, onClose, onRename, onDelete }: LinuxSh
 
   return (
     <>
-      <div className="lx-scrim" onClick={onClose} />
+      <div className="ui-scrim" onClick={onClose} />
       <div {...frame}>
-        <div role="dialog" aria-modal="true" aria-labelledby="shelf-dialog-title" className="lx-dialog w-full max-w-[372px]">
+        <div role="dialog" aria-modal="true" aria-labelledby="shelf-dialog-title" className="ui-dialog w-full max-w-[372px]">
           <div className="flex items-center justify-between">
             <h2 id="shelf-dialog-title" className="text-[15px] font-semibold text-ink-1">
               Edit shelf
             </h2>
-            <button type="button" className="lx-icon-button -mr-1.5" onClick={onClose} aria-label="Close">
+            <button type="button" className="ui-icon-button -mr-1.5" onClick={onClose} aria-label="Close">
               <X size={16} />
             </button>
           </div>
@@ -76,7 +76,7 @@ export function LinuxShelfDialog({ shelf, onClose, onRename, onDelete }: LinuxSh
             onKeyDown={(e) => {
               if (e.key === "Enter") void save();
             }}
-            className="lx-input mt-4 w-full"
+            className="ui-input mt-4 w-full"
           />
           {error && <p className="mt-1.5 text-[12px] text-[var(--l-error-foreground)]">{error}</p>}
 

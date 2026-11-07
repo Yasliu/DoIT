@@ -68,7 +68,7 @@ html[data-platform="linux"] [data-theme] {
   --edge-float: var(--l-border);
 }
 
-/* Corner radii. Every rounded corner in this layer and in src/platform/linux reads one of these. */
+/* Corner radii. Every rounded corner in this layer and in src/platform/modern reads one of these. */
 html[data-platform="linux"] {
   --r-xs: 4px; /* checkboxes, keys, inline code */
   --r-sm: 6px; /* small buttons, menu items */
@@ -200,7 +200,7 @@ html[data-platform="linux"]:not([data-maximized]) .chassis {
   border: 1px solid var(--line-strong);
   overflow: visible;
 }
-html[data-platform="linux"]:not([data-maximized]) .lx-sidebar {
+html[data-platform="linux"]:not([data-maximized]) .ui-sidebar {
   border-radius: calc(var(--r-xl) - 1px) 0 0 calc(var(--r-xl) - 1px);
 }
 html[data-platform="linux"]:not([data-glass]) .chassis::after,
@@ -266,7 +266,7 @@ html[data-platform="linux"] .btn[data-variant="primary"]:hover {
 }
 /* Discrete buttons give under the pointer; full-width rows only change colour. */
 html[data-platform="linux"]
-  :is(.btn, .ghost, .icon-btn, .lx-icon-button, [data-slot="button-outline"], [data-slot="window-control"]):not(:disabled):active {
+  :is(.btn, .ghost, .icon-btn, .ui-icon-button, [data-slot="button-outline"], [data-slot="window-control"]):not(:disabled):active {
   transform: scale(0.97);
 }
 
@@ -665,16 +665,16 @@ html[data-platform="linux"] [data-slot="sheet-dock"] {
   transition: none !important;
 }
 
-/* ---------- Linux-only components (LinuxSidebar, LinuxShelfDialog) ----------
-   The lx-* classes are rendered only on Linux, so they need no platform prefix. */
+/* ---------- Linux-only components (ModernSidebar, ModernShelfDialog) ----------
+   The ui-* classes are rendered only on Linux, so they need no platform prefix. */
 
 html[data-platform="linux"] {
-  --lx-row-hover: color-mix(in oklab, var(--l-sidebar-foreground) 6%, transparent);
-  --lx-row-selected: color-mix(in oklab, var(--l-sidebar-foreground) 9%, transparent);
-  --lx-icon: color-mix(in oklab, var(--l-sidebar-muted-foreground) 85%, var(--l-sidebar));
+  --ui-row-hover: color-mix(in oklab, var(--l-sidebar-foreground) 6%, transparent);
+  --ui-row-selected: color-mix(in oklab, var(--l-sidebar-foreground) 9%, transparent);
+  --ui-icon: color-mix(in oklab, var(--l-sidebar-muted-foreground) 85%, var(--l-sidebar));
 }
 
-.lx-sidebar {
+.ui-sidebar {
   position: relative;
   z-index: 20;
   display: flex;
@@ -689,10 +689,10 @@ html[data-platform="linux"] {
   user-select: none;
   transition: width 220ms var(--ease-drawer);
 }
-.lx-sidebar[data-open="false"] {
+.ui-sidebar[data-open="false"] {
   width: 52px;
 }
-.lx-sidebar-brand {
+.ui-sidebar-brand {
   display: flex;
   flex-shrink: 0;
   align-items: center;
@@ -700,39 +700,39 @@ html[data-platform="linux"] {
   height: 48px;
   padding: 0 0 0 6px;
 }
-.lx-sidebar[data-open="false"] .lx-sidebar-brand {
+.ui-sidebar[data-open="false"] .ui-sidebar-brand {
   padding: 0;
   justify-content: center;
 }
-.lx-sidebar[data-open="false"] .lx-sidebar-brand .lx-icon-button {
+.ui-sidebar[data-open="false"] .ui-sidebar-brand .ui-icon-button {
   margin: 0;
 }
-.lx-sidebar-header {
+.ui-sidebar-header {
   display: flex;
   align-items: center;
   gap: 2px;
   margin-bottom: 8px;
 }
-.lx-sidebar[data-open="false"] .lx-sidebar-header {
+.ui-sidebar[data-open="false"] .ui-sidebar-header {
   flex-direction: column;
   gap: 4px;
 }
 
-.lx-icon-button {
+.ui-icon-button {
   margin: 0;
 }
-.lx-sidebar-header {
+.ui-sidebar-header {
   display: flex;
   align-items: center;
   gap: 2px;
   margin-bottom: 8px;
 }
-.lx-sidebar[data-open="false"] .lx-sidebar-header {
+.ui-sidebar[data-open="false"] .ui-sidebar-header {
   flex-direction: column;
   gap: 4px;
 }
 
-.lx-search {
+.ui-search {
   display: flex;
   flex: 1;
   min-width: 0;
@@ -747,14 +747,14 @@ html[data-platform="linux"] {
   cursor: text;
   transition: background-color 120ms var(--ease-out);
 }
-.lx-search:hover,
-.lx-search:focus-within {
-  background-color: var(--lx-row-hover);
+.ui-search:hover,
+.ui-search:focus-within {
+  background-color: var(--ui-row-hover);
 }
-.lx-search:focus-within {
+.ui-search:focus-within {
   box-shadow: inset 0 0 0 1px color-mix(in oklab, var(--l-focus) 55%, transparent);
 }
-.lx-search input {
+.ui-search input {
   flex: 1;
   min-width: 0;
   border: 0;
@@ -762,16 +762,16 @@ html[data-platform="linux"] {
   color: var(--l-sidebar-foreground);
   font: inherit;
 }
-.lx-search input::placeholder {
+.ui-search input::placeholder {
   color: var(--l-sidebar-muted-foreground);
   opacity: 1;
 }
-html[data-platform="linux"] .lx-search-hint {
+html[data-platform="linux"] .ui-search-hint {
   background: transparent;
   border-color: transparent;
 }
 
-.lx-icon-button {
+.ui-icon-button {
   display: grid;
   flex-shrink: 0;
   place-items: center;
@@ -784,19 +784,19 @@ html[data-platform="linux"] .lx-search-hint {
     color 120ms var(--ease-out),
     transform 120ms var(--ease-out);
 }
-.lx-icon-button:hover {
+.ui-icon-button:hover {
   background-color: var(--hover);
   color: var(--l-text);
 }
-.lx-sidebar .lx-icon-button {
-  color: var(--lx-icon);
+.ui-sidebar .ui-icon-button {
+  color: var(--ui-icon);
 }
-.lx-sidebar .lx-icon-button:hover {
-  background-color: var(--lx-row-hover);
+.ui-sidebar .ui-icon-button:hover {
+  background-color: var(--ui-row-hover);
   color: var(--l-sidebar-foreground);
 }
 
-.lx-sidebar-list {
+.ui-sidebar-list {
   display: flex;
   flex: 1;
   flex-direction: column;
@@ -805,10 +805,10 @@ html[data-platform="linux"] .lx-search-hint {
   overflow-y: auto;
   scrollbar-width: none;
 }
-.lx-row-wrap {
+.ui-row-wrap {
   position: relative;
 }
-.lx-row {
+.ui-row {
   position: relative;
   isolation: isolate;
   display: flex;
@@ -826,63 +826,63 @@ html[data-platform="linux"] .lx-search-hint {
     background-color 120ms var(--ease-out),
     color 120ms var(--ease-out);
 }
-.lx-row:hover {
-  background-color: var(--lx-row-hover);
+.ui-row:hover {
+  background-color: var(--ui-row-hover);
   color: var(--l-sidebar-foreground);
 }
-.lx-row[data-active] {
+.ui-row[data-active] {
   color: var(--l-sidebar-foreground);
 }
-.lx-row[data-active]:not(:has(.lx-row-selected)) {
-  background-color: var(--lx-row-selected);
+.ui-row[data-active]:not(:has(.ui-row-selected)) {
+  background-color: var(--ui-row-selected);
 }
-.lx-row-selected {
+.ui-row-selected {
   position: absolute;
   inset: 0;
   z-index: -1;
   border-radius: var(--r-md);
-  background-color: var(--lx-row-selected);
+  background-color: var(--ui-row-selected);
 }
-.lx-row-icon {
+.ui-row-icon {
   display: grid;
   flex-shrink: 0;
   place-items: center;
   width: 16px;
   height: 16px;
-  color: var(--lx-icon);
+  color: var(--ui-icon);
   transition: color 120ms var(--ease-out);
 }
-.lx-row:hover .lx-row-icon,
-.lx-row[data-active] .lx-row-icon {
+.ui-row:hover .ui-row-icon,
+.ui-row[data-active] .ui-row-icon {
   color: var(--l-sidebar-foreground);
 }
-.lx-row-label {
+.ui-row-label {
   flex: 1;
   min-width: 0;
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
 }
-.lx-row-count {
+.ui-row-count {
   color: var(--l-sidebar-muted-foreground);
   font-size: 12px;
   font-variant-numeric: tabular-nums;
   opacity: 0.75;
 }
-.lx-row-more {
+.ui-row-more {
   position: absolute;
   top: 4px;
   right: 4px;
   opacity: 0;
 }
-.lx-row-wrap:hover .lx-row-more,
-.lx-row-more:focus-visible {
+.ui-row-wrap:hover .ui-row-more,
+.ui-row-more:focus-visible {
   opacity: 1;
 }
-.lx-row-wrap:hover .lx-row-count {
+.ui-row-wrap:hover .ui-row-count {
   visibility: hidden;
 }
-.lx-row-input input {
+.ui-row-input input {
   flex: 1;
   min-width: 0;
   border: 0;
@@ -890,15 +890,15 @@ html[data-platform="linux"] .lx-search-hint {
   color: var(--l-sidebar-foreground);
   font: inherit;
 }
-.lx-row-input {
-  background-color: var(--lx-row-hover);
+.ui-row-input {
+  background-color: var(--ui-row-hover);
   box-shadow: inset 0 0 0 1px color-mix(in oklab, var(--l-focus) 55%, transparent);
 }
-.lx-sidebar[data-open="false"] .lx-row {
+.ui-sidebar[data-open="false"] .ui-row {
   justify-content: center;
   padding: 0;
 }
-.lx-sidebar-footer {
+.ui-sidebar-footer {
   display: flex;
   flex-direction: column;
   gap: 1px;
@@ -906,7 +906,7 @@ html[data-platform="linux"] .lx-search-hint {
 }
 
 /* Small popover menu. Grows from where it is anchored. */
-.lx-menu {
+.ui-menu {
   position: absolute;
   z-index: 50;
   min-width: 200px;
@@ -924,7 +924,7 @@ html[data-platform="linux"] .lx-search-hint {
     transform: scale(0.97) translateY(2px);
   }
 }
-.lx-menu-item {
+.ui-menu-item {
   display: flex;
   align-items: center;
   gap: 8px;
@@ -936,15 +936,15 @@ html[data-platform="linux"] .lx-search-hint {
   font-size: 13.5px;
   text-align: left;
 }
-.lx-menu-item svg {
+.ui-menu-item svg {
   color: var(--l-text-muted);
 }
-.lx-menu-item:hover {
+.ui-menu-item:hover {
   background-color: var(--hover);
 }
 
 /* Dialogs: a quick fade and a slight scale, never from zero. */
-.lx-scrim {
+.ui-scrim {
   position: fixed;
   inset: 0;
   z-index: 120;
@@ -954,7 +954,7 @@ html[data-platform="linux"] .lx-search-hint {
     opacity: 0;
   }
 }
-.lx-dialog {
+.ui-dialog {
   pointer-events: auto;
   padding: 20px;
   border: 1px solid var(--edge-float);
@@ -970,7 +970,7 @@ html[data-platform="linux"] .lx-search-hint {
     transform: scale(0.97);
   }
 }
-.lx-input {
+.ui-input {
   height: 36px;
   padding: 0 12px;
   border: 1px solid var(--l-border);
@@ -980,10 +980,10 @@ html[data-platform="linux"] .lx-search-hint {
   font-size: 14px;
   transition: border-color 120ms var(--ease-out);
 }
-.lx-input:focus {
+.ui-input:focus {
   border-color: color-mix(in oklab, var(--l-focus) 60%, var(--l-border));
 }
-.lx-icon-choice {
+.ui-icon-choice {
   display: grid;
   place-items: center;
   height: 36px;
@@ -993,21 +993,21 @@ html[data-platform="linux"] .lx-search-hint {
     background-color 120ms var(--ease-out),
     color 120ms var(--ease-out);
 }
-.lx-icon-choice:hover {
+.ui-icon-choice:hover {
   background-color: var(--hover);
   color: var(--l-text);
 }
-.lx-icon-choice.is-on {
+.ui-icon-choice.is-on {
   background-color: color-mix(in oklab, var(--l-accent) 14%, transparent);
   box-shadow: inset 0 0 0 1px color-mix(in oklab, var(--l-accent) 55%, transparent);
   color: var(--l-accent);
 }
 
 @media (prefers-reduced-motion: reduce) {
-  .lx-sidebar,
-  .lx-menu,
-  .lx-dialog,
-  .lx-scrim {
+  .ui-sidebar,
+  .ui-menu,
+  .ui-dialog,
+  .ui-scrim {
     transition: none;
   }
 }
@@ -1085,7 +1085,7 @@ html[data-platform="linux"] [data-slot="shelf-picker"]:hover {
   color: var(--l-text);
 }
 
-/* ---------- dock panel (LinuxDockHome) ---------- */
+/* ---------- dock panel (ModernDockHome) ---------- */
 
 html[data-platform="linux"] [data-slot="dock-panel"] {
   padding: 8px;
@@ -1108,7 +1108,7 @@ html[data-platform="linux"] :is([data-slot="dock-canvas"], [data-slot="dock-clos
   width: 15px;
   height: 15px;
 }
-.lx-dock-search {
+.ui-dock-search {
   display: flex;
   align-items: center;
   gap: 8px;
@@ -1120,10 +1120,10 @@ html[data-platform="linux"] :is([data-slot="dock-canvas"], [data-slot="dock-clos
   cursor: text;
   transition: border-color 120ms var(--ease-out);
 }
-.lx-dock-search:focus-within {
+.ui-dock-search:focus-within {
   border-color: color-mix(in oklab, var(--l-focus) 55%, var(--l-border));
 }
-.lx-dock-search input {
+.ui-dock-search input {
   flex: 1;
   min-width: 0;
   border: 0;
@@ -1131,7 +1131,7 @@ html[data-platform="linux"] :is([data-slot="dock-canvas"], [data-slot="dock-clos
   color: var(--l-text);
   font-size: 13.5px;
 }
-.lx-chip {
+.ui-chip {
   height: 26px;
   padding: 0 10px;
   border: 1px solid var(--l-border);
@@ -1144,16 +1144,16 @@ html[data-platform="linux"] :is([data-slot="dock-canvas"], [data-slot="dock-clos
     color 120ms var(--ease-out),
     border-color 120ms var(--ease-out);
 }
-.lx-chip:hover {
+.ui-chip:hover {
   color: var(--l-text);
   background-color: var(--hover);
 }
-.lx-chip.is-on {
+.ui-chip.is-on {
   border-color: transparent;
   background-color: var(--l-text);
   color: var(--l-canvas);
 }
-.lx-dock-row {
+.ui-dock-row {
   display: flex;
   align-items: center;
   gap: 12px;
@@ -1163,8 +1163,8 @@ html[data-platform="linux"] :is([data-slot="dock-canvas"], [data-slot="dock-clos
   text-align: left;
   transition: background-color 120ms var(--ease-out);
 }
-.lx-dock-row:hover,
-.lx-dock-row:focus-visible {
+.ui-dock-row:hover,
+.ui-dock-row:focus-visible {
   background-color: var(--hover);
 }
 
@@ -1280,7 +1280,7 @@ html[data-platform="linux"][data-glass][data-appearance="light"] {
 html[data-platform="linux"][data-glass] .chassis {
   background-color: color-mix(in oklab, var(--l-canvas) var(--glass-canvas), transparent);
 }
-html[data-platform="linux"][data-glass] .lx-sidebar {
+html[data-platform="linux"][data-glass] .ui-sidebar {
   background-color: color-mix(in oklab, var(--l-sidebar) 62%, transparent);
 }
 html[data-platform="linux"][data-glass] :is(.card, .card:hover) {
@@ -1289,7 +1289,7 @@ html[data-platform="linux"][data-glass] :is(.card, .card:hover) {
 html[data-platform="linux"][data-glass] [data-slot="note-sheet"] {
   background-color: color-mix(in oklab, var(--l-surface) 86%, transparent);
 }
-html[data-platform="linux"][data-glass] :is([data-slot="shelf-head"], .lx-page-header) {
+html[data-platform="linux"][data-glass] :is([data-slot="shelf-head"], .ui-page-header) {
   position: relative;
   background-color: transparent;
 }
@@ -1334,10 +1334,10 @@ html[data-platform="linux"] [data-slot="dock-panel"] [contenteditable="true"] {
 
 /* ---------- create row, title-bar search, palette ---------- */
 
-.lx-sidebar-header {
+.ui-sidebar-header {
   gap: 6px;
 }
-.lx-create {
+.ui-create {
   display: flex;
   flex: 1;
   align-items: center;
@@ -1358,18 +1358,18 @@ html[data-platform="linux"] [data-slot="dock-panel"] [contenteditable="true"] {
     border-color 120ms var(--ease-out),
     transform 120ms var(--ease-out);
 }
-.lx-create svg {
+.ui-create svg {
   flex-shrink: 0;
   color: var(--l-text-muted);
 }
-.lx-create:hover {
+.ui-create:hover {
   border-color: var(--line-strong);
   background-color: color-mix(in oklab, var(--l-text) 4%, var(--l-surface));
 }
-.lx-create:active {
+.ui-create:active {
   transform: scale(0.97);
 }
-.lx-sidebar[data-open="false"] .lx-create {
+.ui-sidebar[data-open="false"] .ui-create {
   flex: none;
   width: 36px;
   height: 36px;
@@ -1377,12 +1377,12 @@ html[data-platform="linux"] [data-slot="dock-panel"] [contenteditable="true"] {
   background: transparent;
   box-shadow: none;
 }
-.lx-sidebar[data-open="false"] .lx-create:hover {
-  background-color: var(--lx-row-hover);
+.ui-sidebar[data-open="false"] .ui-create:hover {
+  background-color: var(--ui-row-hover);
 }
 
 /* Centred in the title bar; looks like a field, opens the palette. */
-.lx-search-trigger {
+.ui-search-trigger {
   position: absolute;
   left: 50%;
   top: 50%;
@@ -1401,19 +1401,19 @@ html[data-platform="linux"] [data-slot="dock-panel"] [contenteditable="true"] {
   transform: translate(-50%, -50%);
   transition: border-color 120ms var(--ease-out);
 }
-.lx-search-trigger:hover {
+.ui-search-trigger:hover {
   border-color: var(--line-strong);
 }
-.lx-search-trigger span {
+.ui-search-trigger span {
   flex: 1;
   text-align: left;
 }
-html[data-platform="linux"] .lx-search-trigger kbd {
+html[data-platform="linux"] .ui-search-trigger kbd {
   border-color: transparent;
   background: transparent;
 }
 
-.lx-palette {
+.ui-palette {
   pointer-events: auto;
   display: flex;
   flex-direction: column;
@@ -1433,20 +1433,20 @@ html[data-platform="linux"] .lx-search-trigger kbd {
     transform: scale(0.98) translateY(-4px);
   }
 }
-.lx-palette-list {
+.ui-palette-list {
   max-height: min(400px, 56vh);
   overflow-y: auto;
   padding: 6px;
   border-top: 1px solid var(--l-border);
   scrollbar-width: thin;
 }
-.lx-palette-section {
+.ui-palette-section {
   padding: 8px 10px 4px;
   color: var(--l-text-muted);
   font-size: 12px;
   font-weight: 500;
 }
-.lx-palette-item {
+.ui-palette-item {
   display: flex;
   align-items: center;
   gap: 10px;
@@ -1456,20 +1456,20 @@ html[data-platform="linux"] .lx-search-trigger kbd {
   font-size: 14px;
   cursor: default;
 }
-.lx-palette-item.is-active {
+.ui-palette-item.is-active {
   background-color: var(--press);
 }
-.lx-palette-icon {
+.ui-palette-icon {
   display: grid;
   flex-shrink: 0;
   place-items: center;
   width: 16px;
   color: var(--l-text-muted);
 }
-.lx-palette-item.is-active .lx-palette-icon {
+.ui-palette-item.is-active .ui-palette-icon {
   color: var(--l-text);
 }
-.lx-palette-footer {
+.ui-palette-footer {
   display: flex;
   align-items: center;
   gap: 14px;
@@ -1479,7 +1479,7 @@ html[data-platform="linux"] .lx-search-trigger kbd {
   color: var(--l-text-muted);
   font-size: 12px;
 }
-.lx-palette-action {
+.ui-palette-action {
   display: flex;
   align-items: center;
   gap: 6px;
@@ -1490,29 +1490,29 @@ html[data-platform="linux"] .lx-search-trigger kbd {
   font-size: 12.5px;
   font-weight: 500;
 }
-.lx-palette-action:hover {
+.ui-palette-action:hover {
   background-color: var(--hover);
 }
-.lx-palette-action:disabled {
+.ui-palette-action:disabled {
   opacity: 0.5;
 }
-.lx-hl {
+.ui-hl {
   border-radius: calc(var(--r-xs) - 1px);
   background-color: var(--l-search-match-background);
   color: var(--l-search-match-foreground);
 }
 @media (prefers-reduced-motion: reduce) {
-  .lx-palette {
+  .ui-palette {
     transition: none;
   }
 }
 
-html[data-platform="linux"] :is(.btn, .lx-create):disabled {
+html[data-platform="linux"] :is(.btn, .ui-create):disabled {
   opacity: 0.5;
   pointer-events: none;
 }
 
-.lx-icon-pick {
+.ui-icon-pick {
   display: grid;
   flex-shrink: 0;
   place-items: center;
@@ -1524,37 +1524,37 @@ html[data-platform="linux"] :is(.btn, .lx-create):disabled {
   color: var(--l-text);
   transition: border-color 120ms var(--ease-out), background-color 120ms var(--ease-out);
 }
-.lx-icon-pick:hover {
+.ui-icon-pick:hover {
   border-color: var(--line-strong);
   background-color: var(--hover);
 }
 
 /* A shelf being dragged lifts above the others. */
-.lx-row-wrap[data-sortable] {
+.ui-row-wrap[data-sortable] {
   position: relative;
 }
-.lx-row-wrap[data-dragging] {
+.ui-row-wrap[data-dragging] {
   z-index: 10;
   border-radius: var(--r-md);
   background-color: var(--l-surface-overlay);
   box-shadow: var(--shadow-pop);
   cursor: grabbing;
 }
-.lx-row-wrap[data-dragging] .lx-row {
+.ui-row-wrap[data-dragging] .ui-row {
   color: var(--l-sidebar-foreground);
 }
 
 /* A note dragged from the canvas over a sidebar shelf: that is where it will land. */
-.lx-row-wrap[data-drop-over] .lx-row {
+.ui-row-wrap[data-drop-over] .ui-row {
   background-color: color-mix(in oklab, var(--l-accent) 14%, transparent);
   box-shadow: inset 0 0 0 1px color-mix(in oklab, var(--l-accent) 55%, transparent);
   color: var(--l-sidebar-foreground);
 }
-.lx-menu-danger,
-.lx-menu-danger svg {
+.ui-menu-danger,
+.ui-menu-danger svg {
   color: var(--l-error-foreground);
 }
-.lx-menu-danger:hover {
+.ui-menu-danger:hover {
   background-color: var(--l-error-surface);
 }
 

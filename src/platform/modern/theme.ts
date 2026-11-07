@@ -1,10 +1,10 @@
 /**
  * Linux colour themes: seven palettes, each with a light and a dark variant, applied as `--l-*`
- * custom properties on <html>. `linux.css` maps DoIT's own colour tokens onto them.
+ * custom properties on <html>. `modern.css` maps DoIT's own colour tokens onto them.
  *
  * Six palettes come from T3 Code (MIT, see THIRD_PARTY_NOTICES.md); Monochrome is DoIT's own look.
  * Glass and Boxy are not palettes but flags on top of any of them (`data-glass`, `data-shape`,
- * styled in linux.css).
+ * styled in modern.css).
  */
 
 export type Appearance = "system" | "light" | "dark";
@@ -469,7 +469,7 @@ export function normalizeAppearance(value: string | null | undefined): Appearanc
   return value === "light" || value === "dark" || value === "system" ? value : DEFAULT_APPEARANCE;
 }
 
-export interface LinuxTheme {
+export interface ModernTheme {
   palette: PaletteId;
   appearance: Appearance;
   /** Translucent, grainy window over any palette. */
@@ -481,7 +481,7 @@ export interface LinuxTheme {
 /** The stored settings as a theme, including the old "glass" palette (now Monochrome + Glass). */
 export type ThemeSettings = { palette?: string | null; appearance?: string | null; glass?: boolean | null; boxy?: boolean | null };
 
-export function themeFromSettings(s: ThemeSettings): LinuxTheme {
+export function themeFromSettings(s: ThemeSettings): ModernTheme {
   return {
     palette: normalizePalette(s.palette),
     appearance: normalizeAppearance(s.appearance),
@@ -492,7 +492,7 @@ export function themeFromSettings(s: ThemeSettings): LinuxTheme {
 
 const CACHE_KEY = "doit.linux-theme";
 const darkQuery = typeof window !== "undefined" ? window.matchMedia("(prefers-color-scheme: dark)") : null;
-let current: LinuxTheme | null = null;
+let current: ModernTheme | null = null;
 
 function resolve(appearance: Appearance): Resolved {
   if (appearance === "system") return darkQuery?.matches ? "dark" : "light";
@@ -501,7 +501,7 @@ function resolve(appearance: Appearance): Resolved {
 
 const kebab = (role: string) => role.replace(/[A-Z]/g, (c) => `-${c.toLowerCase()}`);
 
-function paint({ palette, appearance, glass, boxy }: LinuxTheme) {
+function paint({ palette, appearance, glass, boxy }: ModernTheme) {
   const root = document.documentElement;
   const resolved = resolve(appearance);
   const colors = PALETTES[palette][resolved];
@@ -520,7 +520,7 @@ function paint({ palette, appearance, glass, boxy }: LinuxTheme) {
 }
 
 /** Applies a theme and remembers it, so the next window paints it before settings load. */
-export function applyLinuxTheme(theme: LinuxTheme): void {
+export function applyModernTheme(theme: ModernTheme): void {
   current = theme;
   paint(theme);
   try {
@@ -531,7 +531,7 @@ export function applyLinuxTheme(theme: LinuxTheme): void {
 }
 
 /** First paint: the last theme this machine used. */
-export function restoreLinuxTheme(): void {
+export function restoreModernTheme(): void {
   let cached: ThemeSettings = {};
   try {
     cached = JSON.parse(localStorage.getItem(CACHE_KEY) ?? "{}");

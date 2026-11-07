@@ -3,9 +3,9 @@ import { FileText, FolderPlus, LayoutGrid, PanelBottomOpen, Settings, SquarePen 
 import type { NoteItem } from "../../api/tauriBridge";
 import { CATEGORY_ICONS, getCategoryIconName } from "../../lib/categoryIcons";
 import { cleanText, relativeShort } from "../../lib/text";
-import { LinuxPalette, type PaletteItem } from "./LinuxPalette";
+import { ModernPalette, type PaletteItem } from "./ModernPalette";
 
-interface LinuxSpotlightProps {
+interface ModernSpotlightProps {
   notes: NoteItem[];
   shelves: string[];
   onClose: () => void;
@@ -26,7 +26,7 @@ function highlight(text: string, q: string): ReactNode {
   return (
     <>
       {text.slice(0, at)}
-      <mark className="lx-hl">{text.slice(at, at + q.length)}</mark>
+      <mark className="ui-hl">{text.slice(at, at + q.length)}</mark>
       {text.slice(at + q.length)}
     </>
   );
@@ -54,7 +54,7 @@ export function shelfIcon(shelf: string | null, size = 16) {
 }
 
 /** Ctrl+K: find a note, jump to a shelf or run an action, without touching the canvas. */
-export function LinuxSpotlight(props: LinuxSpotlightProps) {
+export function ModernSpotlight(props: ModernSpotlightProps) {
   const [query, setQuery] = useState("");
   // Typing stays instant while a large workspace is searched.
   const q = useDeferredValue(query).trim().toLowerCase();
@@ -114,10 +114,10 @@ export function LinuxSpotlight(props: LinuxSpotlightProps) {
   }, [q, props]);
 
   return (
-    <LinuxPalette
+    <ModernPalette
       label="Search notes"
       placeholder="Search notes, shelves and actions"
-      anchorSelector=".lx-search-trigger"
+      anchorSelector=".ui-search-trigger"
       topSelector='[data-slot="shelf-head"]'
       query={query}
       onQuery={setQuery}

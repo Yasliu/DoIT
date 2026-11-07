@@ -40,13 +40,13 @@ export function TitleBar({
           <button
             type="button"
             onClick={onToggleSidebar}
-            className="lx-icon-button"
+            className="ui-icon-button"
             aria-label={sidebarOpen ? "Collapse sidebar" : "Expand sidebar"}
             title={sidebarOpen ? "Collapse sidebar" : "Expand sidebar"}
           >
             <PanelLeft size={16} />
           </button>
-          <button type="button" onClick={onOpenSearch} className="lx-search-trigger" aria-label="Search notes (Ctrl K)">
+          <button type="button" onClick={onOpenSearch} className="ui-search-trigger" aria-label="Search notes (Ctrl K)">
             <Search size={15} />
             <span>Search notes</span>
             <kbd>Ctrl K</kbd>

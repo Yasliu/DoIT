@@ -95,7 +95,7 @@ export interface AppSettings {
   dock_on_close?: boolean;
   last_seen_version?: string;
   category_icons?: Record<string, string>;
-  /** Linux only: colour theme and light/dark choice (see src/platform/linux/theme.ts). */
+  /** Linux only: colour theme and light/dark choice (see src/platform/modern/theme.ts). */
   palette?: string;
   appearance?: string;
   glass?: boolean;

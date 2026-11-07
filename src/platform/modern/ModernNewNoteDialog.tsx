@@ -1,7 +1,7 @@
 import { FileDown, SquarePen } from "lucide-react";
-import { LinuxShelfPicker } from "./LinuxShelfPicker";
+import { ModernShelfPicker } from "./ModernShelfPicker";
 
-interface LinuxNewNoteDialogProps {
+interface ModernNewNoteDialogProps {
   shelves: string[];
   /** The shelf being viewed, which starts highlighted. */
   current: string | null;
@@ -12,9 +12,9 @@ interface LinuxNewNoteDialogProps {
 }
 
 /** New note: pick its shelf from the keyboard, or import a file onto that shelf instead. */
-export function LinuxNewNoteDialog({ shelves, current, onClose, onCreate, onImportFile }: LinuxNewNoteDialogProps) {
+export function ModernNewNoteDialog({ shelves, current, onClose, onCreate, onImportFile }: ModernNewNoteDialogProps) {
   return (
-    <LinuxShelfPicker
+    <ModernShelfPicker
       label="New note"
       placeholder="New note in…"
       icon={<SquarePen size={17} />}
