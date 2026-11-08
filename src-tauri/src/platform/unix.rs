@@ -17,6 +17,15 @@ pub fn init() {
             // SAFETY: called first in `run()`, before Tauri, GTK or any other thread exists.
             unsafe { std::env::set_var("GDK_BACKEND", "x11") };
         }
+        // WebKit's web process inherits these. A notes UI never runs long enough to pay for the
+        // optimising compiler (off: ~9 MB less per page), and one GC marker thread is plenty for a
+        // heap this small (6 fewer threads). Set here so the user's own values still win.
+        for (name, value) in [("JSC_useDFGJIT", "0"), ("JSC_numberOfGCMarkers", "1")] {
+            if !var(name) {
+                // SAFETY: as above, no other thread exists yet.
+                unsafe { std::env::set_var(name, value) };
+            }
+        }
     }
 }
 

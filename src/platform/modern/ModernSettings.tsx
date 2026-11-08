@@ -2,7 +2,7 @@ import { useEffect, useState } from "react";
 import { motion } from "motion/react";
 import { ArrowLeft, Check, ChevronRight, ExternalLink, FolderOpen, Monitor, Moon, RefreshCw, Sun } from "lucide-react";
 import { AppSettings, DEFAULT_SETTINGS, settingsChanges, tauriApi } from "../../api/tauriBridge";
-import { BLOCKS_STRUCTURE_SHORTCUT_ROWS, TEXT_MARKS_SHORTCUT_ROWS } from "../../components/SettingsPanel";
+import { BLOCKS_STRUCTURE_SHORTCUT_ROWS, TEXT_MARKS_SHORTCUT_ROWS } from "../../lib/shortcuts";
 import { ShortcutField } from "../../components/ShortcutField";
 import { applyShortcutSettings } from "../../lib/shortcuts";
 import { cx } from "../../lib/text";
