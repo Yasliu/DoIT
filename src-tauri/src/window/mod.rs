@@ -11,6 +11,7 @@
 //! Mode switches run on their own thread: window creation must never block a command's thread.
 
 mod drag;
+mod flush;
 mod geometry;
 mod lifecycle;
 mod pill;
@@ -127,9 +128,29 @@ pub fn minimize(window: &Window) -> Result<(), String> {
     window.minimize().map_err(|e| e.to_string())
 }
 
+/// Quits once the pages have saved what they hold. Runs on its own thread because the main thread
+/// has to stay free to handle those saves.
 pub fn quit(app: &AppHandle) {
     remember_maximized(app);
-    app.exit(0);
+    let app = app.clone();
+    std::thread::spawn(move || {
+        flush::pages(&app, &[CANVAS, DOCK]);
+        app.exit(0);
+    });
+}
+
+/// Restarts (after an update) once the pages have saved what they hold.
+pub fn restart(app: &AppHandle) {
+    let app = app.clone();
+    std::thread::spawn(move || {
+        flush::pages(&app, &[CANVAS, DOCK]);
+        app.restart();
+    });
+}
+
+/// The page finished saving after a `flush-pending` request.
+pub fn flush_answered(window: &WebviewWindow) {
+    flush::answered(window.label());
 }
 
 fn remember_maximized(app: &AppHandle) {
@@ -162,7 +183,7 @@ pub fn on_window_event(window: &Window, event: &WindowEvent) {
                     if app.state::<StorageManager>().get_dock_on_close() {
                         let _ = lifecycle::enter_dock(&app, DockOpen::default());
                     } else {
-                        app.exit(0);
+                        quit(&app);
                     }
                 } else if platform::has_tray() {
                     // Window-manager close on the dock (Alt+F4, the dock's Quit): hide it; the tray

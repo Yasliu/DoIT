@@ -459,6 +459,16 @@ export const tauriApi = {
   },
 
   /** Canvas page mounted after a (re)load: lets the backend reveal the window. */
+  /** Tells the backend this page has saved everything it held after a `flush-pending` request. */
+  async flushDone(): Promise<void> {
+    if (!isTauri()) return;
+    try {
+      await invoke("flush_done");
+    } catch {
+      /* not running under Tauri */
+    }
+  },
+
   async canvasReady(): Promise<void> {
     if (!isTauri()) return;
     try {

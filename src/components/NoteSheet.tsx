@@ -41,6 +41,7 @@ import {
 } from "../lib/format";
 import { isModern } from "../platform";
 import { ModernConfirm } from "../platform/modern/ModernConfirm";
+import { holdEdits } from "../lib/heldEdits";
 import { accentFor, cleanText, cx, fullStamp, uid } from "../lib/text";
 
 interface NoteSheetProps {
@@ -408,27 +409,16 @@ export function NoteSheet({
     return () => document.removeEventListener("keydown", onKey);
   }, [fontOpen, shelfOpen, adjustZoom, resetZoom]);
 
-  // The backend asks for a final flush right before it blanks the canvas (tray mode)
-  useEffect(() => {
-    let unlisten: (() => void) | null = null;
-    let disposed = false;
-    void import("@tauri-apps/api/event")
-      .then(({ listen }) =>
-        listen("flush-pending", () => {
-          if (draftRef.current.source_path) return;
-          window.clearTimeout(saveTimer.current);
-          commitRef.current(draftRef.current);
-        }).then((fn) => {
-          if (disposed) fn();
-          else unlisten = fn;
-        }),
-      )
-      .catch(() => undefined);
-    return () => {
-      disposed = true;
-      if (unlisten) unlisten();
-    };
-  }, []);
+  // Typing waits in this sheet's debounce; hand it over whenever the workspace is asked to flush.
+  useEffect(
+    () =>
+      holdEdits(() => {
+        if (draftRef.current.source_path) return;
+        window.clearTimeout(saveTimer.current);
+        commitRef.current(draftRef.current);
+      }),
+    [],
+  );
 
   useEffect(() => {
     return () => {

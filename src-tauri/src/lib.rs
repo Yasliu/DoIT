@@ -161,6 +161,7 @@ pub fn run() {
             commands::window::ensure_dock_topmost,
             commands::window::restart_app,
             commands::window::quit_app,
+            commands::window::flush_done,
             commands::window::show_tray_context_menu
         ])
         .build(tauri::generate_context!())

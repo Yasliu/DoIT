@@ -10,6 +10,7 @@
 use std::time::Duration;
 use tauri::{AppHandle, Emitter, Manager, WebviewWindow, Window};
 
+use super::flush;
 use super::geometry::{primary_screen, rect_of, screen_named, screen_of};
 use super::placement::{
     canvas_placement, clamp_into, dock_home, dock_size, reshape, CanvasGeometry, CanvasPlacement, DockShape, Growth, Rect, Screen,
@@ -72,8 +73,7 @@ fn suspend_canvas(app: &AppHandle) {
             return;
         }
     }
-    let _ = app.emit_to(CANVAS, "flush-pending", ());
-    std::thread::sleep(Duration::from_millis(350));
+    flush::pages(app, &[CANVAS]);
     // The canvas came back in the meantime, or an external file has unsaved edits: leave it alone.
     if engine().mode == Mode::Canvas || engine().external_dirty {
         return;
@@ -280,8 +280,7 @@ fn retire_panel_later(app: &AppHandle, generation: u64) {
             return;
         }
         if let Some(dock) = app.get_webview_window(DOCK) {
-            let _ = app.emit_to(DOCK, "flush-pending", ());
-            std::thread::sleep(Duration::from_millis(350));
+            flush::pages(&app, &[DOCK]);
             if still_idle(generation) {
                 webview::retire(&dock);
             }

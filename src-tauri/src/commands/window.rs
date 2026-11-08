@@ -78,7 +78,13 @@ pub fn save_tray_position(app: AppHandle) {
 
 #[tauri::command]
 pub fn restart_app(app: AppHandle) {
-    app.restart();
+    window::restart(&app);
+}
+
+/// The page saved everything it held after a `flush-pending` request.
+#[tauri::command]
+pub fn flush_done(window: WebviewWindow) {
+    window::flush_answered(&window);
 }
 
 #[tauri::command]

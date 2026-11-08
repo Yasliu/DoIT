@@ -2,6 +2,7 @@ import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { getCurrentWindow } from "@tauri-apps/api/window";
 import { NoteItem, ScanSummary, Shelf, tauriApi } from "../api/tauriBridge";
 import { initCategoryIcons } from "../lib/categoryIcons";
+import { drainHeldEdits } from "../lib/heldEdits";
 import { uid } from "../lib/text";
 
 export type LoadState = "loading" | "ready" | "error";
@@ -350,16 +351,19 @@ export function useWorkspace() {
 
   useEffect(() => {
     const flush = () => {
-      pending.current.forEach((note) => {
-        void tauriApi.saveNote(note);
-      });
+      drainHeldEdits();
+      saveTimers.current.forEach((timer) => window.clearTimeout(timer));
+      saveTimers.current.clear();
+      const saves = [...pending.current.values()].map((note) => tauriApi.saveNote(note));
       pending.current.clear();
+      return Promise.allSettled(saves);
     };
+    const flushAndAnswer = () => void flush().then(() => tauriApi.flushDone());
     window.addEventListener("beforeunload", flush);
     let unlisten: (() => void) | null = null;
     let disposed = false;
     getCurrentWindow()
-      .listen("flush-pending", flush)
+      .listen("flush-pending", flushAndAnswer)
       .then((fn) => {
         if (disposed) fn();
         else unlisten = fn;
