@@ -680,7 +680,19 @@ function ensureCheckbox(block: HTMLElement, placeCaret: boolean): void {
  * Runs on every editor input: turns typed prefixes ("# ", "- ", "> ") into real heading / bullet / quote
  * lines (marker moves into data-p, never shown) and turns a typed "| a | b |" + "|---|---|" pair into a table.
  */
-export function normalizeEditor(editor: HTMLElement): void {
+/**
+ * True when an edit inside `block` cannot change any other block: nothing in it opens a code fence,
+ * makes a table, draws a rule or turns the line into a list. Such an edit normalizes `block` alone.
+ */
+export function editStaysInBlock(block: HTMLElement): boolean {
+  if (block.tagName !== "DIV" || isSpecialBlock(block)) return false;
+  const text = block.textContent || "";
+  if (text.includes("|") || /^\s*(`{3,}|~{3,})/.test(text) || HR_RE.test(text)) return false;
+  return block.hasAttribute("data-p") || !blockPrefix(text, true);
+}
+
+/** Tidies the editor after an edit. With `only`, tidies just that block (see `editStaysInBlock`). */
+export function normalizeEditor(editor: HTMLElement, only?: HTMLElement): void {
 
 function convertInlineInTextNodes(container: HTMLElement): void {
   const sel = window.getSelection();
@@ -962,12 +974,12 @@ function convertInlineInTextNodes(container: HTMLElement): void {
   }
 }
 
-  wrapStrayNodes(editor);
-  convertInlineInTextNodes(editor);
+  if (!only) wrapStrayNodes(editor);
+  convertInlineInTextNodes(only ?? editor);
   const caretBlock = currentBlock(editor);
 
   // Fenced code block detection: merge consecutive divs bounded by ``` ... ``` or ~~~ ... ~~~
-  const childrenList = Array.from(editor.children);
+  const childrenList = only ? [] : Array.from(editor.children);
   for (let idx = 0; idx < childrenList.length; idx++) {
     const el = childrenList[idx];
     if (!(el instanceof HTMLElement) || el.tagName !== "DIV" || isSpecialBlock(el) || el.hasAttribute("data-p")) continue;
@@ -1006,7 +1018,7 @@ function convertInlineInTextNodes(container: HTMLElement): void {
     }
   }
 
-  for (const child of Array.from(editor.children)) {
+  for (const child of only ? [only] : Array.from(editor.children)) {
     if (!(child instanceof HTMLElement) || child.tagName !== "DIV" || isSpecialBlock(child)) continue;
 
     if (child.hasAttribute("data-p")) {
@@ -1055,7 +1067,7 @@ function convertInlineInTextNodes(container: HTMLElement): void {
     if (info.cls.startsWith("md-task")) ensureCheckbox(child, child === caretBlock);
   }
 
-  renumberOrderedLists(editor);
+  if (!only) renumberOrderedLists(editor);
 
   // Typed table: header row line directly above a just-typed separator line
   if (caretBlock && caretBlock.tagName === "DIV" && !isSpecialBlock(caretBlock) && !caretBlock.hasAttribute("data-p")) {
@@ -1104,8 +1116,39 @@ export function handleMarkdownPaste(e: React.ClipboardEvent<HTMLElement>): boole
 /**
  * Converts rich contenteditable DOM back to clean Markdown without losing formatting.
  */
+const BLOCK_TAGS = new Set(["DIV", "P", "LI", "UL", "OL", "H1", "H2", "H3", "H4", "H5", "H6", "BLOCKQUOTE", "PRE"]);
+
+/** Markdown lines read from part of the editor, with the image references they define. */
+export interface MarkdownPiece {
+  lines: string[];
+  references: Map<string, string>;
+}
+
+/** True when `node`, read on its own, gives the same lines as it does in the whole editor. */
+export function readsAsOwnLines(node: Node): boolean {
+  if (!(node instanceof HTMLElement)) return false;
+  return BLOCK_TAGS.has(node.tagName.toUpperCase()) || node.classList.contains("md-tablewrap") || node.classList.contains("md-pre") || node.hasAttribute("data-raw");
+}
+
+/** Joins pieces read in document order into the note's Markdown. */
+export function joinMarkdown(pieces: MarkdownPiece[]): string {
+  let result = pieces.flatMap((piece) => piece.lines).join("\n").replace(/\n+$/, "");
+  const definitions = pieces.flatMap((piece) => Array.from(piece.references.entries()));
+  if (definitions.length > 0) {
+    const unique = new Map(definitions);
+    result = `${result}\n\n${Array.from(unique.entries())
+      .map(([k, v]) => `[${k}]: ${v}`)
+      .join("\n")}`;
+  }
+  return result;
+}
+
 export function htmlToMarkdown(container: HTMLElement): string {
-  const BLOCK_TAGS = new Set(["DIV", "P", "LI", "UL", "OL", "H1", "H2", "H3", "H4", "H5", "H6", "BLOCKQUOTE", "PRE"]);
+  return joinMarkdown([readMarkdown(container, Array.from(container.childNodes))]);
+}
+
+/** Reads `nodes`, children of the editor `container`, as Markdown lines. */
+export function readMarkdown(container: HTMLElement, nodes: Node[]): MarkdownPiece {
   const lines: string[] = [];
   const refDefinitions = new Map<string, string>();
   let cur = "";
@@ -1246,18 +1289,10 @@ export function htmlToMarkdown(container: HTMLElement): string {
     }
   };
 
-  for (const child of Array.from(container.childNodes)) walk(child);
+  for (const child of nodes) walk(child);
   if (cur !== "") flush();
 
-  let result = lines.join("\n").replace(/\n+$/, "");
-  if (refDefinitions.size > 0) {
-    const defs = Array.from(refDefinitions.entries())
-      .map(([k, v]) => `[${k}]: ${v}`)
-      .join("\n");
-    result = `${result}\n\n${defs}`;
-  }
-
-  return result;
+  return { lines, references: refDefinitions };
 }
 function tableToLines(wrap: HTMLElement): string[] {
   const table = wrap.querySelector("table");
@@ -2002,15 +2037,17 @@ export function contentToMarkdown(content: { text: string; is_todo: boolean; com
   return content.map((c) => (c.is_todo ? `- [${c.completed ? "x" : " "}] ${c.text}` : c.text)).join("\n");
 }
 
+/** The note's lines for `md`. A line that did not change keeps its previous object. */
 export function markdownToContent(md: string, prev: ContentItem[], newId: () => string): ContentItem[] {
   return md.split("\n").map((line, idx) => {
+    const before = prev[idx];
+    if (before && !before.is_todo && before.text === line && !line.includes("[")) return before;
     const m = line.match(TASK_LINE);
-    return {
-      id: prev[idx]?.id ?? newId(),
-      text: m ? m[2] : line,
-      is_todo: !!m,
-      completed: !!m && m[1].toLowerCase() === "x",
-    };
+    const text = m ? m[2] : line;
+    const is_todo = !!m;
+    const completed = !!m && m[1].toLowerCase() === "x";
+    if (before && before.text === text && before.is_todo === is_todo && before.completed === completed) return before;
+    return { id: before?.id ?? newId(), text, is_todo, completed };
   });
 }
 /** Context-menu helpers: operate on the table that owns `cell`. */
