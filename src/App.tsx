@@ -7,7 +7,7 @@ import { ContextMenu } from "./components/ContextMenu";
 import { CategoryMenu } from "./components/CategoryMenu";
 import { IconPickerModal } from "./components/IconPickerModal";
 import { setMarkdownBaseDir } from "./lib/format";
-import { applyShortcutSettings } from "./lib/shortcuts";
+import { applyShortcutSettings, canvasShortcut } from "./lib/shortcuts";
 import { initCategoryIcons, setCategoryIcon } from "./lib/categoryIcons";
 import { suggestShelfIcon } from "./platform/modern/ShelfIcons";
 import { NoteSheet } from "./components/NoteSheet";
@@ -507,26 +507,19 @@ export default function App() {
 
   useEffect(() => {
     const onKey = (event: KeyboardEvent) => {
-      const meta = event.ctrlKey || event.metaKey;
-      if (meta && event.key.toLowerCase() === "n") {
-        event.preventDefault();
+      const shortcut = canvasShortcut(event);
+      if (!shortcut || (shortcut === "search" && !isModern)) return;
+      event.preventDefault();
+      if (shortcut === "new-note") {
         if (isSettings) setIsSettings(false);
         if (!openNote) requestNewNote();
-      }
-      if (isModern && meta && event.key.toLowerCase() === "k") {
-        event.preventDefault();
+      } else if (shortcut === "search") {
         setModernDialog((d) => (d === "search" ? null : "search"));
-      }
-      if (meta && event.key.toLowerCase() === "o") {
-        event.preventDefault();
+      } else if (shortcut === "import-file") {
         void handleImportNote();
-      }
-      if (meta && event.key.toLowerCase() === "j") {
-        event.preventDefault();
+      } else if (shortcut === "dock") {
         toggleMini();
-      }
-      if (meta && (event.key === "," || (event.key.toLowerCase() === "s" && event.shiftKey))) {
-        event.preventDefault();
+      } else {
         setIsSettings((prev) => !prev);
       }
     };

@@ -142,3 +142,20 @@ export function matchesCombo(e: KeyEventLike, combo: string): boolean {
   const label = comboFromEvent(e);
   return !!label && normalizeCombo(label) === normalizeCombo(combo);
 }
+
+export type CanvasShortcut = "new-note" | "search" | "import-file" | "dock" | "settings";
+
+/**
+ * The canvas window's own shortcuts. A key that something closer to the focus already handled
+ * (a dialog's Ctrl+O, a palette's Ctrl+N) is theirs, so it never runs the canvas action as well.
+ */
+export function canvasShortcut(e: KeyEventLike & { defaultPrevented: boolean }): CanvasShortcut | null {
+  if (e.defaultPrevented || !(e.ctrlKey || e.metaKey)) return null;
+  const key = e.key.toLowerCase();
+  if (key === "n") return "new-note";
+  if (key === "k") return "search";
+  if (key === "o") return "import-file";
+  if (key === "j") return "dock";
+  if (e.key === "," || (key === "s" && e.shiftKey)) return "settings";
+  return null;
+}
