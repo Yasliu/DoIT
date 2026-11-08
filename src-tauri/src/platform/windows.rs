@@ -375,6 +375,17 @@ mod pill {
         unsafe { DefSubclassProc(hwnd, msg, wparam, lparam) }
     }
 
+    /// Makes the window layered. The windowing library rewrites a window's extended styles when its
+    /// state changes, which can drop this flag again, so every frame re-asserts it.
+    unsafe fn keep_layered(hwnd: Hwnd) {
+        unsafe {
+            let style = GetWindowLongPtrW(hwnd, GWL_EXSTYLE);
+            if style & WS_EX_LAYERED == 0 {
+                SetWindowLongPtrW(hwnd, GWL_EXSTYLE, style | WS_EX_LAYERED);
+            }
+        }
+    }
+
     pub fn attach(window: &tauri::Window, on_input: PillInputHandler) {
         let Ok(hwnd) = window.hwnd() else { return };
         let hwnd = hwnd.0 as isize;
@@ -383,8 +394,7 @@ mod pill {
             let hook = Box::into_raw(Box::new(Hook { on_input, tracking: Cell::new(false) }));
             // SAFETY: plain Win32 calls on a window this thread owns; `hook` lives until WM_NCDESTROY.
             unsafe {
-                let style = GetWindowLongPtrW(hwnd, GWL_EXSTYLE);
-                SetWindowLongPtrW(hwnd, GWL_EXSTYLE, style | WS_EX_LAYERED);
+                keep_layered(hwnd);
                 if SetWindowSubclass(hwnd, proc, SUBCLASS_ID, hook as usize) == 0 {
                     drop(Box::from_raw(hook));
                 }
@@ -417,6 +427,7 @@ mod pill {
             // SAFETY: GDI objects are created, used and released within this block; `bits` points at
             // w * h * 4 bytes owned by the DIB section until DeleteObject.
             unsafe {
+                keep_layered(hwnd);
                 let screen = GetDC(null_mut());
                 let memory = CreateCompatibleDC(screen);
                 let mut bits: *mut c_void = null_mut();

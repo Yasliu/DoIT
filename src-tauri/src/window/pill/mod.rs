@@ -70,6 +70,8 @@ pub fn show(app: &AppHandle, rect: Rect, actions: Actions) -> Result<(), String>
     let _ = window.show();
     let _ = window.set_always_on_top(true);
     platform::keep_wm_from_moving(&window);
+    // Showing can reset the surface on some systems; the frame after it is the one that counts.
+    send(Msg::Redraw);
     Ok(())
 }
 
