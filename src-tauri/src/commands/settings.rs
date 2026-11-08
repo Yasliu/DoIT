@@ -36,3 +36,27 @@ pub fn allow_note_images(app: &AppHandle, storage: &StorageManager) {
 pub fn get_system_fonts() -> Vec<String> {
     crate::platform::system_fonts()
 }
+
+#[tauri::command]
+pub fn is_ms_store_package() -> bool {
+    #[cfg(windows)]
+    {
+        #[link(name = "kernel32")]
+        unsafe extern "system" {
+            fn GetCurrentPackageFullName(
+                package_full_name_length: *mut u32,
+                package_full_name: *mut u16,
+            ) -> i32;
+        }
+        let mut length: u32 = 0;
+        let result = unsafe { GetCurrentPackageFullName(&mut length, std::ptr::null_mut()) };
+        // 15700 is APPMODEL_ERROR_NO_PACKAGE.
+        // Any other return (such as 122 ERROR_INSUFFICIENT_BUFFER or 0 ERROR_SUCCESS) means
+        // the app is executing inside an MSIX / AppX package identity (e.g. Microsoft Store).
+        result != 15700
+    }
+    #[cfg(not(windows))]
+    {
+        false
+    }
+}

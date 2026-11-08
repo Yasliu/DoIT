@@ -141,7 +141,7 @@ function CategoryShelfComponent({
               e.stopPropagation();
               onOpenIconPicker(shelf);
             }}
-            className="ghost !size-7 !p-0 opacity-0 transition-opacity duration-200 group-hover/section:opacity-100 hover:text-white focus-visible:opacity-100"
+            className="ghost !size-7 !p-0 !inline-flex !items-center !justify-center opacity-0 transition-opacity duration-200 group-hover/section:opacity-100 hover:text-white focus-visible:opacity-100"
             title={`Change icon for ${shelf}`}
             aria-label={`Change icon for ${shelf}`}
           >
@@ -156,7 +156,7 @@ function CategoryShelfComponent({
               e.stopPropagation();
               onDeleteCategory(shelf);
             }}
-            className="ghost !size-7 !p-0 opacity-0 transition-opacity duration-200 group-hover/section:opacity-100 hover:text-red-400 focus-visible:opacity-100"
+            className="ghost !size-7 !p-0 !inline-flex !items-center !justify-center opacity-0 transition-opacity duration-200 group-hover/section:opacity-100 hover:text-red-400 focus-visible:opacity-100"
             title={`Delete ${shelf} category`}
             aria-label={`Delete ${shelf} category`}
           >

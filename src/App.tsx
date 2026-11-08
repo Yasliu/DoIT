@@ -120,7 +120,8 @@ export default function App() {
 
   // Background update check. It never blocks the UI, but GitHub's release CDN sometimes needs 10s+ for the
   // TLS handshake: one 3s attempt silently missed updates for 6 hours. So retry with growing patience.
-  const checkForUpdate = useCallback(async (timeoutMs: number): Promise<"found" | "none" | "unsupported" | "error"> => {
+  const checkForUpdate = useCallback(async (timeoutMs: number): Promise<"found" | "none" | "unsupported" | "error" | "store"> => {
+    if (await tauriApi.isMsStorePackage()) return "store";
     if (typeof navigator !== "undefined" && navigator.onLine === false) return "error";
     try {
       const { check } = await import("@tauri-apps/plugin-updater");
@@ -308,7 +309,8 @@ export default function App() {
   useEffect(() => {
     const onManualCheck = async () => {
       const result = await checkForUpdate(30000);
-      if (result === "none") notify("You are on the latest version.");
+      if (result === "store") notify("Updates are managed automatically by the Microsoft Store.");
+      else if (result === "none") notify("You are on the latest version.");
       else if (result === "unsupported") notify("A newer DoIT is out, but there is no update package for this system yet.");
       else if (result === "error") notify("Could not reach the update server. Try again in a moment.");
     };
