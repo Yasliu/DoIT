@@ -283,6 +283,10 @@ html[data-design="modern"] .ghost:hover {
   background-color: var(--hover);
   color: var(--l-text);
 }
+/* The shelf's icon-only buttons drop their padding, so the icon needs centring in the square. */
+html[data-design="modern"] [data-slot="shelf-head"] .ghost {
+  justify-content: center;
+}
 
 html[data-design="modern"] .icon-btn {
   width: 28px;
