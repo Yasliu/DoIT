@@ -21,6 +21,16 @@ pub async fn select_storage_directory() -> Result<Option<String>, String> {
     pick(|d| d.set_title("Select DoIT Notes Markdown Directory").pick_folder()).await
 }
 
+/// Stores a pasted image (raw bytes, MIME type in the `x-mime` header) next to the notes.
+#[tauri::command]
+pub async fn save_attachment(request: tauri::ipc::Request<'_>, storage: State<'_, StorageManager>) -> Result<String, String> {
+    let tauri::ipc::InvokeBody::Raw(bytes) = request.body() else {
+        return Err("Expected image bytes".to_string());
+    };
+    let mime = request.headers().get("x-mime").and_then(|v| v.to_str().ok()).unwrap_or_default();
+    storage.save_attachment(bytes, mime)
+}
+
 #[tauri::command]
 pub fn export_data(storage: State<'_, StorageManager>) -> Result<String, String> {
     storage.export_raw_json()

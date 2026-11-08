@@ -1,3 +1,4 @@
+mod attachments;
 pub mod shelves;
 mod writer;
 
@@ -154,6 +155,17 @@ impl StorageManager {
         }
         notes.sort_by(|a, b| b.last_edited.cmp(&a.last_edited));
         (notes, file_map)
+    }
+
+    /// Stores an image in the notes folder; returns the relative path a note links to.
+    pub fn save_attachment(&self, bytes: &[u8], mime: &str) -> Result<String, String> {
+        let notes_dir = PathBuf::from(&self.settings.read().map_err(|e| e.to_string())?.storage_path);
+        attachments::save(&notes_dir, bytes, mime)
+    }
+
+    /// The folder notes and their images live in.
+    pub fn notes_dir(&self) -> Result<PathBuf, String> {
+        Ok(PathBuf::from(&self.settings.read().map_err(|e| e.to_string())?.storage_path))
     }
 
     /// Blocks until every note change is on disk (call before the process exits).

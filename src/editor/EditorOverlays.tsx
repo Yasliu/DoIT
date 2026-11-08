@@ -4,6 +4,7 @@ import { EmojiPickerModal } from "../components/EmojiPickerModal";
 import { ImageContextMenu } from "../components/ImageContextMenu";
 import { ImageLightbox } from "../components/ImageLightbox";
 import { TableMenu } from "../components/TableMenu";
+import { imageMarkdownWithAlt } from "../lib/format";
 import type { NoteEditor } from "./useNoteEditor";
 
 /** The editor's popovers: emoji, image menu and alt text, table menu and the image lightbox. */
@@ -57,9 +58,8 @@ export function EditorOverlays({ editor }: { editor: NoteEditor }) {
         onSave={(alt) => {
           if (!imageEdit) return;
           const img = imageEdit.element;
+          img.setAttribute("data-md", imageMarkdownWithAlt(img, alt));
           img.alt = alt;
-          const ref = img.getAttribute("data-ref");
-          img.setAttribute("data-md", ref ? `![${alt}][${ref}]` : `![${alt}](${img.src})`);
           editor.input();
           editor.setImageEdit(null);
         }}

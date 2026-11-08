@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useRef, useState } from "react";
-import type { ContentItem, NoteItem } from "../api/tauriBridge";
+import { tauriApi, type ContentItem, type NoteItem } from "../api/tauriBridge";
 import { useUndoStack } from "../hooks/useUndoStack";
 import {
   contentToMarkdown,
@@ -7,6 +7,8 @@ import {
   insertEmojiAtCaret,
   insertInlineImageAtCaret,
   insertInlineImageInMarkdown,
+  insertSavedImageAtCaret,
+  insertSavedImageInMarkdown,
   isRichBoldActive,
   isRichItalicActive,
   markdownToContent,
@@ -16,6 +18,15 @@ import {
 import { uid } from "../lib/text";
 
 const NO_CONTENT: ContentItem[] = [];
+
+function readDataUrl(file: File): Promise<string> {
+  return new Promise((resolve) => {
+    const reader = new FileReader();
+    reader.onload = () => resolve(reader.result as string);
+    reader.onerror = () => resolve("");
+    reader.readAsDataURL(file);
+  });
+}
 
 export interface NoteEditorOptions {
   /** The note being edited; `null` while none is open. */
@@ -182,31 +193,52 @@ export function useNoteEditor({ note, edit, titleRef, onSave }: NoteEditorOption
     [input, refreshFormatting],
   );
 
-  /** Adds image files at the caret, as inline images. */
+  const placeSavedImage = useCallback(
+    (path: string, alt: string) => {
+      if (rawModeRef.current) {
+        insertRaw((markdown, caret) => {
+          const { text, newCaret } = insertSavedImageInMarkdown(markdown, path, caret, alt);
+          return { text, caret: newCaret };
+        });
+      } else if (bodyRef.current) {
+        insertSavedImageAtCaret(bodyRef.current, path, alt);
+        input();
+      }
+    },
+    [input, insertRaw],
+  );
+
+  const placeEmbeddedImage = useCallback(
+    (src: string, alt: string) => {
+      if (rawModeRef.current) {
+        insertRaw((markdown, caret) => {
+          const { text, newCaret } = insertInlineImageInMarkdown(markdown, src, caret, alt);
+          return { text, caret: newCaret };
+        });
+      } else if (bodyRef.current) {
+        insertInlineImageAtCaret(bodyRef.current, src, alt);
+        input();
+      }
+    },
+    [input, insertRaw],
+  );
+
+  /**
+   * Adds image files at the caret. They are saved next to the notes and linked by path; a file
+   * opened from elsewhere embeds them instead, so it still works outside DoIT.
+   */
   const insertImages = useCallback(
     (files: File[], fallbackAlt: string) => {
       files
         .filter((file) => file.type.startsWith("image/"))
-        .forEach((file) => {
-          const reader = new FileReader();
-          reader.onload = () => {
-            const src = reader.result as string;
-            if (!src) return;
-            const alt = file.name ? file.name.replace(/\.[^.]+$/, "") : fallbackAlt;
-            if (rawModeRef.current) {
-              insertRaw((markdown, caret) => {
-                const { text, newCaret } = insertInlineImageInMarkdown(markdown, src, caret, alt);
-                return { text, caret: newCaret };
-              });
-            } else if (bodyRef.current) {
-              insertInlineImageAtCaret(bodyRef.current, src, alt);
-              input();
-            }
-          };
-          reader.readAsDataURL(file);
+        .forEach(async (file) => {
+          const alt = file.name ? file.name.replace(/\.[^.]+$/, "") : fallbackAlt;
+          const path = noteRef.current?.source_path ? null : await tauriApi.saveAttachment(await file.arrayBuffer(), file.type);
+          if (path) placeSavedImage(path, alt);
+          else placeEmbeddedImage(await readDataUrl(file), alt);
         });
     },
-    [input, insertRaw],
+    [placeEmbeddedImage, placeSavedImage],
   );
 
   const insertEmoji = useCallback(

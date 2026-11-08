@@ -429,6 +429,16 @@ export const tauriApi = {
     }
   },
 
+  /** Stores an image next to the notes; returns its relative path, or null if it could not be saved. */
+  async saveAttachment(bytes: ArrayBuffer, mime: string): Promise<string | null> {
+    if (!isTauri()) return null;
+    try {
+      return await invoke<string>("save_attachment", new Uint8Array(bytes), { headers: { "x-mime": mime } });
+    } catch {
+      return null;
+    }
+  },
+
   async setPillLook(look: PillLook): Promise<void> {
     if (!isTauri()) return;
     try {

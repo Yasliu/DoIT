@@ -81,6 +81,7 @@ pub fn run() {
                 app.handle().exit(0);
                 return Ok(());
             }
+            commands::settings::allow_note_images(app.handle(), &app.state::<StorageManager>());
             let canvas = window::open_canvas(app.handle())?;
             if app.state::<StorageManager>().get_is_maximized() {
                 let _ = canvas.maximize();
@@ -131,6 +132,7 @@ pub fn run() {
             commands::notes::reorder_shelves,
             commands::notes::set_shelf_icon,
             commands::notes::set_shelf_collapsed,
+            commands::files::save_attachment,
             commands::files::take_launch_file,
             commands::files::open_external_file,
             commands::files::save_external_file,
