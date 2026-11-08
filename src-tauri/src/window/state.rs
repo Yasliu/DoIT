@@ -26,6 +26,8 @@ pub struct Engine {
     pub dock_screen: Option<String>,
     pub dock_anchor: Option<Rect>,
     pub dock_note: Option<String>,
+    /// The dock webview's page has mounted and listens for `set-expanded`.
+    pub dock_page_ready: bool,
     /// Bumped by every dock change; a delayed job runs only if nothing changed since it was queued.
     pub dock_generation: u64,
     /// Until then the app itself is moving the dock, so moves are not the user's.
@@ -41,6 +43,7 @@ static ENGINE: Mutex<Engine> = Mutex::new(Engine {
     dock_screen: None,
     dock_anchor: None,
     dock_note: None,
+    dock_page_ready: false,
     dock_generation: 0,
     hold_until: None,
 });
