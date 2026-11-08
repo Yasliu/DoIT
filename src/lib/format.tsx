@@ -2069,7 +2069,23 @@ export function deleteTableRow(cell: HTMLElement): boolean {
  * Read-only card preview: exactly the markup the editor shows when the note is opened (MD mode),
  * with every editable flag stripped. `taskIds` maps the Nth rendered checkbox to its content item.
  */
-export function previewMarkup(content: ContentItem[]): { html: string; taskIds: string[] } {
+/** More lines than the tallest card shows. Rendering all of a long note into its card cost more than the rest of the canvas. */
+const PREVIEW_LINES = 40;
+const IMAGE_REFERENCE_LINE = /^\s*\[[a-zA-Z0-9_\-]+\]:\s*\S+\s*$/;
+
+/** The start of a note, plus the image references at its end that those first lines may link to. */
+function previewContent(content: ContentItem[]): ContentItem[] {
+  if (content.length <= PREVIEW_LINES) return content;
+  return [...content.slice(0, PREVIEW_LINES), ...content.slice(PREVIEW_LINES).filter((item) => IMAGE_REFERENCE_LINE.test(item.text))];
+}
+
+/** The start of a text-mode note, as its card shows it. */
+export function previewText(content: ContentItem[]): string {
+  return contentToMarkdown(content.slice(0, PREVIEW_LINES));
+}
+
+export function previewMarkup(fullContent: ContentItem[]): { html: string; taskIds: string[] } {
+  const content = previewContent(fullContent);
   const html = markdownToHtml(contentToMarkdown(content))
     .replace(/ contenteditable="[^"]*"/g, "")
     .replace(/ spellcheck="false"/g, "");
