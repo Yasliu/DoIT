@@ -1,3 +1,5 @@
+mod writer;
+
 use std::collections::HashMap;
 use std::fs::{self, File};
 use std::io::{Read, Write};
@@ -14,6 +16,7 @@ pub struct StorageManager {
     settings: Arc<RwLock<AppSettings>>,
     data: Arc<RwLock<AppStateData>>,
     file_map: Arc<RwLock<HashMap<String, PathBuf>>>,
+    writer: writer::NoteWriter,
 }
 
 impl StorageManager {
@@ -30,6 +33,7 @@ impl StorageManager {
             settings: Arc::new(RwLock::new(settings)),
             data: Arc::new(RwLock::new(initial_data)),
             file_map: Arc::new(RwLock::new(file_map)),
+            writer: writer::NoteWriter::new(),
         }
     }
 
@@ -159,6 +163,11 @@ impl StorageManager {
             },
             file_map,
         )
+    }
+
+    /// Blocks until every note change is on disk (call before the process exits).
+    pub fn flush_writes(&self) {
+        self.writer.flush();
     }
 
     pub fn get_settings(&self) -> Result<AppSettings, String> {
@@ -491,23 +500,7 @@ impl StorageManager {
             old
         };
 
-        // Offload disk write to background thread (high-speed zero-lag execution)
-        std::thread::spawn(move || {
-            if let Some(prev) = previous_path {
-                if prev != target_path && prev.exists() {
-                    let _ = fs::remove_file(prev);
-                }
-            }
-
-            let mut temp_path = target_path.clone();
-            temp_path.set_extension("tmp");
-            if let Ok(mut f) = File::create(&temp_path) {
-                let _ = f.write_all(md_content.as_bytes());
-                let _ = f.sync_all();
-                drop(f);
-                let _ = fs::rename(&temp_path, &target_path);
-            }
-        });
+        self.writer.write(&note.id, target_path, md_content, previous_path);
 
         Ok(note)
     }
@@ -586,9 +579,7 @@ impl StorageManager {
         };
 
         if let Some(p) = path_to_remove {
-            std::thread::spawn(move || {
-                let _ = fs::remove_file(p);
-            });
+            self.writer.delete(id, p);
         }
 
         Ok(removed)

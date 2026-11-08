@@ -267,6 +267,12 @@ pub fn run() {
             commands::window::quit_app,
             commands::window::show_tray_context_menu
         ])
-        .run(tauri::generate_context!())
-        .expect("error while running DoIT tauri application");
+        .build(tauri::generate_context!())
+        .expect("error while building DoIT")
+        .run(|app, event| {
+            // Note files are written in the background; let the last edits land before exiting.
+            if let tauri::RunEvent::Exit = event {
+                app.state::<StorageManager>().flush_writes();
+            }
+        });
 }
