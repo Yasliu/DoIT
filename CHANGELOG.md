@@ -8,8 +8,8 @@
   - Universal Linux AppImage (`.AppImage`) target running on Ubuntu 22.04+, Debian 12+, Arch Linux, and Fedora.
   - Native Linux desktop integration with system menu entries, categories, and CLI mode switches (`--canvas`, `--dock`, `--toggle`, `--quit`).
   - Automated GitHub Actions build chaining linking Windows release to Linux package publication in a unified release asset manifest (`latest.json`).
-- **Modern UI Redesign (`src/platform/modern/`)**:
-  - Full modern design option featuring 7 bespoke color themes, optional blurred Glass transparency, Boxy squared geometry, and Spotlight-style keyboard search (`Ctrl+K`).
+- **Official Modern UI Redesign (`src/platform/modern/`)**:
+  - Promoted Modern design to the official permanent interface across all platforms (Windows and Linux), locking in 7 bespoke themes, Glass transparency, Boxy geometry, and Spotlight search (`Ctrl+K`).
 - **Cross-Platform Dock Topmost Architecture (`src-tauri/src/platform/`, `commands/window.rs`, `TrayCompanion.tsx`, `TrayPill.tsx`)**:
   - Hardened dock window topmost persistence across drags, monitor switches, and window focus changes.
   - Implemented Win32 `SetWindowPos` topmost affirmation and GTK `set_keep_above(true)` on XWayland.
