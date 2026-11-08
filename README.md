@@ -30,7 +30,7 @@ Most note apps want an account before they want your thoughts. DoIT doesn't. Eve
 - **Zero cloud, zero accounts, zero tracking.** No remote auth, no telemetry, MIT-licensed source.
 
 <p align="center">
-  <img src="docs/shot-editor.jpg" width="800" alt="The note editor in MD mode and text mode side by side">
+  <img src="docs/shot-settings.jpg" width="800" alt="DoIT settings with a markdown workout table open beside it">
 </p>
 
 <p align="center">
