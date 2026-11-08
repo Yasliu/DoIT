@@ -31,10 +31,14 @@ Most note apps want an account before they want your thoughts. DoIT doesn't. Eve
 
 <p align="center">
   <img src="docs/shot-settings.jpg" width="800" alt="DoIT settings with a markdown workout table open beside it">
+
+<p align="center">
+  <img src="docs/themes.gif" width="800" alt="Cycling the seven themes with Glass and Boxy in Settings">
+</p>
 </p>
 
 <p align="center">
-  <img src="docs/demo.gif" width="800" alt="DoIT bento grid in motion">
+  <img src="docs/dashboard.gif" width="800" alt="DoIT bento grid in motion">
 </p>
 
 ### The tray companion
@@ -42,7 +46,7 @@ Most note apps want an account before they want your thoughts. DoIT doesn't. Eve
 DoIT lives in the system tray as a floating companion — one click expands it into a mini note surface, wherever you are on any monitor.
 
 <p align="center">
-  <img src="docs/tray.gif" width="480" alt="The DoIT tray companion expanding over the desktop">
+  <img src="docs/dock.gif" width="480" alt="Dock mode expanding over the desktop">
 </p>
 
 ## Getting started
