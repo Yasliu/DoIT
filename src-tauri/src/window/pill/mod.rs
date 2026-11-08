@@ -68,7 +68,7 @@ pub fn show(app: &AppHandle, rect: Rect, actions: Actions) -> Result<(), String>
     platform::set_window_bounds(&window, rect.x, rect.y, rect.w as u32, rect.h as u32);
     send(Msg::Size(rect.w as u32, rect.h as u32));
     let _ = window.show();
-    let _ = window.set_always_on_top(true);
+    platform::ensure_always_on_top(&window);
     platform::keep_wm_from_moving(&window);
     // Showing can reset the surface on some systems; the frame after it is the one that counts.
     send(Msg::Redraw);
@@ -188,13 +188,17 @@ impl Pill {
 
     fn handle(&mut self, input: PillInput) {
         match input {
-            PillInput::Enter => self.hovered = true,
+            PillInput::Enter => {
+                self.hovered = true;
+                platform::ensure_always_on_top(&self.window);
+            }
             PillInput::Leave => {
                 if self.dragging.is_none() {
                     self.hovered = false;
                 }
             }
             PillInput::Press(x, y) => {
+                platform::ensure_always_on_top(&self.window);
                 self.pressed = Some((x, y));
                 self.dragging = None;
             }

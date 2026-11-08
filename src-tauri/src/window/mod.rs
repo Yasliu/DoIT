@@ -102,6 +102,14 @@ pub fn end_dock_drag(app: &AppHandle) {
     lifecycle::settle_dock(app);
 }
 
+/// Puts the dock back above other apps, which a move or focus change can push it behind.
+pub fn ensure_dock_topmost(app: &AppHandle) {
+    let panel = app.get_webview_window(DOCK).map(|w| w.as_ref().window());
+    for window in [pill::window(app), panel].into_iter().flatten() {
+        platform::ensure_always_on_top(&window);
+    }
+}
+
 /// After the OS moved the dock: pulls it back wholly onto the usable screen.
 pub fn settle_dock(app: &AppHandle) {
     lifecycle::settle_dock(app);
@@ -134,6 +142,7 @@ fn remember_maximized(app: &AppHandle) {
 
 pub fn on_window_event(window: &Window, event: &WindowEvent) {
     match event {
+        WindowEvent::Focused(true) if window.label() != CANVAS => platform::ensure_always_on_top(window),
         WindowEvent::Resized(_) if window.label() == CANVAS => {
             if !window.is_minimized().unwrap_or(true) {
                 if let Ok(maximized) = window.is_maximized() {

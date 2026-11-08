@@ -927,6 +927,9 @@ export function NoteSheet({
               hasMedia={hasGallery(draft)}
               large={isMaximized}
               compact={isVeryTight}
+              onOpenChange={(isOpen) => {
+                if (isOpen) editor.closeEmojiPicker();
+              }}
             />
 
             <button
@@ -1119,6 +1122,7 @@ export function NoteSheet({
             setShowDeleteConfirm(false);
             deleted.current = true;
             onDelete(draftRef.current);
+            onClose();
           }}
         />
       )}
@@ -1157,6 +1161,7 @@ export function NoteSheet({
                   setShowDeleteConfirm(false);
                   deleted.current = true;
                   onDelete(draftRef.current);
+                  onClose();
                 }}
                 className="h-8 rounded-xl bg-red-500/20 hover:bg-red-500/30 border border-red-500/30 text-[12px] font-medium text-red-200 transition-colors cursor-pointer"
               >

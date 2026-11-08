@@ -49,5 +49,5 @@ _Avoid_: Drawer
 ### Appearance
 
 **Design**:
-The overall interface style: classic or modern. Linux always uses modern; Windows opts in.
+The overall interface style. Modern is the design on every OS; classic is the original one it replaced.
 _Avoid_: Theme (a theme is a set of colours within a design), skin

@@ -1,8 +1,6 @@
 <div align="center">
 
-<img src="logo.svg" width="90" alt="DoIT logo">
-
-# DoIT
+<img src="docs/banner.jpg" width="800" alt="DoIT banner: Markdown Notes. Simple, Clean, Nothing Extra">
 
 **Local-first notes and tasks, arranged as an organic bento grid.**
 
@@ -32,11 +30,15 @@ Most note apps want an account before they want your thoughts. DoIT doesn't. Eve
 - **Zero cloud, zero accounts, zero tracking.** No remote auth, no telemetry, MIT-licensed source.
 
 <p align="center">
-  <img src="docs/shot-editor.jpg" width="800" alt="The note editor in MD mode and text mode side by side">
+  <img src="docs/shot-settings.jpg" width="800" alt="DoIT settings with a markdown workout table open beside it">
+
+<p align="center">
+  <img src="docs/themes.gif" width="800" alt="Cycling the seven themes with Glass and Boxy in Settings">
+</p>
 </p>
 
 <p align="center">
-  <img src="docs/demo.gif" width="800" alt="DoIT bento grid in motion">
+  <img src="docs/dashboard.gif" width="800" alt="DoIT bento grid in motion">
 </p>
 
 ### The tray companion
@@ -44,7 +46,7 @@ Most note apps want an account before they want your thoughts. DoIT doesn't. Eve
 DoIT lives in the system tray as a floating companion — one click expands it into a mini note surface, wherever you are on any monitor.
 
 <p align="center">
-  <img src="docs/tray.gif" width="480" alt="The DoIT tray companion expanding over the desktop">
+  <img src="docs/dock.gif" width="480" alt="Dock mode expanding over the desktop">
 </p>
 
 ## Getting started
@@ -80,18 +82,28 @@ Drop any `.md` or `.txt` files into your note repository folder, hit **Sync Repo
   <img src="docs/shot-save.jpg" width="700" alt="The Save button for externally opened files">
 </p>
 
-## What's new in v1.1.9
+## What's new in v1.2.0
 
-- Uncategorized is now pinned at the bottom of the sidebar and dashboard
-- Markdown support expanded: numbered lists, inline code, web links, footnotes, definition lists, strikethrough, text highlights, sub/superscript and emoji shortcodes
-- Paste images inline anywhere in a note; a slide-in drawer edits alt text, and one click copies any rendered image
-- A dedicated emoji picker in the toolbar
-- Keyboard shortcuts in Settings reorganized into collapsible categories
-- Card previews no longer clip footnotes or superscripts; text and images stay sharp at every zoom level and display scale
+- Official Linux release: native `.rpm` for Fedora with in-app updater, and universal `.AppImage` for other distributions
+- Modern UI redesign: 7 customizable themes, Glass transparency mode, Boxy squared geometry, and Spotlight-style search (`Ctrl+K`)
+- Dock mode always-on-top retention fix: docking pill reliably stays above other windows across drags, monitor changes, and focus shifts
+- Outside-click mutual dismissal between toolbar popups (emoji picker vs. formatting menu)
+- Ordered list sequential numbering continuity fix
 The full history lives in the release log below.
 
 <details>
 <summary><strong>Release log</strong> (click to expand)</summary>
+
+<details>
+<summary><strong>v1.2.0</strong> — November 8, 2026</summary>
+
+- Linux packaging and distribution: Fedora RPM with in-app updater and universal AppImage
+- Modern UI redesign option with 7 themes, Glass transparency, Boxy geometry, and Spotlight search (Ctrl+K)
+- Dock topmost architecture: dock pill reliably maintains topmost z-order across window drags, monitor changes, and workspace focus
+- Outside-click mutual dismissal between toolbar popups (emoji picker vs. burger menu)
+- Ordered list sequential numbering continuity fix
+
+</details>
 
 <details>
 <summary><strong>v1.1.9</strong> — November 7, 2026</summary>

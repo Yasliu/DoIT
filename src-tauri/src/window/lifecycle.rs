@@ -162,7 +162,7 @@ pub fn enter_dock(app: &AppHandle, open: DockOpen) -> Result<(), String> {
                 }
                 webview::idle(&dock, false);
                 focus(&plain(&dock));
-                let _ = dock.set_always_on_top(true);
+                platform::ensure_always_on_top(&plain(&dock));
                 let _ = dock.emit("set-expanded", true);
                 if let Some(id) = open.note {
                     let _ = dock.emit("open-note", id);
@@ -196,7 +196,7 @@ pub fn dock_ready(window: &WebviewWindow) -> (DockShape, Option<String>) {
         place(&dock, rect);
     }
     let _ = dock.show();
-    let _ = dock.set_always_on_top(true);
+    platform::ensure_always_on_top(&dock);
     platform::keep_wm_from_moving(&dock);
     platform::focus_window(&dock);
     pill::hide(app);
@@ -253,7 +253,7 @@ pub fn reshape_dock(app: &AppHandle, shape: DockShape) -> Result<Growth, String>
             place(&panel, rect);
             webview::idle(&dock, false);
             let _ = panel.show();
-            let _ = panel.set_always_on_top(true);
+            platform::ensure_always_on_top(&panel);
             platform::focus_window(&panel);
             pill::hide(app);
         }
@@ -290,14 +290,15 @@ fn retire_panel_later(app: &AppHandle, generation: u64) {
 }
 
 fn settle(app: &AppHandle, window: &Window) {
-    if engine().moves_held() {
-        return;
+    if !engine().moves_held() {
+        if let (Some(rect), Some(screen)) = (rect_of(window), screen_or_primary(app, Some(window))) {
+            let settled = clamp_into(rect, screen.work);
+            if settled != rect {
+                place(window, settled);
+            }
+        }
     }
-    let (Some(rect), Some(screen)) = (rect_of(window), screen_or_primary(app, Some(window))) else { return };
-    let settled = clamp_into(rect, screen.work);
-    if settled != rect {
-        let _ = window.set_position(tauri::PhysicalPosition::new(settled.x, settled.y));
-    }
+    platform::ensure_always_on_top(window);
 }
 
 /// After the OS moved the panel, pulls it back wholly onto the usable screen.

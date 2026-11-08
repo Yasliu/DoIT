@@ -111,6 +111,21 @@ pub fn focus_window(window: &tauri::Window) {
     let _ = window.set_focus();
 }
 
+/// Re-asserts keep_above / always_on_top on Linux (Mutter/X11/Wayland).
+pub fn ensure_always_on_top(window: &tauri::Window) {
+    let _ = window.set_always_on_top(true);
+    #[cfg(target_os = "linux")]
+    {
+        let target = window.clone();
+        let _ = window.run_on_main_thread(move || {
+            use gtk::prelude::GtkWindowExt;
+            if let Ok(gtk_window) = target.gtk_window() {
+                gtk_window.set_keep_above(true);
+            }
+        });
+    }
+}
+
 /// Mutter lets a window being moved slide off the screen, so under X11 the app moves the dock
 /// window itself during a drag (see `window::drag`). A native Wayland compositor ignores client
 /// positions (and GDK cannot report the cursor there), so it keeps running the drag.

@@ -502,12 +502,22 @@ export const tauriApi = {
     try {
       if (await invoke<boolean>("begin_dock_drag", { grabX, grabY })) {
         await released;
-        await invoke("end_dock_drag");
       }
+      await invoke("end_dock_drag");
     } catch {
       await this.beginDrag();
+      await invoke("end_dock_drag").catch(() => {});
     } finally {
       events.forEach((name) => window.removeEventListener(name, release));
+    }
+  },
+
+  async ensureDockTopmost(): Promise<void> {
+    if (!isTauri()) return;
+    try {
+      await invoke("ensure_dock_topmost");
+    } catch {
+      /* ignore */
     }
   },
 

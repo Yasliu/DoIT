@@ -16,6 +16,8 @@
 //! - `work_area(monitor)`: usable screen rect `(left, top, right, bottom)` in physical px,
 //!   i.e. the monitor minus taskbars/panels.
 //! - `focus_window(window)`: raise and focus a window the user asked for (shortcut, dock, relaunch).
+//! - `ensure_always_on_top(window)`: put the dock back above other apps; call after moves and focus
+//!   changes, which can push it behind.
 //! - `set_window_bounds(window, x, y, w, h)`: move + resize the dock window in one step, without
 //!   flicker. The user cannot resize it afterwards.
 //! - `dock_drag_by_app(window)`: whether the app moves the dock window itself during a drag
@@ -68,7 +70,7 @@ pub struct PillFrame {
 pub type PillInputHandler = Box<dyn Fn(PillInput) + Send + Sync>;
 
 pub use os::{
-    attach_pill, present_pill,
+    attach_pill, present_pill, ensure_always_on_top,
     config_dir, dock_drag_by_app, documents_dir, focus_window, has_tray, init, keep_wm_from_moving, monitor_of_window, prepare_webview, release_webview,
     set_webview_memory_level, set_window_bounds,
     system_fonts, trim_memory, work_area,

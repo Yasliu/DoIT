@@ -11,8 +11,8 @@ React + TypeScript frontend, Rust backend. Shipped for Windows; a Linux port is 
     the pieces that render it). Each window keeps only its own chrome and toolbar.
   - `platform/`: the frontend's seam for OS and design. `index.ts` sets `data-platform` and
     `data-design` on `<html>`: `isLinux` is for real OS behaviour only; `isModern`, `pick` and `text`
-    pick the design. Two designs: classic (Windows' original look) and modern (always on Linux; on
-    Windows behind the experimental `design` setting, switched in `DesignSwitch.tsx`). `modern/` holds
+    pick the design. Modern is the design on every OS since v1.2.0 (`isModern` is always true); the
+    classic components are still in the tree but unreachable. `modern/` holds
     the modern look (`modern.css`, themes, Boxy) and the components it swaps in (sidebar, settings,
     Spotlight search, create and shelf dialogs, dock list), chosen in `App`/`TrayCompanion`.
 - `src-tauri/src/`: Rust backend.

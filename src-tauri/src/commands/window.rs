@@ -67,6 +67,11 @@ pub fn end_dock_drag(app: AppHandle) {
 }
 
 #[tauri::command]
+pub fn ensure_dock_topmost(app: AppHandle) {
+    window::ensure_dock_topmost(&app);
+}
+
+#[tauri::command]
 pub fn save_tray_position(app: AppHandle) {
     window::settle_dock(&app);
 }

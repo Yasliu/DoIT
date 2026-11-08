@@ -43,23 +43,23 @@ const devPlatform = import.meta.env.DEV ? (readStorage("doit.dev-platform") as P
 export const platform: Platform = devPlatform ?? detect();
 export const isLinux = platform === "linux";
 
-/** Linux only has the modern design; elsewhere it is opt-in. */
-export const designIsOptional = !isLinux;
+/** Modern is now the official and only design across all platforms. */
+export const designIsOptional = false;
 
-export function designFor(os: Platform, setting: string | null | undefined): Design {
-  return os === "linux" || setting === "modern" ? "modern" : "classic";
+export function designFor(_os: Platform, _setting: string | null | undefined): Design {
+  return "modern";
 }
 
 /** The saved `design` setting, cached so the first paint knows it before settings load. */
 export const DESIGN_CACHE_KEY = "doit.design";
 export const DESIGN_CHANGED_EVENT = "doit://design-changed";
 
-export const design: Design = designFor(platform, readStorage(DESIGN_CACHE_KEY));
-export const isModern = design === "modern";
+export const design: Design = "modern";
+export const isModern = true;
 
 /** The classic value, or the modern one when this window uses the modern design. */
-export function pick<T>(classic: T, modern: T): T {
-  return isModern ? modern : classic;
+export function pick<T>(_classic: T, modern: T): T {
+  return modern;
 }
 
 /** Runs before React renders, so the first paint already has the right styles and theme. */

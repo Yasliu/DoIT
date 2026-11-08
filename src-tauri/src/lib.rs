@@ -158,6 +158,7 @@ pub fn run() {
             commands::window::begin_dock_drag,
             commands::window::end_dock_drag,
             commands::window::save_tray_position,
+            commands::window::ensure_dock_topmost,
             commands::window::restart_app,
             commands::window::quit_app,
             commands::window::show_tray_context_menu

@@ -1374,6 +1374,22 @@ export function handleRichEditorKeyDown(
       onInput();
       return true;
     }
+    if (e.key === "Backspace" && !e.shiftKey && !e.altKey && !e.ctrlKey) {
+      const table = cell.closest("table") as HTMLTableElement | null;
+      if (table) {
+        const cells = Array.from(table.querySelectorAll("th,td")) as HTMLElement[];
+        const isFirstCell = cells[0] === cell;
+        const allCellsEmpty = cells.every((c) => (c.textContent || "").trim() === "");
+        const cellEmpty = (cell.textContent || "").trim() === "";
+
+        if (allCellsEmpty || (isFirstCell && cellEmpty && caretAtStart(cell, range))) {
+          e.preventDefault();
+          deleteTable(cell);
+          onInput();
+          return true;
+        }
+      }
+    }
     if (e.key === "Enter" && !e.shiftKey) {
       const table = cell.closest("table") as HTMLTableElement | null;
       if (table) {
@@ -1752,6 +1768,17 @@ function caretOffsetIn(block: HTMLElement, range: Range): number {
   return pre.toString().length;
 }
 
+function caretAtStart(block: HTMLElement, range: Range): boolean {
+  try {
+    const pre = document.createRange();
+    pre.selectNodeContents(block);
+    pre.setEnd(range.startContainer, range.startOffset);
+    return pre.toString().trim() === "";
+  } catch {
+    return false;
+  }
+}
+
 function caretAtEnd(block: HTMLElement, range: Range): boolean {
   try {
     const post = document.createRange();
@@ -2016,6 +2043,18 @@ export function addTableRow(cell: HTMLElement): void {
 }
 
 /** Removes the row under `cell` (body rows only; the header row is protected). */
+/** Removes the entire table enclosing `cell`, replacing it with an empty editable line. */
+export function deleteTable(cell: HTMLElement): boolean {
+  const table = cell.closest("table") as HTMLTableElement | null;
+  if (!table) return false;
+  const wrap = (table.closest(".md-tablewrap") as HTMLElement | null) ?? table;
+  const line = document.createElement("div");
+  line.appendChild(document.createElement("br"));
+  wrap.replaceWith(line);
+  placeCaretStart(line);
+  return true;
+}
+
 export function deleteTableRow(cell: HTMLElement): boolean {
   const tr = cell.closest("tr");
   if (!tr || tr.closest("thead")) return false;
