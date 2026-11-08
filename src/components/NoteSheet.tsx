@@ -1,7 +1,6 @@
 import { createPortal } from "react-dom";
 import { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } from "react";
-import {
-  Bold,
+import {  Bold,
   Check,
   ChevronDown,
   CornerDownLeft,
@@ -19,30 +18,12 @@ import {
 } from "lucide-react";
 import type { NoteItem } from "../api/tauriBridge";
 import { NOTE_FONTS, fontStack, tauriApi } from "../api/tauriBridge";
-import { useUndoStack } from "../hooks/useUndoStack";
+import { EditorOverlays, NoteBody, NoteGallery, hasGallery, useNoteEditor } from "../editor";
 import { HeadingSelect } from "./HeadingSelect";
-import { EmojiAutocomplete } from "./EmojiAutocomplete";
-import { EmojiPickerModal } from "./EmojiPickerModal";
-import { EditImageModal } from "./EditImageModal";
-import { ImageContextMenu } from "./ImageContextMenu";
-import { ImageLightbox } from "./ImageLightbox";
 import { InsertMenu } from "./InsertMenu";
 import { ModeToggle } from "./ModeToggle";
-import { RawEditor } from "./RawEditor";
-import { TableMenu } from "./TableMenu";
-import { getMarkdownShortcuts, matchesCombo } from "../lib/shortcuts";
 import {
-  contentToMarkdown,
-  markdownToContent,
-  handleCheckboxClick,
   applyTask,
-  handleRichEditorKeyDown,
-  htmlToMarkdown,
-  isRichBoldActive,
-  isRichItalicActive,
-  markdownToHtml,
-  handleMarkdownPaste,
-  normalizeEditor,
   applyHeading,
   insertTableAtCaret,
   insertCodeBlockAtCaret,
@@ -56,13 +37,7 @@ import {
   applyHighlight,
   applySubscript,
   applySuperscript,
-  insertEmojiAtCaret,
-  insertInlineImageAtCaret,
-  insertInlineImageInMarkdown,
-  isCaretAtEditorStart,
   placeCaretAtEditorStart,
-  fixCheckboxCaret,
-  openExternalUrl,
 } from "../lib/format";
 import { isModern } from "../platform";
 import { ModernConfirm } from "../platform/modern/ModernConfirm";
@@ -106,7 +81,7 @@ export function NoteSheet({
   onResizeStateChange,
   isMaximized = false,
   onToggleMaximize,
-  isBottomMode = false,
+  isBottomMode = false
 }: NoteSheetProps) {
   const frame = useRef<HTMLDivElement | null>(null);
   const [phase, setPhase] = useState<"pre" | "in" | "settled" | "out">(instant ? "settled" : "pre");
@@ -115,7 +90,6 @@ export function NoteSheet({
   const [dirty, setDirty] = useState(false);
   const [savedFlash, setSavedFlash] = useState(false);
   const [saveError, setSaveError] = useState<string | null>(null);
-  const [tableMenu, setTableMenu] = useState<{ x: number; y: number; cell: HTMLElement } | null>(null);
   const closing = useRef(false);
   const deleted = useRef(false);
   const commitRef = useRef(onCommit);
@@ -139,7 +113,6 @@ export function NoteSheet({
   const [shelfMenuStyle, setShelfMenuStyle] = useState<React.CSSProperties>({});
   const [showDeleteConfirm, setShowDeleteConfirm] = useState(false);
   const [shelfOpen, setShelfOpen] = useState(false);
-  const [previewImage, setPreviewImage] = useState<string | null>(null);
   const fileInputRef = useRef<HTMLInputElement | null>(null);
   const [newShelf, setNewShelf] = useState("");
   const titleRef = useRef<HTMLInputElement | null>(null);
@@ -306,177 +279,6 @@ export function NoteSheet({
     window.addEventListener("mouseup", onMouseUp);
   };
 
-  // Rich text formatting state
-  const editorRef = useRef<HTMLDivElement | null>(null);
-  const rawTextareaRef = useRef<HTMLTextAreaElement | null>(null);
-  const [isBoldActive, setIsBoldActive] = useState(false);
-  const [isItalicActive, setIsItalicActive] = useState(false);
-  const lastNoteIdRef = useRef<string | null>(null);
-
-  // Dedicated Emoji Picker Modal
-  const [showEmojiPicker, setShowEmojiPicker] = useState(false);
-  const [emojiAnchor, setEmojiAnchor] = useState<DOMRect | null>(null);
-
-  // Image context menu & edit modal
-  const [contextMenuImg, setContextMenuImg] = useState<{
-    element: HTMLImageElement;
-    x: number;
-    y: number;
-  } | null>(null);
-  const [editImgModal, setEditImgModal] = useState<{
-    element: HTMLImageElement;
-    alt: string;
-    src: string;
-    refKey?: string;
-  } | null>(null);
-
-  const updateActiveFormatting = () => {
-    setIsBoldActive(isRichBoldActive());
-    setIsItalicActive(isRichItalicActive());
-  };
-
-  const initEditor = useCallback((node: HTMLDivElement | null) => {
-    editorRef.current = node;
-    if (node) {
-      if (lastNoteIdRef.current !== draft.id || !node.innerHTML || node.innerHTML === "<div><br></div>") {
-        lastNoteIdRef.current = draft.id;
-        node.innerHTML = markdownToHtml(contentToMarkdown(draft.content));
-      }
-    }
-  }, [draft.id, draft.content]);
-
-  useEffect(() => {
-    if (lastNoteIdRef.current !== draft.id) {
-      lastNoteIdRef.current = draft.id;
-      if (editorRef.current) {
-        editorRef.current.innerHTML = markdownToHtml(contentToMarkdown(draft.content));
-      }
-    }
-  }, [draft.id, draft.content]);
-
-  const handleEditorInput = (immediate = false) => {
-    if (!editorRef.current) return;
-    normalizeEditor(editorRef.current);
-    const content = markdownToContent(htmlToMarkdown(editorRef.current), draftRef.current.content, () => uid("line"));
-    commit({ ...draftRef.current, content, last_edited: Date.now() }, immediate);
-    updateActiveFormatting();
-  };
-
-  const handleToolbarFormat = (style: "bold" | "italic") => {
-    // 2. Contenteditable freeform editor selection formatting
-    if (editorRef.current) {
-      const sel = window.getSelection();
-      const hasSelection = sel && sel.rangeCount > 0 && !sel.isCollapsed && editorRef.current.contains(sel.anchorNode);
-
-      if (hasSelection) {
-        // Text is highlighted: apply formatting strictly to that exact text slice
-        document.execCommand(style, false);
-        handleEditorInput();
-        updateActiveFormatting();
-      } else {
-        // No text selected: toggle formatting state for subsequent typed characters forward
-        if (!editorRef.current.contains(document.activeElement)) {
-          editorRef.current.focus();
-        }
-        document.execCommand(style, false);
-        updateActiveFormatting();
-      }
-    }
-  };
-
-  const removeImageAt = (index: number) => {
-    const existing = (draftRef.current.media_urls && draftRef.current.media_urls.length > 0)
-      ? draftRef.current.media_urls
-      : (draftRef.current.media_url ? [draftRef.current.media_url] : []);
-    const next = existing.filter((_, i) => i !== index);
-    edit({ media_urls: next, media_url: next[0] || undefined });
-  };
-
-  const handlePaste = (event: React.ClipboardEvent) => {
-    const items = event.clipboardData?.items;
-    if (!items) return;
-    const files: File[] = [];
-    for (let i = 0; i < items.length; i++) {
-      if (items[i].type.startsWith("image/")) {
-        const file = items[i].getAsFile();
-        if (file) files.push(file);
-      }
-    }
-    if (files.length === 0) return;
-    event.preventDefault();
-    files.forEach((file) => {
-      const reader = new FileReader();
-      reader.onload = (loadEvt) => {
-        const dataUrl = loadEvt.target?.result as string;
-        if (!dataUrl) return;
-        const altText = file.name ? file.name.replace(/\.[^.]+$/, "") : "Pasted Image";
-        if (rawMode) {
-          const ed = rawTextareaRef.current;
-          const pos = ed?.selectionStart ?? draftRef.current.content.length;
-          const currentMd = contentToMarkdown(draftRef.current.content);
-          const { text, newCaret } = insertInlineImageInMarkdown(currentMd, dataUrl, pos, altText);
-          edit({ content: markdownToContent(text, draftRef.current.content, () => uid("line")) });
-          if (ed) {
-            requestAnimationFrame(() => {
-              ed.selectionStart = newCaret;
-              ed.selectionEnd = newCaret;
-            });
-          }
-        } else {
-          const ed = editorRef.current;
-          if (ed) {
-            insertInlineImageAtCaret(ed, dataUrl, altText);
-            handleEditorInput();
-          }
-        }
-      };
-      reader.readAsDataURL(file);
-    });
-  };
-
-  const handleDrop = (event: React.DragEvent) => {
-    event.preventDefault();
-    const files = event.dataTransfer?.files;
-    if (!files || files.length === 0) return;
-    const imageFiles = Array.from(files).filter((f) => f.type.startsWith("image/"));
-    if (imageFiles.length === 0) return;
-    imageFiles.forEach((file) => {
-      const reader = new FileReader();
-      reader.onload = (loadEvt) => {
-        const dataUrl = loadEvt.target?.result as string;
-        if (!dataUrl) return;
-        const altText = file.name ? file.name.replace(/\.[^.]+$/, "") : "Dropped Image";
-        if (rawMode) {
-          const ed = rawTextareaRef.current;
-          const pos = ed?.selectionStart ?? draftRef.current.content.length;
-          const currentMd = contentToMarkdown(draftRef.current.content);
-          const { text, newCaret } = insertInlineImageInMarkdown(currentMd, dataUrl, pos, altText);
-          edit({ content: markdownToContent(text, draftRef.current.content, () => uid("line")) });
-          if (ed) {
-            requestAnimationFrame(() => {
-              ed.selectionStart = newCaret;
-              ed.selectionEnd = newCaret;
-            });
-          }
-        } else {
-          const ed = editorRef.current;
-          if (ed) {
-            insertInlineImageAtCaret(ed, dataUrl, altText);
-            handleEditorInput();
-          }
-        }
-      };
-      reader.readAsDataURL(file);
-    });
-  };
-
-  const runEditorCommand = (fn: (editor: HTMLElement) => void) => {
-    const ed = editorRef.current;
-    if (!ed) return;
-    fn(ed);
-    handleEditorInput(true);
-  };
-
   const accent = accentFor(draft.category, shelves);
 
   const commit = (next: NoteItem, immediate = false) => {
@@ -529,34 +331,14 @@ export function NoteSheet({
     commit({ ...draftRef.current, format: raw ? "txt" : "md", last_edited: Date.now() }, true);
   };
 
-  const titleHistory = useUndoStack<string>(draft.id, draft.title ?? "", (title) => edit({ title }));
-  const bodyHistory = useUndoStack<NoteItem["content"]>(draft.id, draft.content, (content) => {
-    edit({ content });
-    if (editorRef.current) {
-      editorRef.current.innerHTML = markdownToHtml(contentToMarkdown(content));
+  const editor = useNoteEditor({
+    note: draft,
+    edit,
+    titleRef,
+    onSave: () => {
+      if (draftRef.current.source_path) void saveExternal();
     }
   });
-
-  // Title and body keep separate undo/redo stacks; the focused field decides which one runs.
-  const handleUndoKeys = (e: React.KeyboardEvent) => {
-    if ((e.ctrlKey || e.metaKey) && !e.shiftKey && e.key.toLowerCase() === "s") {
-      e.preventDefault();
-      if (draftRef.current.source_path) void saveExternal();
-      return;
-    }
-    if (!(e.ctrlKey || e.metaKey)) return;
-    const k = e.key.toLowerCase();
-    const isUndo = k === "z" && !e.shiftKey;
-    const isRedo = k === "y" || (k === "z" && e.shiftKey);
-    if (!isUndo && !isRedo) return;
-    const zone = (e.target as HTMLElement).closest("[data-undo]")?.getAttribute("data-undo");
-    if (!zone) return;
-    e.preventDefault();
-    e.stopPropagation();
-    const history = zone === "title" ? titleHistory : bodyHistory;
-    if (isUndo) history.undo();
-    else history.redo();
-  };
 
   // ---- Right-side drawer slide-in: single spring-like curve, transform only ----
   // Decided once, at mount: App flips `instant` to true on the very next render, and re-running this
@@ -700,7 +482,7 @@ export function NoteSheet({
 
   const tasks = {
     total: body.filter((item) => item.is_todo).length,
-    done: body.filter((item) => item.is_todo && item.completed).length,
+    done: body.filter((item) => item.is_todo && item.completed).length
   };
 
   return (
@@ -711,13 +493,13 @@ export function NoteSheet({
         role="complementary"
         aria-label={cleanText(draft.title) || "Untitled note"}
         tabIndex={-1}
-        onKeyDownCapture={handleUndoKeys}
-        onPaste={handlePaste}
+        onKeyDownCapture={editor.onKeyDown}
+        onPaste={editor.onPaste}
         onDragOver={(e) => {
           e.preventDefault();
           e.dataTransfer.dropEffect = "copy";
         }}
-        onDrop={handleDrop}
+        onDrop={editor.onDrop}
         onTransitionEnd={(e) => {
           if (e.target === e.currentTarget && e.propertyName === "transform" && phase === "in") setPhase("settled");
         }}
@@ -743,7 +525,7 @@ export function NoteSheet({
               : phase === "in"
                 ? "transform 340ms cubic-bezier(0.22, 1, 0.36, 1), opacity 220ms ease-out"
                 : "none",
-          willChange: phase === "settled" ? "auto" : "transform",
+          willChange: phase === "settled" ? "auto" : "transform"
         }}
         className="relative z-30 flex flex-col h-full w-full overflow-visible rounded-[22px] glass-sheet outline-none border border-white/10 shadow-[0_30px_90px_rgba(0,0,0,0.6)]"
       >
@@ -998,9 +780,9 @@ export function NoteSheet({
                           onClick={(e) => {
                             e.stopPropagation();
                             edit({ font_family: font.name }, true);
-                            if (editorRef.current) {
-                              editorRef.current.style.fontFamily = font.stack;
-                              editorRef.current.focus();
+                            if (editor.bodyRef.current) {
+                              editor.bodyRef.current.style.fontFamily = font.stack;
+                              editor.bodyRef.current.focus();
                             }
                             setFontOpen(false);
                           }}
@@ -1058,9 +840,9 @@ export function NoteSheet({
                                 onClick={(e) => {
                                   e.stopPropagation();
                                   edit({ font_family: fontName }, true);
-                                  if (editorRef.current) {
-                                    editorRef.current.style.fontFamily = fontStack(fontName);
-                                    editorRef.current.focus();
+                                  if (editor.bodyRef.current) {
+                                    editor.bodyRef.current.style.fontFamily = fontStack(fontName);
+                                    editor.bodyRef.current.focus();
                                   }
                                   setFontOpen(false);
                                 }}
@@ -1090,14 +872,14 @@ export function NoteSheet({
             <button
               type="button"
               onMouseDown={(e) => e.preventDefault()}
-              onClick={() => handleToolbarFormat("bold")}
+              onClick={() => editor.format("bold")}
               aria-label="Toggle Bold"
               title="Bold text (Ctrl+B)"
-              data-active={isBoldActive || undefined}
+              data-active={editor.bold || undefined}
               className={cx(
                 "icon-btn cursor-pointer shrink-0 transition-all duration-150 ease-out",
                 isMaximized ? "!size-8.5" : (isVeryTight ? "!size-6.5" : "!size-7"),
-                isBoldActive && "!bg-white/20 !text-white",
+                editor.bold && "!bg-white/20 !text-white",
               )}
             >
               <Bold size={isMaximized ? 14.5 : (isVeryTight ? 11.5 : 12.5)} strokeWidth={2.4} />
@@ -1105,14 +887,14 @@ export function NoteSheet({
             <button
               type="button"
               onMouseDown={(e) => e.preventDefault()}
-              onClick={() => handleToolbarFormat("italic")}
+              onClick={() => editor.format("italic")}
               aria-label="Toggle Italic"
               title="Italic text (Ctrl+I)"
-              data-active={isItalicActive || undefined}
+              data-active={editor.italic || undefined}
               className={cx(
                 "icon-btn cursor-pointer shrink-0 transition-all duration-150 ease-out",
                 isMaximized ? "!size-8.5" : (isVeryTight ? "!size-6.5" : "!size-7"),
-                isItalicActive && "!bg-white/20 !text-white",
+                editor.italic && "!bg-white/20 !text-white",
               )}
             >
               <Italic size={isMaximized ? 14.5 : (isVeryTight ? 11.5 : 12.5)} strokeWidth={2.4} />
@@ -1122,27 +904,27 @@ export function NoteSheet({
             <HeadingSelect
               compact={isTight}
               large={isMaximized}
-              editorRef={editorRef}
-              onSelect={(level) => runEditorCommand((ed) => applyHeading(ed, level))}
+              editorRef={editor.bodyRef}
+              onSelect={(level) => editor.run((ed) => applyHeading(ed, level))}
             />
 
             <InsertMenu
-              editorRef={editorRef}
-              onInsertTable={() => runEditorCommand((ed) => insertTableAtCaret(ed))}
-              onInsertTask={() => runEditorCommand((ed) => applyTask(ed))}
-              onInsertOrderedList={() => runEditorCommand((ed) => applyOrderedList(ed))}
-              onInsertBlockquote={() => runEditorCommand((ed) => applyBlockquote(ed))}
-              onInsertCode={() => runEditorCommand((ed) => insertCodeBlockAtCaret(ed))}
-              onInsertDefinitionList={() => runEditorCommand((ed) => applyDefinitionList(ed))}
+              editorRef={editor.bodyRef}
+              onInsertTable={() => editor.run((ed) => insertTableAtCaret(ed))}
+              onInsertTask={() => editor.run((ed) => applyTask(ed))}
+              onInsertOrderedList={() => editor.run((ed) => applyOrderedList(ed))}
+              onInsertBlockquote={() => editor.run((ed) => applyBlockquote(ed))}
+              onInsertCode={() => editor.run((ed) => insertCodeBlockAtCaret(ed))}
+              onInsertDefinitionList={() => editor.run((ed) => applyDefinitionList(ed))}
               onAttachImage={() => fileInputRef.current?.click()}
-              onInsertInlineCode={() => runEditorCommand((ed) => applyInlineCode(ed))}
-              onInsertLink={() => runEditorCommand((ed) => applyLink(ed))}
-              onInsertFootnote={() => runEditorCommand((ed) => applyFootnote(ed))}
-              onInsertStrikethrough={() => runEditorCommand((ed) => applyStrikethrough(ed))}
-              onInsertHighlight={() => runEditorCommand((ed) => applyHighlight(ed))}
-              onInsertSubscript={() => runEditorCommand((ed) => applySubscript(ed))}
-              onInsertSuperscript={() => runEditorCommand((ed) => applySuperscript(ed))}
-              hasMedia={Boolean((draft.media_urls && draft.media_urls.length > 0) || draft.media_url)}
+              onInsertInlineCode={() => editor.run((ed) => applyInlineCode(ed))}
+              onInsertLink={() => editor.run((ed) => applyLink(ed))}
+              onInsertFootnote={() => editor.run((ed) => applyFootnote(ed))}
+              onInsertStrikethrough={() => editor.run((ed) => applyStrikethrough(ed))}
+              onInsertHighlight={() => editor.run((ed) => applyHighlight(ed))}
+              onInsertSubscript={() => editor.run((ed) => applySubscript(ed))}
+              onInsertSuperscript={() => editor.run((ed) => applySuperscript(ed))}
+              hasMedia={hasGallery(draft)}
               large={isMaximized}
               compact={isVeryTight}
             />
@@ -1152,16 +934,15 @@ export function NoteSheet({
               onMouseDown={(e) => e.preventDefault()}
               onClick={(e) => {
                 const rect = e.currentTarget.getBoundingClientRect();
-                setEmojiAnchor(rect);
-                setShowEmojiPicker((v) => !v);
+                editor.toggleEmojiPicker(rect);
               }}
               aria-label="Emoji Picker"
               title="Insert Emoji (:name:)"
-              data-active={showEmojiPicker || undefined}
+              data-active={Boolean(editor.emojiAnchor) || undefined}
               className={cx(
                 "icon-btn cursor-pointer shrink-0 transition-all duration-150 ease-out",
                 isMaximized ? "!size-8.5" : (isVeryTight ? "!size-6.5" : "!size-7"),
-                showEmojiPicker && "!bg-white/20 !text-white",
+                Boolean(editor.emojiAnchor) && "!bg-white/20 !text-white",
               )}
             >
               <Smile size={isMaximized ? 14.5 : (isVeryTight ? 11.5 : 12.5)} strokeWidth={2.2} />
@@ -1175,36 +956,7 @@ export function NoteSheet({
               className="hidden"
               onChange={(e) => {
                 const files = e.target.files;
-                if (!files || files.length === 0) return;
-                const imageFiles = Array.from(files);
-                imageFiles.forEach((file) => {
-                  const reader = new FileReader();
-                  reader.onload = (loadEvt) => {
-                    const dataUrl = loadEvt.target?.result as string;
-                    if (!dataUrl) return;
-                    const altText = file.name ? file.name.replace(/\.[^.]+$/, "") : "Attached Image";
-                    if (rawMode) {
-                      const ed = rawTextareaRef.current;
-                      const pos = ed?.selectionStart ?? draftRef.current.content.length;
-                      const currentMd = contentToMarkdown(draftRef.current.content);
-                      const { text, newCaret } = insertInlineImageInMarkdown(currentMd, dataUrl, pos, altText);
-                      edit({ content: markdownToContent(text, draftRef.current.content, () => uid("line")) });
-                      if (ed) {
-                        requestAnimationFrame(() => {
-                          ed.selectionStart = newCaret;
-                          ed.selectionEnd = newCaret;
-                        });
-                      }
-                    } else {
-                      const ed = editorRef.current;
-                      if (ed) {
-                        insertInlineImageAtCaret(ed, dataUrl, altText);
-                        handleEditorInput();
-                      }
-                    }
-                  };
-                  reader.readAsDataURL(file);
-                });
+                if (files && files.length > 0) editor.insertImages(Array.from(files), "Attached Image");
                 e.target.value = "";
               }}
             />
@@ -1291,13 +1043,12 @@ export function NoteSheet({
                       textarea.setSelectionRange(0, 0);
                       return;
                     }
-                  } else if (editorRef.current) {
+                  } else if (editor.bodyRef.current) {
                     e.preventDefault();
-                    placeCaretAtEditorStart(editorRef.current);
+                    placeCaretAtEditorStart(editor.bodyRef.current);
                     return;
                   }
                 }
-                handleUndoKeys(e);
               }}
               data-undo="title"
               data-slot="note-title"
@@ -1309,165 +1060,15 @@ export function NoteSheet({
               )}
               style={{
                 fontFamily: fontStack(draft.font_family),
-                fontWeight: 560,
+                fontWeight: 560
               }}
             />
 
-            {(() => {
-              const rawImages = (draft.media_urls && draft.media_urls.length > 0)
-                ? draft.media_urls
-                : (draft.media_url ? [draft.media_url] : []);
-              const images = rawImages.filter((img) => img && typeof img === "string" && img.trim().length > 0);
-              if (images.length === 0) return null;
-              return (
-                <div className="mt-4">
-                  <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 gap-2.5 max-h-[220px] overflow-y-auto p-1 scroll">
-                    {images.map((imgUrl, idx) => (
-                      <div
-                        key={`img-${idx}`}
-                        onClick={() => setPreviewImage(imgUrl)}
-                        className="relative group aspect-video min-h-[100px] rounded-[10px] overflow-hidden bg-black/50 border border-white/10 shadow-sm cursor-pointer hover:border-white/30 transition-all flex items-center justify-center"
-                        title="Click to preview full image"
-                      >
-                        <img
-                          src={imgUrl}
-                          alt=""
-                          className="w-full h-full object-cover transition-transform duration-200 group-hover:scale-105"
-                          onError={(event) => {
-                            const parent = event.currentTarget.parentElement;
-                            if (parent) parent.style.display = "none";
-                          }}
-                        />
-                        <button
-                          type="button"
-                          onClick={(e) => {
-                            e.stopPropagation();
-                            removeImageAt(idx);
-                          }}
-                          className="absolute right-1.5 top-1.5 grid size-6 place-items-center rounded-md bg-black/80 text-ink-3 hover:bg-black hover:text-white opacity-0 group-hover:opacity-100 transition-opacity border border-white/15 z-10"
-                          title="Remove image"
-                          aria-label="Remove image"
-                        >
-                          <X size={11} strokeWidth={2.2} />
-                        </button>
-                      </div>
-                    ))}
-                  </div>
-                </div>
-              );
-            })()}
+            <NoteGallery editor={editor} variant="sheet" />
 
             <div data-slot="title-rule" className="rule my-5" />
 
-            <div data-undo="body">
-              {rawMode ? (
-                <RawEditor
-                  content={draft.content}
-                  textareaRef={rawTextareaRef}
-                  minHeight={300}
-                  className="text-[13px]"
-                  onChange={(content) => commit({ ...draftRef.current, content, last_edited: Date.now() })}
-                  onArrowUpAtStart={() => {
-                    if (titleRef.current) {
-                      titleRef.current.focus();
-                      const len = titleRef.current.value.length;
-                      titleRef.current.setSelectionRange(len, len);
-                    }
-                  }}
-                />
-              ) : (
-              <div className="min-h-[220px]">
-                <div
-                  ref={initEditor}
-                  onPaste={(e) => {
-                    if (handleMarkdownPaste(e)) handleEditorInput();
-                  }}
-                  contentEditable
-                  suppressContentEditableWarning
-                  onInput={() => handleEditorInput()}
-                  onContextMenu={(e) => {
-                    const img = (e.target as HTMLElement).closest("img.md-img") as HTMLImageElement | null;
-                    if (img) {
-                      e.preventDefault();
-                      e.stopPropagation();
-                      setContextMenuImg({
-                        element: img,
-                        x: e.clientX,
-                        y: e.clientY,
-                      });
-                      return;
-                    }
-                    const cell = (e.target as HTMLElement).closest("td,th") as HTMLElement | null;
-                    if (cell && editorRef.current?.contains(cell)) {
-                      e.preventDefault();
-                      e.stopPropagation();
-                      setTableMenu({ x: e.clientX, y: e.clientY, cell });
-                    }
-                  }}
-                  onMouseDown={(e) => {
-                    if ((e.target as HTMLElement).closest(".md-cb")) e.preventDefault();
-                  }}
-                  onClick={(e) => {
-                    const img = (e.target as HTMLElement).closest("img.md-img") as HTMLImageElement | null;
-                    if (img) {
-                      e.preventDefault();
-                      setPreviewImage(img.src);
-                      return;
-                    }
-                    const link = (e.target as HTMLElement).closest("a.md-link") as HTMLAnchorElement | null;
-                    if (link && (e.ctrlKey || e.metaKey)) {
-                      e.preventDefault();
-                      const href = link.getAttribute("href");
-                      if (href) openExternalUrl(href);
-                      return;
-                    }
-                    if (handleCheckboxClick(e, editorRef.current)) handleEditorInput();
-                    if (editorRef.current) fixCheckboxCaret(editorRef.current);
-                  }}
-                  onKeyDown={(e) => {
-                    if (e.key === "ArrowUp" && editorRef.current && isCaretAtEditorStart(editorRef.current)) {
-                      e.preventDefault();
-                      if (titleRef.current) {
-                        titleRef.current.focus();
-                        const len = titleRef.current.value.length;
-                        titleRef.current.setSelectionRange(len, len);
-                      }
-                      return;
-                    }
-                    const sc = getMarkdownShortcuts();
-                    if (matchesCombo(e, sc.bold)) {
-                      e.preventDefault();
-                      handleToolbarFormat("bold");
-                      return;
-                    }
-                    if (matchesCombo(e, sc.italic)) {
-                      e.preventDefault();
-                      handleToolbarFormat("italic");
-                      return;
-                    }
-                    if (editorRef.current && handleRichEditorKeyDown(e, editorRef.current, handleEditorInput)) {
-                      return;
-                    }
-                  }}
-                  onKeyUp={() => {
-                    updateActiveFormatting();
-                    if (editorRef.current) fixCheckboxCaret(editorRef.current);
-                  }}
-                  onMouseUp={() => {
-                    updateActiveFormatting();
-                    if (editorRef.current) fixCheckboxCaret(editorRef.current);
-                  }}
-                  className={cx(
-                    "w-full min-h-[300px] whitespace-pre-wrap break-words bg-transparent text-ink-2 outline-none scroll select-text transition-all",
-                    isMaximized ? "text-[16.5px] leading-[1.8]" : "text-[15.5px] leading-relaxed",
-                  )}
-                  style={{
-                    fontFamily: fontStack(draft.font_family),
-                  }}
-                />
-              </div>
-              )}
-            </div>
+            <NoteBody editor={editor} variant="sheet" maximized={isMaximized} />
           </div>
         </div>
 
@@ -1505,93 +1106,7 @@ export function NoteSheet({
         </div>
       </div>
 
-      <EmojiAutocomplete editorRef={editorRef} onEmojiInserted={handleEditorInput} />
-
-      <EmojiPickerModal
-        isOpen={showEmojiPicker}
-        onClose={() => setShowEmojiPicker(false)}
-        anchorRect={emojiAnchor}
-        onSelect={(emoji) => {
-          if (rawMode) {
-            const ed = rawTextareaRef.current;
-            if (ed) {
-              const start = ed.selectionStart;
-              const end = ed.selectionEnd;
-              const val = ed.value;
-              const next = val.slice(0, start) + emoji + val.slice(end);
-              edit({ content: markdownToContent(next, draftRef.current.content, () => uid("line")) });
-              requestAnimationFrame(() => {
-                ed.selectionStart = start + emoji.length;
-                ed.selectionEnd = start + emoji.length;
-                ed.focus();
-              });
-            }
-          } else {
-            runEditorCommand((ed) => insertEmojiAtCaret(ed, emoji));
-            handleEditorInput();
-          }
-        }}
-      />
-
-      {contextMenuImg && (
-        <ImageContextMenu
-          isOpen={Boolean(contextMenuImg)}
-          x={contextMenuImg.x}
-          y={contextMenuImg.y}
-          imgElement={contextMenuImg.element}
-          onClose={() => setContextMenuImg(null)}
-          onZoom={() => {
-            setPreviewImage(contextMenuImg.element.src);
-            setContextMenuImg(null);
-          }}
-          onEdit={() => {
-            setEditImgModal({
-              element: contextMenuImg.element,
-              alt: contextMenuImg.element.alt || "Image",
-              src: contextMenuImg.element.src,
-              refKey: contextMenuImg.element.getAttribute("data-ref") || undefined,
-            });
-            setContextMenuImg(null);
-          }}
-          onDelete={() => {
-            contextMenuImg.element.remove();
-            handleEditorInput();
-            setContextMenuImg(null);
-          }}
-        />
-      )}
-
-      <EditImageModal
-        isOpen={Boolean(editImgModal)}
-        onClose={() => setEditImgModal(null)}
-        alt={editImgModal?.alt ?? ""}
-        src={editImgModal?.src ?? ""}
-        refKey={editImgModal?.refKey}
-        onSave={(newAlt) => {
-          if (!editImgModal) return;
-          editImgModal.element.alt = newAlt;
-          const ref = editImgModal.element.getAttribute("data-ref");
-          if (ref) {
-            editImgModal.element.setAttribute("data-md", `![${newAlt}][${ref}]`);
-          } else {
-            editImgModal.element.setAttribute("data-md", `![${newAlt}](${editImgModal.element.src})`);
-          }
-          handleEditorInput();
-          setEditImgModal(null);
-        }}
-      />
-
-      {tableMenu && (
-        <TableMenu
-          x={tableMenu.x}
-          y={tableMenu.y}
-          cell={tableMenu.cell}
-          onClose={() => setTableMenu(null)}
-          onChanged={() => handleEditorInput()}
-        />
-      )}
-
-      {previewImage && <ImageLightbox src={previewImage} onClose={() => setPreviewImage(null)} />}
+      <EditorOverlays editor={editor} />
 
       {/* Theme-matched destructive action confirmation modal */}
       {showDeleteConfirm && isModern && (
