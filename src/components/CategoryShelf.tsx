@@ -156,7 +156,7 @@ function CategoryShelfComponent({
               e.stopPropagation();
               onDeleteCategory(shelf);
             }}
-            className="ghost !size-7 !p-0 opacity-0 transition-opacity duration-200 group-hover/section:opacity-100 hover:text-red-400 focus-visible:opacity-100"
+            className={`ghost !size-7 !p-0 opacity-0 transition-opacity duration-200 group-hover/section:opacity-100 focus-visible:opacity-100 ${pick("hover:text-red-400", "hover:!text-red-400 hover:!bg-red-500/10")}`}
             title={`Delete ${shelf} category`}
             aria-label={`Delete ${shelf} category`}
           >
