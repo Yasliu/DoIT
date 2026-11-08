@@ -19,9 +19,24 @@ use tauri::{
 
 const TRAY_ICON_BYTES: &[u8] = include_bytes!("../icons/tray_rgba.bin");
 
+/// Tauri's default async runtime starts one worker per CPU core (16 idle threads on a 16-core
+/// laptop, each with its own allocator arena). DoIT's async commands are a handful of file
+/// pickers, so two workers are plenty.
+fn use_small_async_runtime() {
+    let runtime = tokio::runtime::Builder::new_multi_thread()
+        .worker_threads(2)
+        .enable_all()
+        .build()
+        .expect("async runtime");
+    tauri::async_runtime::set(runtime.handle().clone());
+    // Lives for the whole process; dropping it would stop every async command.
+    std::mem::forget(runtime);
+}
+
 #[cfg_attr(mobile, tauri::mobile_entry_point)]
 pub fn run() {
     platform::init();
+    use_small_async_runtime();
 
     let storage_manager = StorageManager::new();
 
