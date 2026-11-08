@@ -474,7 +474,7 @@ impl StorageManager {
             &note.title,
             note.last_edited,
             repeated_num,
-            ext,
+            note.file_name_extension(),
         );
 
         let storage_dir = {

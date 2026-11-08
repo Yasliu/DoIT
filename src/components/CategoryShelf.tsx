@@ -27,6 +27,7 @@ interface CategoryShelfProps {
   onArm: (event: ReactPointerEvent, note: NoteItem) => void;
   onToggleItem: (note: NoteItem, itemId: string) => void;
   onContextMenu?: (event: React.MouseEvent, note: NoteItem) => void;
+  onToggleSettled?: (note: NoteItem) => void;
 }
 
 function CategoryShelfComponent({
@@ -49,6 +50,7 @@ function CategoryShelfComponent({
   onArm,
   onToggleItem,
   onContextMenu,
+  onToggleSettled,
 }: CategoryShelfProps) {
   const [, setIconsVersion] = useState(0);
 
@@ -222,6 +224,7 @@ function CategoryShelfComponent({
                   onArm={onArm}
                   onToggleItem={onToggleItem}
                   onContextMenu={onContextMenu}
+                  onToggleSettled={onToggleSettled}
                 />
               ))
             )}

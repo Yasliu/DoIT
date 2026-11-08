@@ -6,7 +6,7 @@ import { BentoCanvas } from "./components/BentoCanvas";
 import { ContextMenu } from "./components/ContextMenu";
 import { CategoryMenu } from "./components/CategoryMenu";
 import { IconPickerModal } from "./components/IconPickerModal";
-import { setMarkdownBaseDir } from "./lib/format";
+import { contentToMarkdown, setMarkdownBaseDir } from "./lib/format";
 import { applyShortcutSettings, canvasShortcut } from "./lib/shortcuts";
 import { setCategoryIcon } from "./lib/categoryIcons";
 import { suggestShelfIcon } from "./platform/modern/ShelfIcons";
@@ -36,8 +36,11 @@ interface OpenNote {
 interface Toast {
   id: number;
   message: string;
-  undo?: NoteItem;
+  undo?: () => void;
 }
+
+/** The Settled view shows every note whatever the shelves' collapsed state. */
+const NOTHING_COLLAPSED: Record<string, boolean> = {};
 
 const CURRENT_VERSION = "1.1.7";
 const VERSION_TRACKER_KEY = "doit.release_notes_version";
@@ -89,6 +92,7 @@ export default function App() {
   /** Modern design: a note on its way to another shelf, by Move to… or Copy to…. */
   const [shelfAction, setShelfAction] = useState<{ kind: "move" | "copy"; note: NoteItem } | null>(null);
   const [active, setActive] = useState<string | null>(null);
+  const [showSettled, setShowSettled] = useState(false);
   const [openNote, setOpenNote] = useState<OpenNote | null>(null);
   const [isNoteMaximized, setIsNoteMaximized] = useState(false);
   const [isVerticalScreen, setIsVerticalScreen] = useState(() => window.innerHeight > window.innerWidth);
@@ -263,7 +267,7 @@ export default function App() {
   }, []);
 
   const notify = useCallback(
-    (message: string, undo?: NoteItem) => {
+    (message: string, undo?: () => void) => {
       window.clearTimeout(toastTimer.current);
       setToast({ id: Date.now(), message, undo });
       toastTimer.current = window.setTimeout(() => {
@@ -383,6 +387,7 @@ export default function App() {
   const requestNewNote = useCallback(
     (shelf?: string) => {
       setIsSettings(false);
+      setShowSettled(false);
       if (!shelf && isModern) setModernDialog("new-note");
       else newNote(shelf);
     },
@@ -422,10 +427,25 @@ export default function App() {
       setOpenNote(null);
       deletedRef.current = [...deletedRef.current, note];
       const count = deletedRef.current.length;
-      notify(count > 1 ? `${count} notes deleted.` : "Note deleted.", note);
+      notify(count > 1 ? `${count} notes deleted.` : "Note deleted.", () => {
+        deletedRef.current.forEach((entry) => restore(entry));
+        deletedRef.current = [];
+      });
     },
-    [remove, notify],
+    [remove, restore, notify],
   );
+
+  /** Saves a note that was just settled or brought back, with a way to change your mind. */
+  const applySettled = useCallback(
+    (next: NoteItem) => {
+      patch(next, true);
+      notify(next.is_settled ? "Settled. Search still finds it." : "Back on its shelf.", () =>
+        patch({ ...next, is_settled: !next.is_settled }, true),
+      );
+    },
+    [patch, notify],
+  );
+  const toggleSettled = useCallback((note: NoteItem) => applySettled({ ...note, is_settled: !note.is_settled }), [applySettled]);
 
   const toggleItem = useCallback(
     (note: NoteItem, itemId: string) => {
@@ -472,14 +492,17 @@ export default function App() {
     }
   }, [workspace, notify]);
 
+  const deskNotes = useMemo(() => notes.filter((note) => !note.is_settled), [notes]);
+  const settledNotes = useMemo(() => notes.filter((note) => note.is_settled), [notes]);
+
   const counts = useMemo(() => {
     const map: Record<string, number> = {};
-    notes.forEach((note) => {
+    deskNotes.forEach((note) => {
       const key = note.category || "Uncategorized";
       map[key] = (map[key] ?? 0) + 1;
     });
     return map;
-  }, [notes]);
+  }, [deskNotes]);
 
   useEffect(() => {
     const onKey = (event: KeyboardEvent) => {
@@ -552,12 +575,19 @@ export default function App() {
         <ModernSidebar
           shelves={shelves}
           counts={counts}
-          total={notes.length}
+          total={deskNotes.length}
           active={active}
           isSettings={isSettings}
           open={railOpen}
+          settledCount={settledNotes.length}
+          settledOpen={showSettled}
+          onOpenSettled={() => {
+            setIsSettings(false);
+            setShowSettled(true);
+          }}
           onSelect={(shelf) => {
             setIsSettings(false);
+            setShowSettled(false);
             setActive(shelf);
           }}
           onNewNote={() => requestNewNote()}
@@ -574,7 +604,7 @@ export default function App() {
         <Sidebar
           shelves={shelves}
           counts={counts}
-          total={notes.length}
+          total={deskNotes.length}
           active={isSettings ? "SETTINGS" : active}
           onSelect={(shelf) => {
             setIsSettings(false);
@@ -658,13 +688,15 @@ export default function App() {
                   </div>
                 ) : (
                   <BentoCanvas
-                    notes={notes}
+                    notes={showSettled ? settledNotes : deskNotes}
                     shelves={shelves}
-                    active={active}
+                    active={showSettled ? null : active}
+                    settledView={showSettled}
+                    onToggleSettled={isModern ? toggleSettled : undefined}
                     query={isModern ? "" : query}
                     loading={state === "loading"}
                     locked={false}
-                    collapsed={collapsed}
+                    collapsed={showSettled ? NOTHING_COLLAPSED : collapsed}
                     onToggleCollapse={toggleCollapse}
                     onOpen={openTile}
                     onNewNote={requestNewNote}
@@ -752,6 +784,7 @@ export default function App() {
                     onCommit={commitSheet}
                     onClose={closeSheet}
                     onDelete={deleteNote}
+                    onSettledChange={isModern ? applySettled : undefined}
                   />
                 )}
               </aside>
@@ -764,10 +797,19 @@ export default function App() {
         <ModernNoteMenu
           x={contextMenu.x}
           y={contextMenu.y}
+          settled={!!contextMenu.note.is_settled}
           onClose={() => setContextMenu(null)}
           onOpen={() => openTile(contextMenu.note, originFromCanvas())}
+          onOpenFull={() => openTile(contextMenu.note, originFromCanvas(), true)}
+          onToggleSettled={contextMenu.note.source_path ? undefined : () => toggleSettled(contextMenu.note)}
           onMove={() => setShelfAction({ kind: "move", note: contextMenu.note })}
           onCopy={() => setShelfAction({ kind: "copy", note: contextMenu.note })}
+          onCopyText={() => {
+            navigator.clipboard.writeText(contentToMarkdown(contextMenu.note.content)).then(
+              () => notify("Copied the note's text."),
+              () => notify("Could not copy that note."),
+            );
+          }}
           onDelete={() => {
             const note = contextMenu.note;
             deleteNote(note);
@@ -884,8 +926,7 @@ export default function App() {
               <button
                 type="button"
                 onClick={() => {
-                  deletedRef.current.forEach((entry) => restore(entry));
-                  deletedRef.current = [];
+                  toast.undo?.();
                   dismissToast();
                 }}
                 className="h-7 rounded-full bg-white/[0.1] px-2.5 text-[11.5px] font-medium text-ink-1 transition-colors hover:bg-white/[0.16]"
@@ -920,6 +961,7 @@ export default function App() {
           }}
           onOpenShelf={(shelf) => {
             setIsSettings(false);
+            setShowSettled(false);
             setActive(shelf);
           }}
           onNewNote={() => setModernDialog("new-note")}

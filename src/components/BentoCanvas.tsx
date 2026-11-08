@@ -28,6 +28,9 @@ interface BentoCanvasProps {
   onOpenIconPicker?: (shelf: string) => void;
   onReorderNotes?: (shelf: string, activeId: string, overId: string) => void;
   onContextMenu?: (event: React.MouseEvent, note: NoteItem) => void;
+  onToggleSettled?: (note: NoteItem) => void;
+  /** Showing the settled notes: empty shelves and the create buttons step aside. */
+  settledView?: boolean;
 }
 
 interface DragState {
@@ -72,6 +75,8 @@ export function BentoCanvas({
   onOpenIconPicker,
   onReorderNotes,
   onContextMenu,
+  onToggleSettled,
+  settledView = false,
 }: BentoCanvasProps) {
   const [isAddingCategory, setIsAddingCategory] = useState(false);
   const [newCatName, setNewCatName] = useState("");
@@ -107,8 +112,8 @@ export function BentoCanvas({
           shelf,
           notes: visible.filter((note) => (note.category || "Uncategorized") === shelf).sort(byOrder),
         }))
-        .filter((group) => (query.trim() || active ? group.notes.length > 0 : true)),
-    [shelves, visible, active, query],
+        .filter((group) => (query.trim() || active || settledView ? group.notes.length > 0 : true)),
+    [shelves, visible, active, query, settledView],
   );
 
   const totalVisible = visible.length;
@@ -283,7 +288,7 @@ export function BentoCanvas({
     window.addEventListener("pointercancel", onCancel);
   };
 
-  const title = active ?? "All notes";
+  const title = settledView ? "Settled" : (active ?? "All notes");
   const today = longDate(Date.now());
 
   return (
@@ -304,6 +309,8 @@ export function BentoCanvas({
             <p data-slot="page-meta" className="mt-2.5 max-w-[52ch] text-[12.5px] leading-relaxed text-ink-3">
               {loading
                 ? text.loadingWorkspace
+                : settledView
+                  ? `${notes.length} settled note${notes.length === 1 ? "" : "s"}. Search still finds them.`
                 : notes.length === 0
                   ? text.noNotes
                   : query.trim()
@@ -375,10 +382,12 @@ export function BentoCanvas({
               </button>
             )}
 
-            <button type="button" onClick={() => onNewNote()} className="btn" data-variant="primary">
-              <Plus size={14} strokeWidth={1.9} />
-              <span>New note</span>
-            </button>
+            {!settledView && (
+              <button type="button" onClick={() => onNewNote()} className="btn" data-variant="primary">
+                <Plus size={14} strokeWidth={1.9} />
+                <span>New note</span>
+              </button>
+            )}
           </div>
         </header>
 
@@ -410,6 +419,13 @@ export function BentoCanvas({
                   </div>
                 </div>
               ))}
+            </div>
+          ) : groups.length === 0 && settledView ? (
+            <div data-slot="empty-state" className="flex flex-col items-start justify-center rounded-[22px] px-8 py-20 shadow-[inset_0_0_0_1px_rgba(255,255,255,0.06)]">
+              <p className="text-[19px] tracking-[-0.02em] text-ink-2">Nothing settled yet.</p>
+              <p className="mt-2 max-w-[44ch] text-[12.5px] leading-relaxed text-ink-4">
+                Tick a note you are done with, or right-click it and choose Settle. It waits here, off your shelves.
+              </p>
             </div>
           ) : groups.length === 0 ? (
             <div data-slot="empty-state" className="flex flex-col items-start justify-center rounded-[22px] px-8 py-20 shadow-[inset_0_0_0_1px_rgba(255,255,255,0.06)]">
@@ -449,6 +465,7 @@ export function BentoCanvas({
                 onArm={arm}
                 onToggleItem={onToggleItem}
                 onContextMenu={onContextMenu}
+                onToggleSettled={onToggleSettled}
               />
             ))
           )}

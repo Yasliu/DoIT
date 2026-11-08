@@ -9,6 +9,7 @@ import { ModeToggle } from "./ModeToggle";
 import {
   ArrowLeft,
   ArrowUpRight,
+  FolderInput,
   Bold,
   Check,
   ChevronDown,
@@ -52,12 +53,18 @@ import {
   placeCaretAtEditorStart,
 } from "../lib/format";
 import { applyThemeSettings, isModern, pick } from "../platform";
+import { ModernConfirm } from "../platform/modern/ModernConfirm";
 import { ModernDockHome } from "../platform/modern/ModernDockHome";
+import { ModernNoteMenu } from "../platform/modern/ModernNoteMenu";
+import { ModernShelfPicker } from "../platform/modern/ModernShelfPicker";
 import { accentFor, cleanText, cx, relativeShort } from "../lib/text";
 
 
 export function TrayCompanion() {
-  const { notes, shelves, patch, create, remove } = useWorkspace();
+  const { notes, shelves, patch, create, remove, moveCategory, createCategory } = useWorkspace();
+  const [noteMenu, setNoteMenu] = useState<{ x: number; y: number; note: NoteItem } | null>(null);
+  const [movingNote, setMovingNote] = useState<NoteItem | null>(null);
+  const [deletingNote, setDeletingNote] = useState<NoteItem | null>(null);
   const [shown, setShown] = useState(false);
   const shownRef = useRef(false);
   const hideTimerRef = useRef<number | null>(null);
@@ -354,7 +361,8 @@ export function TrayCompanion() {
 
 
   const filteredNotes = useMemo(() => {
-    let list = [...notes].sort((a, b) => b.last_edited - a.last_edited);
+    // Settled notes stay out of the list; searching still finds them.
+    let list = notes.filter((n) => !n.is_settled || filter.trim()).sort((a, b) => b.last_edited - a.last_edited);
     if (selectedShelf) {
       list = list.filter((n) => n.category.toLowerCase() === selectedShelf.toLowerCase());
     }
@@ -978,6 +986,11 @@ export function TrayCompanion() {
           shelvesOpen={drawerOpen}
           onToggleShelves={() => setDrawerOpen((v) => !v)}
           onOpen={openNoteById}
+          onNoteMenu={(event, note) => {
+            event.preventDefault();
+            event.stopPropagation();
+            setNoteMenu({ x: event.clientX, y: event.clientY, note });
+          }}
         />
       ) : (
         /* ---- DESK TRAY MAIN MENU (SCREENSHOT 3: CLEAN, UNCLUTTERED, OPEN PROFILE) ---- */
@@ -1170,6 +1183,49 @@ export function TrayCompanion() {
       <EditorOverlays editor={editor} />
 
       {/* Theme-matched delete confirmation popover modal */}
+      {noteMenu && (
+        <ModernNoteMenu
+          x={noteMenu.x}
+          y={noteMenu.y}
+          settled={!!noteMenu.note.is_settled}
+          onClose={() => setNoteMenu(null)}
+          onOpen={() => openNoteById(noteMenu.note.id)}
+          onToggleSettled={() => patch({ ...noteMenu.note, is_settled: !noteMenu.note.is_settled }, true)}
+          onMove={() => setMovingNote(noteMenu.note)}
+          onDelete={() => setDeletingNote(noteMenu.note)}
+        />
+      )}
+      {movingNote && (
+        <ModernShelfPicker
+          label="Move note"
+          placeholder={`Move “${cleanText(movingNote.title) || "Untitled"}” to…`}
+          icon={<FolderInput size={17} />}
+          enterLabel="move"
+          shelves={shelves}
+          exclude={movingNote.category || "Uncategorized"}
+          onClose={() => setMovingNote(null)}
+          onPick={({ shelf, created }) => {
+            const { id } = movingNote;
+            setMovingNote(null);
+            void (async () => {
+              if (created) await createCategory(shelf);
+              await moveCategory(id, shelf);
+            })();
+          }}
+        />
+      )}
+      {deletingNote && (
+        <ModernConfirm
+          title={`Delete “${cleanText(deletingNote.title) || "Untitled"}”?`}
+          body="The note's file is removed from your notes folder."
+          confirmLabel="Delete"
+          onCancel={() => setDeletingNote(null)}
+          onConfirm={() => {
+            remove(deletingNote.id);
+            setDeletingNote(null);
+          }}
+        />
+      )}
       {showDeleteConfirm && activeNote && (
         <div
           className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 backdrop-blur-sm p-4 animate-in fade-in duration-150 select-none pointer-events-auto"

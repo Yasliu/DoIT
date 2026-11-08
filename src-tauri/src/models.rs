@@ -53,6 +53,9 @@ pub struct NoteItem {
     pub is_collapsed: Option<bool>,
     #[serde(default)]
     pub is_pinned: Option<bool>,
+    /// Put away: hidden from the canvas and the shelves, still found by search.
+    #[serde(default)]
+    pub is_settled: Option<bool>,
     /// Source file format: "md" (default) or "txt"
     #[serde(default)]
     pub format: Option<String>,
@@ -342,6 +345,9 @@ pub fn compute_markdown_filename(
     format!("{cat_clean} - {title_clean} - {date_str} - {repeated_num}.md")
 }
 
+/// Ends the stem of a settled .txt note's file name (see `NoteItem::file_name_extension`).
+const SETTLED_TXT_MARK: &str = ".settled";
+
 pub const MAX_FILE_SIZE_BYTES: u64 = 30 * 1024 * 1024; // 30 MB
 
 /// The result of importing a folder as a shelf.
@@ -394,6 +400,9 @@ impl NoteItem {
         if let Some(pinned) = self.is_pinned {
             md.push_str(&format!("is_pinned: {}\n", pinned));
         }
+        if self.is_settled == Some(true) {
+            md.push_str("is_settled: true\n");
+        }
         if !self.media_urls.is_empty() {
             let combined = self.media_urls.join("|||");
             md.push_str(&format!("media_urls: \"{}\"\n", combined));
@@ -426,6 +435,10 @@ impl NoteItem {
     }
 
     pub fn parse_generic_document(content: &str, file_stem: &str, ext: &str, modified_ms: i64) -> Self {
+        let (file_stem, settled_by_name) = match file_stem.strip_suffix(SETTLED_TXT_MARK) {
+            Some(stem) if ext == "txt" => (stem, true),
+            _ => (file_stem, false),
+        };
         let all: Vec<&str> = content.lines().collect();
         let mut fm: std::collections::HashMap<String, String> = std::collections::HashMap::new();
         let mut body_idx = 0usize;
@@ -539,6 +552,7 @@ impl NoteItem {
             media_urls,
             is_collapsed: Some(false),
             is_pinned: Some(flag("is_pinned")),
+            is_settled: Some(flag("is_settled") || settled_by_name),
             format: Some(ext.to_string()),
             source_path: None,
             external_header: None,
@@ -587,6 +601,14 @@ impl NoteItem {
             }
         }
         out
+    }
+
+    /// A .txt file has no front matter to keep the flag in, so a settled one says so in its name.
+    pub fn file_name_extension(&self) -> &'static str {
+        match (self.file_extension(), self.is_settled == Some(true)) {
+            ("txt", true) => "settled.txt",
+            (ext, _) => ext,
+        }
     }
 
     pub fn file_extension(&self) -> &'static str {
@@ -685,6 +707,26 @@ mod tests {
     use super::*;
 
     #[test]
+    fn a_settled_note_is_still_settled_after_a_reload() {
+        let mut note = NoteItem::from_file("just text", "Work - Plan - 2026-11-08 - 0", "md", 1);
+        assert_eq!(note.is_settled, Some(false));
+
+        note.is_settled = Some(true);
+        let reloaded = NoteItem::from_file(&note.to_markdown(0), "Work - Plan - 2026-11-08 - 0", "md", 1);
+        assert_eq!(reloaded.is_settled, Some(true));
+        assert_eq!(reloaded.category, "Work");
+
+        // A .txt file has no front matter: the flag travels in its name, which still parses.
+        let mut text = NoteItem::from_file("just text", "Work - Plan - 2026-11-08 - 0", "txt", 1);
+        text.is_settled = Some(true);
+        let name = compute_note_filename(&text.category, &text.title, text.last_edited, 0, text.file_name_extension());
+        let stem = name.strip_suffix(".txt").unwrap();
+        let reloaded = NoteItem::from_file(&text.to_plain_text(), stem, "txt", 1);
+        assert_eq!(reloaded.is_settled, Some(true));
+        assert_eq!((reloaded.category.as_str(), reloaded.title.as_str()), ("Work", "Plan"));
+    }
+
+    #[test]
     fn test_strict_doit_frontmatter_generation() {
         let note = NoteItem {
             id: "test-note-1".to_string(),
@@ -707,6 +749,7 @@ mod tests {
             media_urls: vec![],
             is_collapsed: Some(false),
             is_pinned: Some(false),
+            is_settled: None,
             format: None,
             source_path: None,
             external_header: None,

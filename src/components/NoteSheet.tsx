@@ -3,6 +3,7 @@ import { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } fr
 import {  Bold,
   Check,
   ChevronDown,
+  CircleCheck,
   CornerDownLeft,
   Italic,
   Maximize2,
@@ -12,6 +13,7 @@ import {  Bold,
   Smile,
   Trash,
   Type,
+  Undo2,
   X,
   ZoomIn,
   ZoomOut,
@@ -52,6 +54,8 @@ interface NoteSheetProps {
   onCommit: (note: NoteItem) => void;
   onClose: () => void;
   onDelete: (note: NoteItem) => void;
+  /** The note was settled or brought back; given the note as it now stands. */
+  onSettledChange?: (note: NoteItem) => void;
   /** true when switching notes while the drawer is already open (skip the slide-in) */
   instant?: boolean;
   /** fired the moment the exit slide starts so the dashboard can reclaim the space */
@@ -74,6 +78,7 @@ export function NoteSheet({
   onCommit,
   onClose,
   onDelete,
+  onSettledChange,
   instant = false,
   onClosing,
   onOpening,
@@ -305,6 +310,19 @@ export function NoteSheet({
     commit({ ...draftRef.current, ...patch, last_edited: Date.now() }, immediate);
   };
 
+  // The card's menu can settle or move this note while it is open; this sheet's next save must
+  // not put it back.
+  useEffect(() => {
+    if (!!draftRef.current.is_settled === !!note.is_settled) return;
+    draftRef.current = { ...draftRef.current, is_settled: note.is_settled };
+    setDraft(draftRef.current);
+  }, [note.is_settled]);
+  useEffect(() => {
+    if (draftRef.current.category === note.category) return;
+    draftRef.current = { ...draftRef.current, category: note.category };
+    setDraft(draftRef.current);
+  }, [note.category]);
+
   const external = !!draft.source_path;
   const rawMode = draft.format === "txt";
 
@@ -459,6 +477,16 @@ export function NoteSheet({
     phaseTimer.current = window.setTimeout(() => onClose(), 290);
   };
   closeRef.current = close;
+
+  /** Settling puts the note away, so the sheet closes with it; bringing one back leaves it open. */
+  const toggleSettled = () => {
+    const next = { ...draftRef.current, is_settled: !draftRef.current.is_settled };
+    draftRef.current = next;
+    setDraft(next);
+    window.clearTimeout(saveTimer.current);
+    onSettledChange?.(next);
+    if (next.is_settled) close();
+  };
 
   const addShelf = () => {
     const name = newShelf.trim().slice(0, 24);
@@ -626,6 +654,18 @@ export function NoteSheet({
 
           {/* Right: Window Controls (Trash, Maximize, Close) */}
           <div className="flex shrink-0 items-center gap-1.5 pointer-events-auto">
+            {!external && onSettledChange && (
+              <button
+                type="button"
+                onClick={toggleSettled}
+                aria-label={draft.is_settled ? "Bring note back" : "Settle note"}
+                data-slot="settle-tick"
+                className={cx("icon-btn cursor-pointer", isMaximized ? "!size-8.5" : "!size-7")}
+                title={draft.is_settled ? "Bring back to its shelf" : "Settle: put away, search still finds it"}
+              >
+                {draft.is_settled ? <Undo2 size={isMaximized ? 15 : 12.5} strokeWidth={1.7} /> : <CircleCheck size={isMaximized ? 15 : 12.5} strokeWidth={1.7} />}
+              </button>
+            )}
             {!external && (
               <button
                 type="button"

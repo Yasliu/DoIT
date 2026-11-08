@@ -72,7 +72,7 @@ export function ModernSpotlight(props: ModernSpotlightProps) {
         icon: <FileText size={16} />,
         label: highlight(title, q),
         detail,
-        meta: `${cleanText(note.category)} · ${relativeShort(note.last_edited)}`,
+        meta: `${cleanText(note.category)}${note.is_settled ? " · Settled" : ""} · ${relativeShort(note.last_edited)}`,
         run: close(() => props.onOpenNote(note)),
       };
     };
@@ -85,7 +85,7 @@ export function ModernSpotlight(props: ModernSpotlightProps) {
       notes.push(...inTitle.sort(byRecent).slice(0, 12).map((n) => noteItem(n)));
       notes.push(...inBody.sort(byRecent).slice(0, 12).map((n) => noteItem(n, snippet(n, q))));
     } else {
-      notes.push(...[...props.notes].sort((a, b) => b.last_edited - a.last_edited).slice(0, 6).map((n) => noteItem(n)));
+      notes.push(...props.notes.filter((n) => !n.is_settled).sort((a, b) => b.last_edited - a.last_edited).slice(0, 6).map((n) => noteItem(n)));
     }
 
     const shelves: PaletteItem[] = [null, ...props.shelves]
@@ -95,7 +95,7 @@ export function ModernSpotlight(props: ModernSpotlightProps) {
         section: "Shelves",
         icon: shelfIcon(shelf),
         label: highlight(shelf === null ? "All notes" : cleanText(shelf), q),
-        meta: `${shelf === null ? props.notes.length : props.notes.filter((n) => n.category === shelf).length}`,
+        meta: `${props.notes.filter((n) => !n.is_settled && (shelf === null || n.category === shelf)).length}`,
         run: close(() => props.onOpenShelf(shelf)),
       }));
 
