@@ -111,6 +111,7 @@ fn rebuild_canvas(app: &AppHandle) -> Option<WebviewWindow> {
 fn reveal_canvas(app: &AppHandle) {
     if let Some(canvas) = app.get_webview_window(CANVAS) {
         focus(&plain(&canvas));
+        platform::make_visible(&plain(&canvas));
     }
     if let Some(dock) = app.get_webview_window(DOCK) {
         webview::retire(&dock);
@@ -416,10 +417,7 @@ pub fn enter_canvas(app: &AppHandle) {
     }
 
     if rebuilt {
-        // The page is loading in a fresh webview: reveal it when it reports ready, or after a timeout.
-        engine().canvas_reveal_pending = true;
-        std::thread::sleep(Duration::from_millis(3000));
-        canvas_ready(app);
+        reveal_canvas_when_ready(app);
     } else {
         reveal_canvas(app);
     }
@@ -430,7 +428,27 @@ fn set_rect(window: &WebviewWindow, rect: Rect) {
     let _ = window.set_position(tauri::PhysicalPosition::new(rect.x, rect.y));
 }
 
-/// The canvas page mounted (or the reveal timeout passed): show it if a rebuilt canvas is waiting.
+/// The page is loading in a fresh webview: reveal it when it reports ready, or after a timeout.
+pub fn reveal_canvas_when_ready(app: &AppHandle) {
+    engine().canvas_reveal_pending = true;
+    let app = app.clone();
+    std::thread::spawn(move || {
+        std::thread::sleep(Duration::from_millis(3000));
+        canvas_ready(&app);
+    });
+}
+
+/// The canvas's page has begun loading: map its window, still invisible, so the page can paint.
+pub fn canvas_loading(app: &AppHandle) {
+    if !engine().canvas_reveal_pending {
+        return;
+    }
+    if let Some(canvas) = app.get_webview_window(CANVAS) {
+        platform::map_invisibly(&plain(&canvas));
+    }
+}
+
+/// The canvas page has painted or mounted (or the reveal timeout passed): show it if it is waiting.
 pub fn canvas_ready(app: &AppHandle) {
     let pending = std::mem::take(&mut engine().canvas_reveal_pending);
     if pending {

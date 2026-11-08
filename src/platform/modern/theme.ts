@@ -491,6 +491,8 @@ export function themeFromSettings(s: ThemeSettings): ModernTheme {
 }
 
 const CACHE_KEY = "doit.theme";
+/** Read by the launch screen in index.html, before any of this code has loaded. */
+const BOOT_CANVAS_KEY = "doit.boot-canvas";
 const darkQuery = typeof window !== "undefined" ? window.matchMedia("(prefers-color-scheme: dark)") : null;
 let current: ModernTheme | null = null;
 
@@ -516,6 +518,11 @@ function paint({ palette, appearance, glass, boxy }: ModernTheme) {
   if (boxy) root.dataset.shape = "boxy";
   else delete root.dataset.shape;
   root.style.colorScheme = resolved;
+  try {
+    localStorage.setItem(BOOT_CANVAS_KEY, colors.canvas);
+  } catch {
+    /* the launch screen falls back to the OS light or dark */
+  }
   requestAnimationFrame(() => requestAnimationFrame(() => root.classList.remove("theme-switching")));
 }
 

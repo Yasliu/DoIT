@@ -111,6 +111,39 @@ pub fn focus_window(window: &tauri::Window) {
     let _ = window.set_focus();
 }
 
+/// Maps the window fully transparent, so its page can paint without the window being seen: a
+/// window shown before WebKit's first frame is black.
+pub fn map_invisibly(window: &tauri::Window) {
+    #[cfg(target_os = "linux")]
+    {
+        let target = window.clone();
+        let _ = window.run_on_main_thread(move || {
+            use gtk::prelude::WidgetExt;
+            let Ok(gtk_window) = target.gtk_window() else { return };
+            gtk_window.set_opacity(0.0);
+            // `show` alone would leave the webview inside unmapped, and it would never paint.
+            gtk_window.show_all();
+        });
+    }
+    #[cfg(not(target_os = "linux"))]
+    let _ = window;
+}
+
+pub fn make_visible(window: &tauri::Window) {
+    #[cfg(target_os = "linux")]
+    {
+        let target = window.clone();
+        let _ = window.run_on_main_thread(move || {
+            use gtk::prelude::WidgetExt;
+            if let Ok(gtk_window) = target.gtk_window() {
+                gtk_window.set_opacity(1.0);
+            }
+        });
+    }
+    #[cfg(not(target_os = "linux"))]
+    let _ = window;
+}
+
 /// Re-asserts keep_above / always_on_top on Linux (Mutter/X11/Wayland).
 pub fn ensure_always_on_top(window: &tauri::Window) {
     let _ = window.set_always_on_top(true);

@@ -209,6 +209,11 @@ pub const BROWSER_ARGS: &str = "--disable-features=msWebOOUI,msPdfOOUI,msSmartSc
 /// WebView2 is tuned at creation through `BROWSER_ARGS`.
 pub fn prepare_webview(_window: &tauri::WebviewWindow) {}
 
+/// WebView2 loads in a hidden window, so it simply stays hidden until it is ready.
+pub fn map_invisibly(_window: &tauri::Window) {}
+
+pub fn make_visible(_window: &tauri::Window) {}
+
 /// Destroying the window already releases WebView2's renderer.
 pub fn release_webview(_window: &tauri::WebviewWindow) {}
 

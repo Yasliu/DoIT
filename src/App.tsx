@@ -17,6 +17,7 @@ import { TitleBar } from "./components/TitleBar";
 import { UpdateInfo, UpdateModal } from "./components/UpdateModal";
 import { ReleaseLogModal } from "./components/ReleaseLogModal";
 import { useWorkspace } from "./hooks/useWorkspace";
+import { dismissBootScreen } from "./lib/bootScreen";
 import { accentFor, cleanText, cx } from "./lib/text";
 import { applyThemeSettings, isLinux, isModern } from "./platform";
 import { ModernSettings } from "./platform/modern/ModernSettings";
@@ -299,6 +300,10 @@ export default function App() {
   useEffect(() => {
     wasSheetOpen.current = !!openNote;
   }, [openNote]);
+
+  useEffect(() => {
+    if (state !== "loading") dismissBootScreen();
+  }, [state]);
 
   // The canvas can be swapped for a blank page while in tray mode: confirm each (re)load so it is revealed
   useEffect(() => {

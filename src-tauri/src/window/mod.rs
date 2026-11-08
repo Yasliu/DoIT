@@ -31,9 +31,16 @@ use state::{engine, Mode};
 const CANVAS: &str = webview::Surface::Canvas.label();
 const DOCK: &str = webview::Surface::Dock.label();
 
-/// Builds the canvas when the app starts.
-pub fn open_canvas(app: &AppHandle) -> Result<WebviewWindow, String> {
-    webview::open(app, webview::Surface::Canvas, true)
+/// Builds the canvas when the app starts. It stays hidden, already at its final size, until its
+/// page can paint: shown earlier it is an empty rectangle, and growing to maximized fills the new
+/// area with opaque black.
+pub fn launch_canvas(app: &AppHandle, maximized: bool) -> Result<(), String> {
+    lifecycle::reveal_canvas_when_ready(app);
+    let canvas = webview::open(app, webview::Surface::Canvas, false)?;
+    if maximized {
+        let _ = canvas.maximize();
+    }
+    Ok(())
 }
 
 /// How the dock opens from the canvas: as the pill, or as the panel (optionally on a note).
@@ -61,7 +68,12 @@ pub fn show_dock(app: &AppHandle, open: DockOpen) {
     });
 }
 
-/// The canvas page mounted; reveals a rebuilt canvas that was waiting for it.
+/// The canvas's page started loading; its window can be mapped, unseen, so the page can paint.
+pub fn canvas_loading(app: &AppHandle) {
+    lifecycle::canvas_loading(app);
+}
+
+/// The canvas page mounted; reveals a hidden canvas that was waiting for it.
 pub fn canvas_ready(app: &AppHandle) {
     lifecycle::canvas_ready(app);
 }
@@ -165,7 +177,8 @@ pub fn on_window_event(window: &Window, event: &WindowEvent) {
     match event {
         WindowEvent::Focused(true) if window.label() != CANVAS => platform::ensure_always_on_top(window),
         WindowEvent::Resized(_) if window.label() == CANVAS => {
-            if !window.is_minimized().unwrap_or(true) {
+            // A canvas still waiting to be shown is on its way to its size; it says nothing yet.
+            if !engine().canvas_reveal_pending && !window.is_minimized().unwrap_or(true) {
                 if let Ok(maximized) = window.is_maximized() {
                     let _ = window.app_handle().state::<StorageManager>().set_is_maximized(maximized);
                 }
