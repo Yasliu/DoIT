@@ -17,6 +17,9 @@
 - **Toolbar & Outside-Click Refinements (`EmojiPickerModal.tsx`, `InsertMenu.tsx`, `NoteSheet.tsx`, `TrayCompanion.tsx`)**:
   - Implemented capture-phase DOM outside-click detection on the emoji picker modal, preventing mutual toggle collisions with the formatting burger menu.
   - Added `onOpenChange` notification on `InsertMenu` to cleanly dismiss the emoji picker when opening the burger menu.
+- **Table Deletion Engine (`format.tsx`, `TableMenu.tsx`)**:
+  - Added explicit "Delete Table" action in the cell right-click context menu with rose destructive styling.
+  - Added smart Backspace key handling inside table cells: pressing Backspace on an empty table or in an empty first cell collapses the container back to a standard blank line.
 
 ## [2026-11-06] - Version 1.1.9: Comprehensive Markdown Engine Expansion, Persistent Uncategorized Anchor, & Extended Insert Menu
 
