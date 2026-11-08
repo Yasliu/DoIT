@@ -203,6 +203,19 @@ pub fn release_webview(window: &tauri::WebviewWindow) {
     let _ = window;
 }
 
+/// Only WebView2 takes browser arguments.
+pub const BROWSER_ARGS: &str = "";
+
+/// glibc keeps freed heap pages for reuse; after a webview closes (a few MB of UI-side state) hand
+/// them back to the system instead.
+pub fn trim_memory() {
+    #[cfg(all(target_os = "linux", target_env = "gnu"))]
+    // SAFETY: malloc_trim only releases free pages at the top of glibc's heaps.
+    unsafe {
+        libc::malloc_trim(0);
+    }
+}
+
 /// Font families from fontconfig, the same source WebKitGTK resolves CSS font names against.
 pub fn system_fonts() -> Vec<String> {
     let Ok(output) = std::process::Command::new("fc-list").args(["--format", "%{family[0]}\\n", ":"]).output() else {

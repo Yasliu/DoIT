@@ -10,21 +10,7 @@
     "frontendDist": "../dist"
   },
   "app": {
-    "windows": [
-      {
-        "title": "DoIT",
-        "label": "main",
-        "width": 1440,
-        "height": 900,
-        "minWidth": 900,
-        "minHeight": 620,
-        "decorations": false,
-        "transparent": true,
-        "shadow": true,
-        "resizable": true,
-        "additionalBrowserArgs": "--disable-features=msWebOOUI,msPdfOOUI,msSmartScreenProtection --js-flags=--expose-gc --disable-background-networking --disk-cache-size=8388608 --in-process-gpu"
-      }
-    ],
+    "windows": [],
     "security": {
       "csp": null,
       "assetProtocol": {

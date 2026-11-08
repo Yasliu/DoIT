@@ -22,9 +22,13 @@
 //!   (clamped to the screens every step, see `window::drag`) instead of the OS move loop.
 //! - `keep_wm_from_moving(window)`: stop the window manager's own move gestures on the dock
 //!   window, which could carry it off-screen. Call once it is shown.
+//! - `BROWSER_ARGS`: engine arguments every webview is built with (only WebView2 takes any).
 //! - `set_webview_memory_level(window, low)`: hint the webview to trim memory while idle.
 //! - `prepare_webview(window)`: one-off engine tuning for each newly built webview window.
 //! - `release_webview(window)`: free the page's engine resources; call right before `destroy()`.
+//! - `trim_memory()`: hand freed heap pages back to the system (after a webview closed).
+//!
+//! The webview items are used only by `window::webview`, which calls them in the right order.
 //! - `documents_dir()`: the user's Documents folder (default parent of the notes folder).
 //! - `system_fonts()`: installed font family names, sorted and deduplicated.
 
@@ -41,6 +45,6 @@ use unix as os;
 pub use os::{
     config_dir, dock_drag_by_app, documents_dir, focus_window, has_tray, init, keep_wm_from_moving, monitor_of_window, prepare_webview, release_webview,
     set_webview_memory_level, set_window_bounds,
-    system_fonts, work_area,
-    DOCK_WINDOW_RESIZABLE, TRAY_SKIPS_TASKBAR,
+    system_fonts, trim_memory, work_area,
+    BROWSER_ARGS, DOCK_WINDOW_RESIZABLE, TRAY_SKIPS_TASKBAR,
 };

@@ -9,18 +9,10 @@ use super::placement::{
     canvas_placement, clamp_into, dock_home, dock_size, reshape, CanvasGeometry, CanvasPlacement, DockShape, Growth, Rect,
 };
 use super::state::{engine, Mode};
+use super::webview::{self, Surface};
 use super::{DockOpen, CANVAS, DOCK};
 use crate::platform;
 use crate::storage::StorageManager;
-
-/// Identical browser arguments on EVERY window: WebView2 shares one browser/GPU process tree per
-/// (user-data-folder + arguments) pair, so mismatching args would spawn a second tree.
-pub const WEBVIEW_ARGS: &str = "--disable-features=msWebOOUI,msPdfOOUI,msSmartScreenProtection --js-flags=--expose-gc --disable-background-networking --disk-cache-size=8388608 --in-process-gpu";
-
-/// Forces a V8 garbage collection inside the page (needs --js-flags=--expose-gc).
-fn flush_webview_memory(window: &WebviewWindow) {
-    let _ = window.eval("try{if(window.gc){window.gc();}}catch(e){}");
-}
 
 fn place(window: &WebviewWindow, rect: Rect) {
     platform::set_window_bounds(window, rect.x, rect.y, rect.w as u32, rect.h as u32);
@@ -65,18 +57,14 @@ fn suspend_canvas(app: &AppHandle) {
     if engine().mode == Mode::Canvas || engine().external_dirty {
         return;
     }
-    flush_webview_memory(&canvas);
-    platform::release_webview(&canvas);
-    if canvas.destroy().is_ok() {
+    if webview::retire(&canvas) {
         engine().canvas_suspended = true;
     }
 }
 
-/// Rebuilds the (hidden) canvas window from its config; the page calls `canvas_ready` when mounted.
+/// Rebuilds the (hidden) canvas; its page calls `canvas_ready` when mounted.
 fn rebuild_canvas(app: &AppHandle) -> Option<WebviewWindow> {
-    let config = app.config().app.windows.iter().find(|w| w.label == CANVAS)?.clone();
-    let window = tauri::WebviewWindowBuilder::from_config(app, &config).ok()?.visible(false).build().ok()?;
-    platform::prepare_webview(&window);
+    let window = webview::open(app, Surface::Canvas, false).ok()?;
     engine().canvas_suspended = false;
     Some(window)
 }
@@ -87,30 +75,16 @@ fn reveal_canvas(app: &AppHandle) {
         focus(&canvas);
     }
     if let Some(dock) = app.get_webview_window(DOCK) {
-        platform::release_webview(&dock);
-        let _ = dock.destroy();
+        webview::retire(&dock);
     }
 }
 
 /// The dock window, built hidden on demand (its page calls `dock_ready` once mounted).
 fn ensure_dock(app: &AppHandle) -> Result<(WebviewWindow, bool), String> {
-    if let Some(existing) = app.get_webview_window(DOCK) {
-        return Ok((existing, false));
+    match app.get_webview_window(DOCK) {
+        Some(existing) => Ok((existing, false)),
+        None => Ok((webview::open(app, Surface::Dock, false)?, true)),
     }
-    let window = tauri::WebviewWindowBuilder::new(app, DOCK, tauri::WebviewUrl::App("index.html?window=tray".into()))
-        .title("DoIT Companion")
-        .decorations(false)
-        .transparent(true)
-        .shadow(false)
-        .always_on_top(true)
-        .resizable(platform::DOCK_WINDOW_RESIZABLE)
-        .skip_taskbar(platform::TRAY_SKIPS_TASKBAR)
-        .visible(false)
-        .additional_browser_args(WEBVIEW_ARGS)
-        .build()
-        .map_err(|e| e.to_string())?;
-    platform::prepare_webview(&window);
-    Ok((window, true))
 }
 
 pub fn enter_dock(app: &AppHandle, open: DockOpen) -> Result<(), String> {
@@ -183,11 +157,7 @@ pub fn reshape_dock(app: &AppHandle, shape: DockShape) -> Result<Growth, String>
         state.hold_moves(Duration::from_millis(250));
     }
     place(&dock, rect);
-    let idle = shape == DockShape::Pill;
-    if idle {
-        flush_webview_memory(&dock);
-    }
-    platform::set_webview_memory_level(&dock, idle);
+    webview::idle(&dock, shape == DockShape::Pill);
     Ok(growth)
 }
 

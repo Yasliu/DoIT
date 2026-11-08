@@ -167,11 +167,19 @@ pub fn set_webview_memory_level(window: &tauri::WebviewWindow, low: bool) {
     });
 }
 
-/// WebView2 is tuned at creation through `additionalBrowserArgs` / `WEBVIEW_ARGS`.
+/// WebView2 shares one browser/GPU process tree per (user-data-folder + arguments) pair, so every
+/// webview must get exactly these. `--expose-gc` lets the app collect garbage before idling or closing
+/// a page; `--in-process-gpu` folds the GPU process into the browser process.
+pub const BROWSER_ARGS: &str = "--disable-features=msWebOOUI,msPdfOOUI,msSmartScreenProtection --js-flags=--expose-gc --disable-background-networking --disk-cache-size=8388608 --in-process-gpu";
+
+/// WebView2 is tuned at creation through `BROWSER_ARGS`.
 pub fn prepare_webview(_window: &tauri::WebviewWindow) {}
 
 /// Destroying the window already releases WebView2's renderer.
 pub fn release_webview(_window: &tauri::WebviewWindow) {}
+
+/// The Windows heap gives freed pages back on its own.
+pub fn trim_memory() {}
 
 pub fn documents_dir() -> Option<PathBuf> {
     std::env::var_os("USERPROFILE")

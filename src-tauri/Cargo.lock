@@ -866,6 +866,7 @@ dependencies = [
  "gdkx11",
  "gio",
  "gtk",
+ "libc",
  "pulldown-cmark",
  "rfd",
  "serde",

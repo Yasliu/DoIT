@@ -14,18 +14,23 @@ mod geometry;
 mod lifecycle;
 mod placement;
 mod state;
+mod webview;
 
 use tauri::{AppHandle, Manager, WebviewWindow, Window, WindowEvent};
 
-pub use lifecycle::WEBVIEW_ARGS;
 pub use placement::{DockShape, Growth};
 
 use crate::platform;
 use crate::storage::StorageManager;
 use state::{engine, Mode};
 
-const CANVAS: &str = "main";
-const DOCK: &str = "tray";
+const CANVAS: &str = webview::Surface::Canvas.label();
+const DOCK: &str = webview::Surface::Dock.label();
+
+/// Builds the canvas when the app starts.
+pub fn open_canvas(app: &AppHandle) -> Result<WebviewWindow, String> {
+    webview::open(app, webview::Surface::Canvas, true)
+}
 
 /// How the dock opens from the canvas: as the pill, or as the panel (optionally on a note).
 #[derive(Debug, Default, Clone)]

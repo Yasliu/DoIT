@@ -81,15 +81,9 @@ pub fn run() {
                 app.handle().exit(0);
                 return Ok(());
             }
-            // Force absolute transparency on window background wrapper layer
-            // Launch Window State Persistence Engine: Restore maximize state
-            if let Some(main_win) = app.get_webview_window("main") {
-                platform::prepare_webview(&main_win);
-                let _ = main_win.set_decorations(false);
-                let storage = app.state::<StorageManager>();
-                if storage.get_is_maximized() {
-                    let _ = main_win.maximize();
-                }
+            let canvas = window::open_canvas(app.handle())?;
+            if app.state::<StorageManager>().get_is_maximized() {
+                let _ = canvas.maximize();
             }
             // Native Windows taskbar notification tray icon
             let show_item = MenuItem::with_id(app, "show", "Open Canvas", true, None::<&str>)?;

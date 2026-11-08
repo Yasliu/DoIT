@@ -38,6 +38,7 @@ webkit2gtk = { version = "2.0.2", features = ["v2_40"] }
 gio = "0.18"
 gtk = "0.18"
 gdkx11 = "0.18"
+libc = "0.2"
 
 # Read the optimization guideline for more details: https://tauri.app/concept/size/#cargo-configuration
 [profile.release]
