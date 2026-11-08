@@ -7,9 +7,7 @@ pub mod window;
 
 use actions::Action;
 use commands::files::{file_from_args, LaunchFile};
-use commands::window::{open_canvas_mode, open_tray_mode};
 use storage::StorageManager;
-use window::state::{MainWindowState, SAVED_MAIN_WINDOW_STATE};
 use tauri::{
     image::Image,
     menu::{Menu, MenuItem},
@@ -51,126 +49,31 @@ pub fn run() {
                 action.perform(app);
                 return;
             }
-            let main_visible = app
-                .get_webview_window("main")
-                .map(|w| w.is_visible().unwrap_or(false))
-                .unwrap_or(false);
             let path = file_from_args(&argv);
-            if !main_visible {
-                // canvas may have to be rebuilt: park the path so the fresh page picks it up on mount
-                if let Some(ref p) = path {
-                    if let Ok(mut slot) = app.state::<LaunchFile>().0.lock() {
-                        *slot = Some(p.clone());
-                    }
-                }
-                let _ = open_canvas_mode(app.clone());
-            } else {
-                if let Some(main) = app.get_webview_window("main") {
-                    let _ = main.unminimize();
-                    platform::focus_window(&main);
-                }
+            if window::in_canvas() {
+                window::show_canvas(app);
                 if let Some(p) = path {
                     let _ = app.emit("open-external-file", p);
                 }
+            } else {
+                // The canvas may have to be rebuilt: park the path so the fresh page picks it up on mount.
+                if let Some(p) = path {
+                    if let Ok(mut slot) = app.state::<LaunchFile>().0.lock() {
+                        *slot = Some(p);
+                    }
+                }
+                window::show_canvas(app);
             }
         }))
         .manage(storage_manager)
         .manage(LaunchFile(std::sync::Mutex::new(launch_file)))
         .plugin(tauri_plugin_opener::init())
         .plugin(tauri_plugin_updater::Builder::new().build())
-        .on_window_event(|window, event| {
-            let label = window.label().to_string();
-
-            if let tauri::WindowEvent::Moved(pos) = event {
-                if label == "tray" {
-                    commands::window::track_tray_window_moved(window, *pos);
-                }
-            }
-
-            if let tauri::WindowEvent::Resized(_) = event {
-                if label == "main" {
-                    if let Ok(is_min) = window.is_minimized() {
-                        if !is_min {
-                            if let Ok(is_max) = window.is_maximized() {
-                                let app = window.app_handle();
-                                let storage = app.state::<StorageManager>();
-                                let _ = storage.set_is_maximized(is_max);
-                            }
-                        }
-                    }
-                }
-            }
-
-            if let tauri::WindowEvent::CloseRequested { api, .. } = event {
-                // Always prevent native close — we manage visibility ourselves
-                api.prevent_close();
-
-                let app = window.app_handle().clone();
-
-                // Run on a background thread to avoid blocking the event callback
-                std::thread::spawn(move || {
-                    if label == "main" {
-                        // Save main window exact state before switching to tray
-                        if let Some(main_win) = app.get_webview_window("main") {
-                            let is_fullscreen = main_win.is_fullscreen().unwrap_or(false);
-                            let is_maximized = main_win.is_maximized().unwrap_or(false);
-                            let size = main_win.outer_size().ok();
-                            let position = main_win.outer_position().ok();
-                            let monitor_name = main_win
-                                .current_monitor()
-                                .ok()
-                                .flatten()
-                                .and_then(|m| m.name().cloned());
-
-                            let storage = app.state::<StorageManager>();
-                            let _ = storage.set_is_maximized(is_maximized);
-
-                            *SAVED_MAIN_WINDOW_STATE.lock().unwrap() = Some(MainWindowState {
-                                is_maximized,
-                                is_fullscreen,
-                                position,
-                                size,
-                                monitor_name,
-                            });
-                        }
-
-                        // X button on main: if dock_on_close is true, switch to floating docking mode; else exit
-                        let storage = app.state::<StorageManager>();
-                        if storage.get_dock_on_close() {
-                            let _ = open_tray_mode(app.clone(), None, None);
-                        } else {
-                            app.exit(0);
-                        }
-                    } else if platform::has_tray() {
-                        // Window-manager close (Alt+F4, the dock's Quit) on the pill/panel: hide it;
-                        // the tray icon brings it back.
-                        if let Some(win) = app.get_webview_window(&label) {
-                            let _ = win.hide();
-                        }
-                    } else {
-                        // No tray icon to come back from (stock GNOME): hiding would leave an
-                        // invisible process, so quit as the user asked.
-                        commands::window::quit_app(app.clone());
-                    }
-                });
-            }
-        })
-        .on_menu_event(|app, event| {
-            match event.id.as_ref() {
-                "maximize" | "show" => {
-                    let _ = open_canvas_mode(app.clone());
-                }
-                "quit" => {
-                    if let Some(main_win) = app.get_webview_window("main") {
-                        if let Ok(is_max) = main_win.is_maximized() {
-                            let storage = app.state::<StorageManager>();
-                            let _ = storage.set_is_maximized(is_max);
-                        }
-                    }
-                    app.exit(0);
-                }
-                _ => {}
-            }
+        .on_window_event(window::on_window_event)
+        .on_menu_event(|app, event| match event.id.as_ref() {
+            "maximize" | "show" => window::show_canvas(app),
+            "quit" => window::quit(app),
+            _ => {}
         })
         .setup(move |app| {
             // Reaching setup means no instance was running, so there is nothing to quit.
@@ -201,16 +104,11 @@ pub fn run() {
                 .tooltip("DoIT — click to toggle")
                 .menu(&tray_menu)
                 .show_menu_on_left_click(false)
-                .on_menu_event(|app, event| {
-                    let _ = match event.id.as_ref() {
-                        "show" => open_canvas_mode(app.clone()),
-                        "tray" => open_tray_mode(app.clone(), None, None),
-                        "quit" => {
-                            app.exit(0);
-                            Ok(())
-                        }
-                        _ => Ok(()),
-                    };
+                .on_menu_event(|app, event| match event.id.as_ref() {
+                    "show" => window::show_canvas(app),
+                    "tray" => window::show_dock(app, window::DockOpen::default()),
+                    "quit" => window::quit(app),
+                    _ => {}
                 })
                 .on_tray_icon_event(|tray, event| {
                     if let TrayIconEvent::Click {
@@ -252,14 +150,12 @@ pub fn run() {
             commands::settings::update_settings,
             commands::settings::get_system_fonts,
             commands::window::toggle_window_minimize,
-            commands::window::set_mini_window_mode,
             commands::window::open_tray_mode,
             commands::window::open_canvas_mode,
             commands::window::tray_ready,
             commands::window::set_tray_mode,
             commands::window::canvas_ready,
             commands::window::set_external_dirty,
-            commands::window::start_drag,
             commands::window::begin_dock_drag,
             commands::window::end_dock_drag,
             commands::window::save_tray_position,

@@ -3,12 +3,13 @@
 //! Where `platform::dock_drag_by_app` allows it, the app moves the window itself: it follows the
 //! cursor and passes every step through `keep_on_screen`, so the window stays wholly on the
 //! combined screen area while the button is held, not only after release. Elsewhere the OS move
-//! loop runs the drag and the position is clamped afterwards (`save_tray_position`).
+//! loop runs the drag and the position is clamped afterwards (`settle_dock`).
 
 use std::sync::atomic::{AtomicU64, Ordering};
 use std::time::Duration;
 
-use super::geometry::{keep_on_screen, screen_work_areas};
+use super::geometry::work_areas;
+use super::placement::keep_on_screen;
 use crate::platform;
 
 /// Bumped by every begin and end; a follow loop runs only while it still holds its own value.
@@ -31,7 +32,7 @@ pub fn begin(window: &tauri::WebviewWindow, grab: (f64, f64)) -> bool {
         let grab = ((grab.0 * scale).round() as i32, (grab.1 * scale).round() as i32);
         let Ok(size) = window.outer_size() else { return };
         let size = (size.width as i32, size.height as i32);
-        let screens = screen_work_areas(&window);
+        let screens = work_areas(&window);
         let mut last = window.outer_position().ok().map(|p| (p.x, p.y));
         while DRAG_GENERATION.load(Ordering::SeqCst) == generation {
             if let Ok(cursor) = window.cursor_position() {

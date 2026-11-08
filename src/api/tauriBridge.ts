@@ -352,14 +352,6 @@ export const tauriApi = {
     }
   },
 
-  async setMiniMode(mini: boolean): Promise<void> {
-    if (!isTauri()) return;
-    try {
-      await invoke("set_mini_window_mode", { mini });
-    } catch (err) {
-    }
-  },
-
   async openTrayMode(hasActiveNote?: boolean, noteId?: string): Promise<void> {
     if (!isTauri()) return;
     try {
@@ -435,26 +427,9 @@ export const tauriApi = {
   async beginDrag(): Promise<void> {
     if (!isTauri()) return;
     try {
-      await invoke("start_drag");
+      await getCurrentWindow().startDragging();
     } catch {
-      try {
-        await getCurrentWindow().startDragging();
-      } catch {
-        /* ignore */
-      }
-    }
-  },
-
-  async startDrag(): Promise<void> {
-    if (!isTauri()) return;
-    try {
-      await invoke("start_drag");
-    } catch {
-      try {
-        await getCurrentWindow().startDragging();
-      } catch {
-        /* ignore */
-      }
+      /* ignore */
     }
   },
 
