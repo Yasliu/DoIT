@@ -227,7 +227,6 @@ export function TrayCompanion() {
     changeMode("switching");
     const q = await tauriApi.setTrayMode("panel");
     if (q) setQuadrant(q);
-    await wait(45);
     changeMode("panel");
     openTray();
   }, [changeMode, openTray]);
@@ -237,7 +236,7 @@ export function TrayCompanion() {
     shownRef.current = false;
     setShown(false);
     // Fallback in case transitionend never fires
-    hideTimerRef.current = window.setTimeout(hideNow, 260);
+    hideTimerRef.current = window.setTimeout(hideNow, 180);
   }, [hideNow]);
 
   const toggleMinimize = useCallback(() => {
@@ -479,7 +478,7 @@ export function TrayCompanion() {
           y: 0,
           opacity: shown ? 1 : 0
         }}
-        transition={{ type: "spring", stiffness: 420, damping: 32 }}
+        transition={shown ? { type: "spring", stiffness: 420, damping: 32 } : { duration: 0.12, ease: "easeOut" }}
         onAnimationComplete={() => {
           if (!shown && !shownRef.current) {
             hideNow();
