@@ -195,16 +195,7 @@ export function setCategoryIcon(category: string, iconName: string | null): void
     localStorage.setItem(STORAGE_KEY, JSON.stringify(icons));
     window.dispatchEvent(new CustomEvent("category-icons-changed", { detail: { category, iconName } }));
 
-    // Persist to settings.json in Rust backend
-    void tauriApi.getSettings().then((s) => {
-      const current = s.category_icons || {};
-      if (iconName) {
-        current[key] = iconName;
-      } else {
-        delete current[key];
-      }
-      void tauriApi.patchSettings({ category_icons: current });
-    }).catch(() => undefined);
+    void tauriApi.setShelfIcon(category, iconName);
   } catch {
     /* ignore storage errors */
   }
@@ -221,15 +212,6 @@ export function renameCategoryIcon(oldName: string, newName: string): void {
       memoryIcons = icons;
       localStorage.setItem(STORAGE_KEY, JSON.stringify(icons));
       window.dispatchEvent(new CustomEvent("category-icons-changed"));
-
-      void tauriApi.getSettings().then((s) => {
-        const current = s.category_icons || {};
-        if (current[oldKey]) {
-          current[newKey] = current[oldKey];
-          delete current[oldKey];
-          void tauriApi.patchSettings({ category_icons: current });
-        }
-      }).catch(() => undefined);
     }
   } catch {
     /* ignore */
@@ -245,12 +227,6 @@ export function removeCategoryIcon(category: string): void {
       memoryIcons = icons;
       localStorage.setItem(STORAGE_KEY, JSON.stringify(icons));
       window.dispatchEvent(new CustomEvent("category-icons-changed"));
-
-      void tauriApi.getSettings().then((s) => {
-        const current = s.category_icons || {};
-        delete current[key];
-        void tauriApi.patchSettings({ category_icons: current });
-      }).catch(() => undefined);
     }
   } catch {
     /* ignore */

@@ -8,7 +8,7 @@ import { CategoryMenu } from "./components/CategoryMenu";
 import { IconPickerModal } from "./components/IconPickerModal";
 import { setMarkdownBaseDir } from "./lib/format";
 import { applyShortcutSettings, canvasShortcut } from "./lib/shortcuts";
-import { initCategoryIcons, setCategoryIcon } from "./lib/categoryIcons";
+import { setCategoryIcon } from "./lib/categoryIcons";
 import { suggestShelfIcon } from "./platform/modern/ShelfIcons";
 import { NoteSheet } from "./components/NoteSheet";
 import { SettingsPanel } from "./components/SettingsPanel";
@@ -39,7 +39,6 @@ interface Toast {
   undo?: NoteItem;
 }
 
-const COLLAPSE_KEY = "doit.collapsed";
 const CURRENT_VERSION = "1.1.7";
 const VERSION_TRACKER_KEY = "doit.release_notes_version";
 
@@ -54,15 +53,6 @@ function isVersionLower(current: string | null, target: string): boolean {
     if (cv > tv) return false;
   }
   return false;
-}
-
-function readCollapsed(): Record<string, boolean> {
-  try {
-    const raw = window.localStorage.getItem(COLLAPSE_KEY);
-    return raw ? (JSON.parse(raw) as Record<string, boolean>) : {};
-  } catch {
-    return {};
-  }
 }
 
 export function getAdaptiveMinDrawerWidth(): number {
@@ -121,7 +111,6 @@ export default function App() {
   const [isSettings, setIsSettings] = useState(false);
   const [mini] = useState(false);
   const [railOpen, setRailOpen] = useState(true);
-  const [collapsed, setCollapsed] = useState<Record<string, boolean>>(readCollapsed);
   const [toast, setToast] = useState<Toast | null>(null);
   const [themeMode, setThemeMode] = useState<"glass" | "monochrome">("glass");
   const [availableUpdate, setAvailableUpdate] = useState<UpdateInfo | null>(null);
@@ -263,19 +252,9 @@ export default function App() {
         setThemeMode(s.theme_mode as "glass" | "monochrome");
         document.documentElement.dataset.theme = s.theme_mode;
       }
-      if (s.category_icons) {
-        initCategoryIcons(s.category_icons);
-      }
     });
   }, []);
 
-  useEffect(() => {
-    try {
-      window.localStorage.setItem(COLLAPSE_KEY, JSON.stringify(collapsed));
-    } catch {
-      /* ignore */
-    }
-  }, [collapsed]);
 
   const dismissToast = useCallback(() => {
     window.clearTimeout(toastTimer.current);
@@ -460,9 +439,7 @@ export default function App() {
     [patch],
   );
 
-  const toggleCollapse = useCallback((shelf: string) => {
-    setCollapsed((prev) => ({ ...prev, [shelf]: !prev[shelf] }));
-  }, []);
+  const { collapsed, toggleCollapsed: toggleCollapse } = workspace;
 
   const toggleMini = useCallback(() => {
     void tauriApi.openTrayMode(Boolean(openNote), openNote?.note.id);
@@ -862,11 +839,6 @@ export default function App() {
             const err = await renameCategory(shelf, newName);
             if (!err) {
               setActive((cur) => (cur === shelf ? newName : cur));
-              setCollapsed((prev) => {
-                if (!(shelf in prev)) return prev;
-                const { [shelf]: was, ...rest } = prev;
-                return { ...rest, [newName]: was };
-              });
             }
             return err;
           }}

@@ -1,6 +1,7 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { getCurrentWindow } from "@tauri-apps/api/window";
-import { CategoryInfo, NoteItem, ScanSummary, tauriApi } from "../api/tauriBridge";
+import { NoteItem, ScanSummary, Shelf, tauriApi } from "../api/tauriBridge";
+import { initCategoryIcons } from "../lib/categoryIcons";
 import { uid } from "../lib/text";
 
 export type LoadState = "loading" | "ready" | "error";
@@ -13,29 +14,39 @@ export type LoadState = "loading" | "ready" | "error";
  * path re-creates it from the in-memory snapshot. Deferring the IPC delete would
  * resurrect the note if the app closed inside the undo window.
  */
-/**
- * Shelves in display order: the saved order first, any others alphabetically after them, and
- * Uncategorized always last. With no saved order this is plain alphabetical order.
- */
-export function sortShelves(names: string[], order: string[]): string[] {
-  const rank = new Map(order.map((name, i) => [name.toLowerCase(), i]));
-  const place = (name: string) =>
-    name.toLowerCase() === "uncategorized" ? Number.MAX_SAFE_INTEGER : (rank.get(name.toLowerCase()) ?? order.length);
-  return [...names].sort((a, b) => place(a) - place(b) || a.localeCompare(b, undefined, { sensitivity: "base" }));
-}
-
 export function useWorkspace() {
   const [notes, setNotes] = useState<NoteItem[]>([]);
-  const [categories, setCategories] = useState<CategoryInfo[]>([]);
-  // The order the user dragged shelves into (Linux sidebar). Without one, shelves stay alphabetical.
-  const [shelfOrder, setShelfOrder] = useState<string[]>([]);
+  /** Every shelf in display order, as the backend keeps it (with icon and collapsed state). */
+  const [shelfList, setShelfList] = useState<Shelf[]>([]);
+  const reloadShelves = useCallback(() => void tauriApi.getShelves().then(setShelfList), []);
+
+  // The icon helpers read a cache; keep it in step with the shelves.
   useEffect(() => {
-    void tauriApi.getSettings().then((s) => setShelfOrder(s.shelf_order ?? []));
+    const icons: Record<string, string> = {};
+    shelfList.forEach((shelf) => {
+      if (shelf.icon) icons[shelf.name.toLowerCase()] = shelf.icon;
+    });
+    if (shelfList.length) initCategoryIcons(icons);
+  }, [shelfList]);
+
+  /** Puts `order` first (others keep their place after it); the backend keeps "Uncategorized" last. */
+  const reorderShelves = useCallback((order: string[]) => {
+    setShelfList((prev) => {
+      const rank = new Map(order.map((name, i) => [name.toLowerCase(), i]));
+      const place = (shelf: Shelf, i: number) =>
+        shelf.name.toLowerCase() === "uncategorized" ? Number.MAX_SAFE_INTEGER : (rank.get(shelf.name.toLowerCase()) ?? order.length + i);
+      return prev.map((shelf, i) => ({ shelf, at: place(shelf, i) })).sort((a, b) => a.at - b.at).map(({ shelf }) => shelf);
+    });
+    void tauriApi.reorderShelves(order);
   }, []);
 
-  const saveShelfOrder = useCallback((order: string[]) => {
-    setShelfOrder(order);
-    void tauriApi.patchSettings({ shelf_order: order });
+  const collapsed = useMemo(() => Object.fromEntries(shelfList.map((s) => [s.name, s.collapsed])), [shelfList]);
+  const toggleCollapsed = useCallback((name: string) => {
+    setShelfList((prev) => {
+      const shelf = prev.find((s) => s.name.toLowerCase() === name.toLowerCase());
+      if (shelf) void tauriApi.setShelfCollapsed(shelf.name, !shelf.collapsed);
+      return prev.map((s) => (s === shelf ? { ...s, collapsed: !s.collapsed } : s));
+    });
   }, []);
 
   const [state, setState] = useState<LoadState>("loading");
@@ -46,12 +57,10 @@ export function useWorkspace() {
   const load = useCallback(async () => {
     setState("loading");
     try {
-      const [loadedNotes, loadedCategories] = await Promise.all([
-        tauriApi.getNotes(),
-        tauriApi.getCategories(),
-      ]);
+      const [loadedNotes, loadedShelves] = await Promise.all([tauriApi.getNotes(), tauriApi.getShelves()]);
       setNotes(loadedNotes);
-      setCategories(loadedCategories);
+      setShelfList(loadedShelves);
+      migrateCollapsedShelves(loadedShelves);
       setState("ready");
     } catch (err) {
       console.error("workspace load failed", err);
@@ -93,9 +102,7 @@ export function useWorkspace() {
       });
 
     getCurrentWindow()
-      .listen<void>("categories-changed", () => {
-        void tauriApi.getCategories().then(setCategories);
-      })
+      .listen<void>("shelves-changed", reloadShelves)
       .then((unlisten) => {
         unlistenCats = unlisten;
       });
@@ -216,62 +223,45 @@ export function useWorkspace() {
     [load],
   );
 
-  const deleteCategory = useCallback(
-    async (category: string) => {
-      if (category.toLowerCase() === "uncategorized") return;
-      setNotes((prev) =>
-        prev.map((n) =>
-          n.category.toLowerCase() === category.toLowerCase()
-            ? { ...n, category: "Uncategorized", last_edited: Date.now() }
-            : n,
-        ),
-      );
-      setCategories((prev) =>
-        prev.filter((c) => c.name.toLowerCase() !== category.toLowerCase()),
-      );
-      try {
-        await tauriApi.deleteCategory(category);
-      } catch (err) {
-        console.error("delete category failed", err);
-      }
-      void load();
-    },
-    [load],
-  );
+  const deleteCategory = useCallback(async (category: string) => {
+    if (category.toLowerCase() === "uncategorized") return;
+    const lower = category.toLowerCase();
+    setNotes((prev) =>
+      prev.map((n) => (n.category.toLowerCase() === lower ? { ...n, category: "Uncategorized", last_edited: Date.now() } : n)),
+    );
+    setShelfList((prev) => prev.filter((s) => s.name.toLowerCase() !== lower));
+    const moved = await tauriApi.deleteShelf(category);
+    setNotes((prev) => prev.map((n) => moved.find((m) => m.id === n.id) ?? n));
+    reloadShelves();
+  }, [reloadShelves]);
 
   const renameCategory = useCallback(async (category: string, rawName: string): Promise<string | null> => {
     const newName = rawName.trim().slice(0, 24);
-    // flush unsaved edits first so a late save cannot resurrect the old category name
+    // flush unsaved edits first so a late save cannot resurrect the old shelf name
     pending.current.forEach((n) => persist(n, true));
     try {
-      const updated = await tauriApi.renameCategory(category, newName);
-      setNotes((prev) => prev.map((n) => updated.find((u) => u.id === n.id) ?? n));
-      setCategories(await tauriApi.getCategories());
-      if (shelfOrder.some((s) => s.toLowerCase() === category.toLowerCase())) {
-        saveShelfOrder(shelfOrder.map((s) => (s.toLowerCase() === category.toLowerCase() ? newName : s)));
-      }
+      const moved = await tauriApi.renameShelf(category, newName);
+      setNotes((prev) => prev.map((n) => moved.find((m) => m.id === n.id) ?? n));
+      reloadShelves();
       return null;
     } catch (err) {
-      return typeof err === "string" ? err : "Could not rename category.";
+      return typeof err === "string" ? err : "Could not rename the shelf.";
     }
-  }, [persist, shelfOrder, saveShelfOrder]);
+  }, [persist, reloadShelves]);
 
-  const createCategory = useCallback(
-    async (category: string) => {
-      const trimmed = category.trim().slice(0, 24);
-      if (!trimmed) return;
-      setCategories((prev) => {
-        if (prev.some((c) => c.name.toLowerCase() === trimmed.toLowerCase())) return prev;
-        return [...prev, { name: trimmed, collapsed: false, color_accent: "#ffffff" }];
-      });
-      try {
-        await tauriApi.addCategory(trimmed);
-      } catch (err) {
-        console.warn("add category failed", err);
-      }
-    },
-    [],
-  );
+  const createCategory = useCallback(async (category: string) => {
+    const trimmed = category.trim().slice(0, 24);
+    if (!trimmed) return;
+    setShelfList((prev) => {
+      if (prev.some((s) => s.name.toLowerCase() === trimmed.toLowerCase())) return prev;
+      const at = prev.findIndex((s) => s.name.toLowerCase() === "uncategorized");
+      const next = [...prev];
+      next.splice(at < 0 ? next.length : at, 0, { name: trimmed, collapsed: false });
+      return next;
+    });
+    await tauriApi.createShelf(trimmed);
+    reloadShelves();
+  }, [reloadShelves]);
 
   /** A copy of `note` on `shelf`, saved as a note of its own. */
   const copyNote = useCallback(
@@ -346,18 +336,17 @@ export function useWorkspace() {
     [persist],
   );
 
+  /** Shelf names in display order, plus any a note is on that the backend has not reported yet. */
   const shelves = useMemo(() => {
-    const names = new Set<string>();
-    names.add("Uncategorized");
-    categories.forEach((category) => {
-      if (category.name.trim()) names.add(category.name.trim());
-    });
-    notes.forEach((note) => {
-      const name = (note.category || "Uncategorized").trim();
-      if (name) names.add(name);
-    });
-    return sortShelves([...names], shelfOrder);
-  }, [categories, notes, shelfOrder]);
+    const names = shelfList.map((s) => s.name);
+    const known = new Set(names.map((n) => n.toLowerCase()));
+    const extra = notes
+      .map((note) => (note.category || "Uncategorized").trim())
+      .filter((name) => name && !known.has(name.toLowerCase()) && known.add(name.toLowerCase()));
+    const at = names.findIndex((n) => n.toLowerCase() === "uncategorized");
+    if (at < 0) return [...names, ...extra, "Uncategorized"];
+    return [...names.slice(0, at), ...extra, ...names.slice(at)];
+  }, [shelfList, notes]);
 
   useEffect(() => {
     const flush = () => {
@@ -393,7 +382,7 @@ export function useWorkspace() {
       }
       return [imported, ...prev];
     });
-    void tauriApi.getCategories().then(setCategories);
+    reloadShelves();
     return imported;
   }, []);
 
@@ -401,7 +390,7 @@ export function useWorkspace() {
     const summary = await tauriApi.scanMarkdownFolder(folderPath);
     if (summary.imported_notes.length > 0) {
       setNotes(summary.imported_notes);
-      void tauriApi.getCategories().then(setCategories);
+      reloadShelves();
     }
     return summary;
   }, []);
@@ -410,7 +399,7 @@ export function useWorkspace() {
     const summary = await tauriApi.pickAndScanFolder();
     if (summary.imported_notes.length > 0) {
       setNotes(summary.imported_notes);
-      void tauriApi.getCategories().then(setCategories);
+      reloadShelves();
     }
     return summary;
   }, []);
@@ -418,14 +407,15 @@ export function useWorkspace() {
   const importFolderAsShelf = useCallback(async (shelf?: string) => {
     const result = await tauriApi.importFolderAsShelf(shelf);
     setNotes(result.notes);
-    void tauriApi.getCategories().then(setCategories);
+    reloadShelves();
     return result;
   }, []);
 
   return {
     notes,
-    categories,
     shelves,
+    collapsed,
+    toggleCollapsed,
     state,
     reload: load,
     create,
@@ -441,9 +431,25 @@ export function useWorkspace() {
     scanFolder,
     pickAndScan,
     importFolderAsShelf,
-    reorderShelves: saveShelfOrder,
+    reorderShelves,
     copyNote,
   };
 }
 
 export type Workspace = ReturnType<typeof useWorkspace>;
+
+/** Collapsed shelves used to live in this window's storage; hand them to the backend once. */
+function migrateCollapsedShelves(shelves: Shelf[]): void {
+  const KEY = "doit.collapsed";
+  try {
+    const raw = localStorage.getItem(KEY);
+    if (!raw) return;
+    const saved = JSON.parse(raw) as Record<string, boolean>;
+    shelves.forEach((shelf) => {
+      if (saved[shelf.name] && !shelf.collapsed) void tauriApi.setShelfCollapsed(shelf.name, true);
+    });
+    localStorage.removeItem(KEY);
+  } catch {
+    /* nothing to migrate */
+  }
+}

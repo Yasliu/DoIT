@@ -3,7 +3,6 @@ import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { motion } from "motion/react";
 import { getCurrentWindow } from "@tauri-apps/api/window";
 import { Mark } from "./Mark";
-import { initCategoryIcons } from "../lib/categoryIcons";
 import { HeadingSelect } from "./HeadingSelect";
 import { ImageLightbox } from "./ImageLightbox";
 import { InsertMenu } from "./InsertMenu";
@@ -83,7 +82,7 @@ import { accentFor, cleanText, cx, relativeShort, uid } from "../lib/text";
 const NO_CONTENT: ContentItem[] = [];
 
 export function TrayCompanion() {
-  const { notes, categories, patch, create, remove } = useWorkspace();
+  const { notes, shelves, patch, create, remove } = useWorkspace();
   const [shown, setShown] = useState(false);
   const shownRef = useRef(false);
   const hideTimerRef = useRef<number | null>(null);
@@ -209,16 +208,6 @@ export function TrayCompanion() {
     [notes, activeNoteId],
   );
 
-  const shelves = useMemo(() => {
-    const list = categories.map((c) => c.name);
-    return list.sort((a, b) => {
-      const aUn = a.toLowerCase() === "uncategorized";
-      const bUn = b.toLowerCase() === "uncategorized";
-      if (aUn && !bUn) return 1;
-      if (!aUn && bUn) return -1;
-      return a.localeCompare(b, undefined, { sensitivity: "base" });
-    });
-  }, [categories]);
   const rawMode = activeNote?.format === "txt";
   const [tableMenu, setTableMenu] = useState<{ x: number; y: number; cell: HTMLElement } | null>(null);
 
@@ -365,9 +354,6 @@ export function TrayCompanion() {
       applyThemeSettings(s);
       if (s.theme_mode) {
         document.documentElement.dataset.theme = s.theme_mode;
-      }
-      if (s.category_icons) {
-        initCategoryIcons(s.category_icons);
       }
       setMarkdownBaseDir(s.storage_path);
       applyShortcutSettings(s);

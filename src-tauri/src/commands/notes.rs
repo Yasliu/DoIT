@@ -1,6 +1,6 @@
 use tauri::{AppHandle, Emitter, State};
 
-use crate::models::{CategoryInfo, GridCoordinates, NoteItem};
+use crate::models::{GridCoordinates, NoteItem, Shelf};
 use crate::storage::StorageManager;
 
 #[tauri::command]
@@ -56,46 +56,57 @@ pub fn delete_note(
     Ok(removed)
 }
 
-#[tauri::command]
-pub fn get_categories(storage: State<'_, StorageManager>) -> Result<Vec<CategoryInfo>, String> {
-    storage.get_categories()
-}
-
-#[tauri::command]
-pub fn toggle_category_collapse(
-    category: String,
-    storage: State<'_, StorageManager>,
-) -> Result<bool, String> {
-    storage.toggle_category_collapse(&category)
-}
-
-#[tauri::command]
-pub fn add_category(
-    category: String,
-    storage: State<'_, StorageManager>,
-) -> Result<bool, String> {
-    storage.add_category(&category)
-}
-
-#[tauri::command]
-pub fn rename_category(
-    category: String,
-    new_name: String,
-    storage: State<'_, StorageManager>,
-    app: AppHandle,
-) -> Result<Vec<NoteItem>, String> {
-    let updated = storage.rename_category(&category, &new_name)?;
-    for note in &updated {
+/// Tells every window the shelves changed (and which notes moved with them).
+fn shelves_changed(app: &AppHandle, moved: &[NoteItem]) {
+    for note in moved {
         let _ = app.emit("note-saved", note);
     }
-    let _ = app.emit("categories-changed", ());
-    Ok(updated)
+    let _ = app.emit("shelves-changed", ());
 }
 
 #[tauri::command]
-pub fn delete_category(
-    category: String,
-    storage: State<'_, StorageManager>,
-) -> Result<bool, String> {
-    storage.delete_category(&category)
+pub fn get_shelves(storage: State<'_, StorageManager>) -> Result<Vec<Shelf>, String> {
+    storage.get_shelves()
+}
+
+#[tauri::command]
+pub fn create_shelf(name: String, storage: State<'_, StorageManager>, app: AppHandle) -> Result<bool, String> {
+    let created = storage.create_shelf(&name)?;
+    shelves_changed(&app, &[]);
+    Ok(created)
+}
+
+#[tauri::command]
+pub fn rename_shelf(name: String, new_name: String, storage: State<'_, StorageManager>, app: AppHandle) -> Result<Vec<NoteItem>, String> {
+    let moved = storage.rename_shelf(&name, &new_name)?;
+    shelves_changed(&app, &moved);
+    Ok(moved)
+}
+
+#[tauri::command]
+pub fn delete_shelf(name: String, storage: State<'_, StorageManager>, app: AppHandle) -> Result<Vec<NoteItem>, String> {
+    let moved = storage.delete_shelf(&name)?;
+    shelves_changed(&app, &moved);
+    Ok(moved)
+}
+
+#[tauri::command]
+pub fn reorder_shelves(names: Vec<String>, storage: State<'_, StorageManager>, app: AppHandle) -> Result<(), String> {
+    storage.reorder_shelves(&names)?;
+    shelves_changed(&app, &[]);
+    Ok(())
+}
+
+#[tauri::command]
+pub fn set_shelf_icon(name: String, icon: Option<String>, storage: State<'_, StorageManager>, app: AppHandle) -> Result<(), String> {
+    storage.set_shelf_icon(&name, icon)?;
+    shelves_changed(&app, &[]);
+    Ok(())
+}
+
+#[tauri::command]
+pub fn set_shelf_collapsed(name: String, collapsed: bool, storage: State<'_, StorageManager>, app: AppHandle) -> Result<(), String> {
+    storage.set_shelf_collapsed(&name, collapsed)?;
+    shelves_changed(&app, &[]);
+    Ok(())
 }
