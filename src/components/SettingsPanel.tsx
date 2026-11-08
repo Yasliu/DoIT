@@ -230,7 +230,7 @@ export function SettingsPanel({ onBack, onStoragePathChanged, onThemeChanged }: 
     setSettings(updated);
     document.documentElement.dataset.theme = mode;
     if (onThemeChanged) onThemeChanged(mode);
-    void tauriApi.updateSettings(updated);
+    void tauriApi.patchSettings({ theme_mode: mode });
   };
 
   const handleBrowseFolder = async () => {
@@ -268,7 +268,7 @@ export function SettingsPanel({ onBack, onStoragePathChanged, onThemeChanged }: 
       dock_on_close: checked,
     };
     setSettings(nextSettings);
-    await tauriApi.updateSettings(nextSettings);
+    await tauriApi.patchSettings({ dock_on_close: checked });
   };
 
   const handleSave = async () => {
@@ -278,7 +278,12 @@ export function SettingsPanel({ onBack, onStoragePathChanged, onThemeChanged }: 
       dock_on_close: settings.dock_on_close ?? true,
     };
     const pathChanged = nextSettings.storage_path !== settings.storage_path;
-    const res = await tauriApi.updateSettings(nextSettings);
+    const hotkeys = Object.fromEntries(Object.entries(nextSettings).filter(([key]) => key.startsWith("hotkey_")));
+    const res = await tauriApi.patchSettings({
+      ...hotkeys,
+      storage_path: nextSettings.storage_path,
+      dock_on_close: nextSettings.dock_on_close,
+    });
     applyShortcutSettings(res);
     setSettings(res);
     setSaved(true);
@@ -290,10 +295,8 @@ export function SettingsPanel({ onBack, onStoragePathChanged, onThemeChanged }: 
   };
 
   const handleResetDefaults = async () => {
-    const res = await tauriApi.updateSettings({
-      ...DEFAULT_SETTINGS,
-      storage_path: settings.storage_path, // Keep path, reset hotkeys
-    });
+    const { storage_path: _keepPath, ...defaults } = DEFAULT_SETTINGS;
+    const res = await tauriApi.patchSettings(defaults);
     applyShortcutSettings(res);
     setSettings(res);
     setSaved(true);

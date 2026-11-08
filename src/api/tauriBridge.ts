@@ -127,6 +127,15 @@ export const DEFAULT_SETTINGS: AppSettings = {
   dock_on_close: true,
 };
 
+/** The fields of `next` that differ from `prev`, i.e. what a settings screen changed. */
+export function settingsChanges(prev: AppSettings, next: AppSettings): Partial<AppSettings> {
+  const changes: Partial<Record<keyof AppSettings, unknown>> = {};
+  for (const key of Object.keys(next) as (keyof AppSettings)[]) {
+    if (JSON.stringify(prev[key]) !== JSON.stringify(next[key])) changes[key] = next[key];
+  }
+  return changes as Partial<AppSettings>;
+}
+
 export const NOTE_FONTS: Array<{ name: string; label: string; stack: string }> = [
   // Linux's interface typeface, offered for notes too.
   ...pick([], [{ name: "Inter", label: "Inter", stack: '"Inter Variable", "Inter", system-ui, sans-serif' }]),
@@ -224,15 +233,20 @@ export const tauriApi = {
     return stored ? JSON.parse(stored) : DEFAULT_SETTINGS;
   },
 
-  async updateSettings(settings: AppSettings): Promise<AppSettings> {
+  /**
+   * Saves only the given fields; every other setting keeps its saved value. Never send a whole
+   * settings object read earlier: another window may have changed a field since.
+   */
+  async patchSettings(changes: Partial<AppSettings>): Promise<AppSettings> {
     if (isTauri()) {
       try {
-        return await invoke<AppSettings>("update_settings", { settings });
+        return await invoke<AppSettings>("update_settings", { patch: changes });
       } catch (err) {
       }
     }
-    localStorage.setItem("doit.settings", JSON.stringify(settings));
-    return settings;
+    const merged = { ...(await tauriApi.getSettings()), ...changes };
+    localStorage.setItem("doit.settings", JSON.stringify(merged));
+    return merged;
   },
 
   async selectStorageDirectory(): Promise<string | null> {

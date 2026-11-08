@@ -207,9 +207,7 @@ export default function App() {
     try {
       sessionStorage.setItem("doit.release_notes_seen", CURRENT_VERSION);
       localStorage.setItem(VERSION_TRACKER_KEY, CURRENT_VERSION);
-      void tauriApi.getSettings().then((s) => {
-        void tauriApi.updateSettings({ ...s, last_seen_version: CURRENT_VERSION });
-      });
+      void tauriApi.patchSettings({ last_seen_version: CURRENT_VERSION });
     } catch {
       /* ignore */
     }
@@ -233,7 +231,7 @@ export default function App() {
         if (!diskSeen && !localSeen) {
           localStorage.setItem(VERSION_TRACKER_KEY, CURRENT_VERSION);
           sessionStorage.setItem("doit.release_notes_seen", CURRENT_VERSION);
-          void tauriApi.updateSettings({ ...s, last_seen_version: CURRENT_VERSION });
+          void tauriApi.patchSettings({ last_seen_version: CURRENT_VERSION });
           return;
         }
 
@@ -243,11 +241,11 @@ export default function App() {
           setShowReleaseModal(true);
           sessionStorage.setItem("doit.release_notes_seen", CURRENT_VERSION);
           localStorage.setItem(VERSION_TRACKER_KEY, CURRENT_VERSION);
-          void tauriApi.updateSettings({ ...s, last_seen_version: CURRENT_VERSION });
+          void tauriApi.patchSettings({ last_seen_version: CURRENT_VERSION });
         } else {
           sessionStorage.setItem("doit.release_notes_seen", CURRENT_VERSION);
           if (!diskSeen) {
-            void tauriApi.updateSettings({ ...s, last_seen_version: CURRENT_VERSION });
+            void tauriApi.patchSettings({ last_seen_version: CURRENT_VERSION });
           }
         }
       } catch {

@@ -206,12 +206,14 @@ impl StorageManager {
         Ok(())
     }
 
-    pub fn update_settings(&self, new_settings: AppSettings) -> Result<AppSettings, String> {
-        let old_path = {
+    /// Merges `patch` (any subset of the settings fields) into the saved settings. Callers send only
+    /// what they changed, so two windows saving different fields never undo each other.
+    pub fn update_settings(&self, patch: serde_json::Map<String, serde_json::Value>) -> Result<AppSettings, String> {
+        let (old_path, new_settings) = {
             let mut lock = self.settings.write().map_err(|e| e.to_string())?;
-            let old = lock.storage_path.clone();
-            *lock = new_settings.clone();
-            old
+            let merged = merge_settings(&lock, patch)?;
+            let old = std::mem::replace(&mut *lock, merged.clone());
+            (old.storage_path, merged)
         };
 
         self.persist_settings()?;
@@ -742,9 +744,38 @@ impl StorageManager {
     }
 }
 
+/// `current` with every field named in `patch` replaced; `null` clears an optional field.
+fn merge_settings(current: &AppSettings, patch: serde_json::Map<String, serde_json::Value>) -> Result<AppSettings, String> {
+    let mut fields = match serde_json::to_value(current).map_err(|e| e.to_string())? {
+        serde_json::Value::Object(map) => map,
+        _ => return Err("settings are not an object".to_string()),
+    };
+    fields.extend(patch);
+    serde_json::from_value(serde_json::Value::Object(fields)).map_err(|e| format!("Invalid settings: {e}"))
+}
+
 #[cfg(test)]
 mod tests {
-    use super::StorageManager;
+    use super::{merge_settings, StorageManager};
+    use crate::models::AppSettings;
+
+    #[test]
+    fn a_settings_patch_changes_only_the_fields_it_names() {
+        let mut current = AppSettings::default();
+        current.is_maximized = true;
+        current.shelf_order = Some(vec!["Work".into()]);
+        let patch = |json: &str| serde_json::from_str(json).unwrap();
+
+        // Two windows each saving their own field: both survive, and backend-owned fields stay put.
+        let once = merge_settings(&current, patch(r#"{"category_icons":{"work":"briefcase"}}"#)).unwrap();
+        let twice = merge_settings(&once, patch(r#"{"design":"modern"}"#)).unwrap();
+        assert_eq!(twice.shelf_order, Some(vec!["Work".to_string()]));
+        assert_eq!(twice.category_icons.unwrap().get("work").map(String::as_str), Some("briefcase"));
+        assert_eq!(twice.design.as_deref(), Some("modern"));
+        assert!(twice.is_maximized);
+
+        assert!(merge_settings(&current, patch(r#"{"is_maximized":"yes"}"#)).is_err());
+    }
 
     #[test]
     fn a_folder_imports_as_one_shelf_whatever_its_files_say() {

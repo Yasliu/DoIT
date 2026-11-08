@@ -14,11 +14,12 @@ pub fn get_settings(storage: State<'_, StorageManager>) -> Result<AppSettings, S
 }
 
 #[tauri::command]
+/// `patch` holds only the fields the caller changed; the rest keep their saved values.
 pub fn update_settings(
-    settings: AppSettings,
+    patch: serde_json::Map<String, serde_json::Value>,
     storage: State<'_, StorageManager>,
 ) -> Result<AppSettings, String> {
-    storage.update_settings(settings)
+    storage.update_settings(patch)
 }
 
 #[tauri::command]

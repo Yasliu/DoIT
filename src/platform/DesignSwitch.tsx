@@ -5,8 +5,7 @@ import { DESIGN_CACHE_KEY, DESIGN_CHANGED_EVENT, type Design, designIsOptional }
 
 /** Saves the design choice and reloads every DoIT window (canvas and dock) into it. */
 export async function setDesign(next: Design): Promise<void> {
-  const settings = await tauriApi.getSettings();
-  await tauriApi.updateSettings({ ...settings, design: next });
+  await tauriApi.patchSettings({ design: next });
   try {
     localStorage.setItem(DESIGN_CACHE_KEY, next);
   } catch {

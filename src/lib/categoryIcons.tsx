@@ -203,7 +203,7 @@ export function setCategoryIcon(category: string, iconName: string | null): void
       } else {
         delete current[key];
       }
-      void tauriApi.updateSettings({ ...s, category_icons: current });
+      void tauriApi.patchSettings({ category_icons: current });
     }).catch(() => undefined);
   } catch {
     /* ignore storage errors */
@@ -227,7 +227,7 @@ export function renameCategoryIcon(oldName: string, newName: string): void {
         if (current[oldKey]) {
           current[newKey] = current[oldKey];
           delete current[oldKey];
-          void tauriApi.updateSettings({ ...s, category_icons: current });
+          void tauriApi.patchSettings({ category_icons: current });
         }
       }).catch(() => undefined);
     }
@@ -249,7 +249,7 @@ export function removeCategoryIcon(category: string): void {
       void tauriApi.getSettings().then((s) => {
         const current = s.category_icons || {};
         delete current[key];
-        void tauriApi.updateSettings({ ...s, category_icons: current });
+        void tauriApi.patchSettings({ category_icons: current });
       }).catch(() => undefined);
     }
   } catch {

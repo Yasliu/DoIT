@@ -35,7 +35,7 @@ export function useWorkspace() {
 
   const saveShelfOrder = useCallback((order: string[]) => {
     setShelfOrder(order);
-    void tauriApi.getSettings().then((s) => tauriApi.updateSettings({ ...s, shelf_order: order }));
+    void tauriApi.patchSettings({ shelf_order: order });
   }, []);
 
   const [state, setState] = useState<LoadState>("loading");
