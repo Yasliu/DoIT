@@ -61,6 +61,18 @@ export interface ScanSummary {
   imported_notes: NoteItem[];
 }
 
+/** The dock pill's look, measured from CSS for the natively drawn pill (see platform/pillLook.ts). */
+export interface PillLook {
+  width: number;
+  height: number;
+  radius: number;
+  background: [number, number, number, number];
+  border: [number, number, number, number];
+  border_width: number;
+  text: [number, number, number, number];
+  letter_spacing: number;
+}
+
 export interface QuadrantInfo {
   grow_x: "right" | "left" | "center";
   grow_y: "down" | "up";
@@ -386,12 +398,23 @@ export const tauriApi = {
   },
 
   /** Tray page mounted: the backend shows the (pre-positioned) frame and returns the start mode. */
-  async trayReady(): Promise<"panel" | "pill"> {
-    if (!isTauri()) return "panel";
+  /** The dock page mounted: the backend shows it and says which shape it is in and which note to open. */
+  async trayReady(): Promise<{ shape: "panel" | "pill"; note: string | null }> {
+    if (!isTauri()) return { shape: "panel", note: null };
     try {
-      return (await invoke<string>("tray_ready")) === "pill" ? "pill" : "panel";
+      const ready = await invoke<{ shape: string; note: string | null }>("tray_ready");
+      return { shape: ready.shape === "pill" ? "pill" : "panel", note: ready.note ?? null };
     } catch {
-      return "panel";
+      return { shape: "panel", note: null };
+    }
+  },
+
+  async setPillLook(look: PillLook): Promise<void> {
+    if (!isTauri()) return;
+    try {
+      await invoke("set_pill_look", { look });
+    } catch {
+      /* the pill keeps its previous look */
     }
   },
 

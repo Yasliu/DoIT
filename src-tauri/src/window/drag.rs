@@ -20,7 +20,7 @@ const FOLLOW_INTERVAL: Duration = Duration::from_millis(8);
 
 /// Starts a drag that grabbed the window at `grab` (logical px from its top-left). Returns `true`
 /// when the app runs the drag (call `end` on release), `false` when the OS ran it to completion.
-pub fn begin(window: &tauri::WebviewWindow, grab: (f64, f64)) -> bool {
+pub fn begin(window: &tauri::Window, grab: (f64, f64)) -> bool {
     if !platform::dock_drag_by_app(window) {
         let _ = window.start_dragging();
         return false;

@@ -3,7 +3,7 @@
 use std::sync::{Mutex, MutexGuard};
 use std::time::{Duration, Instant};
 
-use super::placement::{CanvasGeometry, DockShape};
+use super::placement::{CanvasGeometry, DockShape, Rect};
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub enum Mode {
@@ -21,9 +21,13 @@ pub struct Engine {
     pub canvas_reveal_pending: bool,
     /// An externally opened file has unsaved edits: never destroy the canvas then.
     pub external_dirty: bool,
-    /// The shape and monitor a freshly built dock page opens in.
-    pub dock_start: DockShape,
+    /// Where a freshly built panel opens: on this monitor's home spot, or grown out of the pill at
+    /// `dock_anchor`; and the note it opens on.
     pub dock_screen: Option<String>,
+    pub dock_anchor: Option<Rect>,
+    pub dock_note: Option<String>,
+    /// Bumped by every dock change; a delayed job runs only if nothing changed since it was queued.
+    pub dock_generation: u64,
     /// Until then the app itself is moving the dock, so moves are not the user's.
     hold_until: Option<Instant>,
 }
@@ -34,8 +38,10 @@ static ENGINE: Mutex<Engine> = Mutex::new(Engine {
     canvas_suspended: false,
     canvas_reveal_pending: false,
     external_dirty: false,
-    dock_start: DockShape::Pill,
     dock_screen: None,
+    dock_anchor: None,
+    dock_note: None,
+    dock_generation: 0,
     hold_until: None,
 });
 

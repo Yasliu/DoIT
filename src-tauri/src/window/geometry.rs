@@ -1,6 +1,6 @@
 //! The Tauri side of placement: which monitor a window is on, as a `Screen`, and its current rect.
 
-use tauri::{AppHandle, Monitor, WebviewWindow};
+use tauri::{AppHandle, Monitor, Window};
 
 use super::placement::{Rect, Screen};
 use crate::platform;
@@ -17,14 +17,14 @@ fn to_screen(monitor: &Monitor) -> Screen {
 }
 
 /// The window's outer rect in physical px.
-pub fn rect_of(window: &WebviewWindow) -> Option<Rect> {
+pub fn rect_of(window: &Window) -> Option<Rect> {
     let (pos, size) = (window.outer_position().ok()?, window.outer_size().ok()?);
     Some(Rect { x: pos.x, y: pos.y, w: size.width as i32, h: size.height as i32 })
 }
 
 /// The monitor the window is on: the OS's own answer where it has one, else the monitor under the
 /// window's centre, else the one it overlaps most, else the primary.
-pub fn screen_of(window: &WebviewWindow) -> Option<Screen> {
+pub fn screen_of(window: &Window) -> Option<Screen> {
     if let Some(monitor) = platform::monitor_of_window(window).or_else(|| window.current_monitor().ok().flatten()) {
         return Some(to_screen(&monitor));
     }
@@ -47,7 +47,7 @@ pub fn screen_of(window: &WebviewWindow) -> Option<Screen> {
     window.primary_monitor().ok().flatten().map(|m| to_screen(&m))
 }
 
-pub fn screen_named(window: &WebviewWindow, name: &str) -> Option<Screen> {
+pub fn screen_named(window: &Window, name: &str) -> Option<Screen> {
     window.available_monitors().ok()?.iter().find(|m| m.name().is_some_and(|n| n == name)).map(to_screen)
 }
 
@@ -56,6 +56,6 @@ pub fn primary_screen(app: &AppHandle) -> Option<Screen> {
 }
 
 /// The usable area of every connected monitor.
-pub fn work_areas(window: &WebviewWindow) -> Vec<Rect> {
+pub fn work_areas(window: &Window) -> Vec<Rect> {
     window.available_monitors().unwrap_or_default().iter().map(|m| to_screen(m).work).collect()
 }

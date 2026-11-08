@@ -1,9 +1,10 @@
 //! DoIT's two modes and the windows that show them.
 //!
 //! - Canvas: the "main" window renders the full React canvas.
-//! - Dock: the "tray" window, in one of two shapes: the pill (a small floating button) or the panel
-//!   (note list and editor). ONE live webview at a time: entering the dock destroys the canvas
-//!   webview (rebuilt on the way back), and returning to the canvas destroys the dock's.
+//! - Dock, in one of two shapes: the pill (a small floating button, drawn natively by `pill` with no
+//!   webview at all) or the panel (the "tray" webview: note list and editor). At most ONE live
+//!   webview: entering the dock destroys the canvas webview (rebuilt on the way back), and returning
+//!   to the canvas destroys the dock's.
 //!
 //! Callers name the mode they want and report what the pages and the OS did; where windows go
 //! (`placement`, pure and tested) and when webviews are built or freed stays inside this module.
@@ -12,12 +13,14 @@
 mod drag;
 mod geometry;
 mod lifecycle;
+mod pill;
 mod placement;
 mod state;
 mod webview;
 
 use tauri::{AppHandle, Manager, WebviewWindow, Window, WindowEvent};
 
+pub use pill::PillLook;
 pub use placement::{DockShape, Growth};
 
 use crate::platform;
@@ -62,9 +65,25 @@ pub fn canvas_ready(app: &AppHandle) {
     lifecycle::canvas_ready(app);
 }
 
-/// The dock page mounted; shows its window and returns the shape the page starts in.
-pub fn dock_ready(window: &WebviewWindow) -> DockShape {
+/// The dock page mounted; shows its window and returns the shape the page starts in, and the note
+/// to open.
+pub fn dock_ready(window: &WebviewWindow) -> (DockShape, Option<String>) {
     lifecycle::dock_ready(window)
+}
+
+/// The pill's look as the page measured it from its CSS (design and theme).
+pub fn set_pill_look(look: PillLook) {
+    pill::set_look(look);
+}
+
+/// The dock's context menu (pill and panel): back to the canvas, or quit. Its items are handled by
+/// the app's menu-event handler ("maximize", "quit").
+pub fn dock_menu(app: &AppHandle) -> tauri::Result<tauri::menu::Menu<tauri::Wry>> {
+    use tauri::menu::{MenuBuilder, MenuItemBuilder, PredefinedMenuItem};
+    let maximize = MenuItemBuilder::with_id("maximize", "Maximize").build(app)?;
+    let separator = PredefinedMenuItem::separator(app)?;
+    let quit = MenuItemBuilder::with_id("quit", "Quit DoIT").build(app)?;
+    MenuBuilder::new(app).item(&maximize).item(&separator).item(&quit).build()
 }
 
 /// Changes the dock between pill and panel, returning which way it grew.
@@ -75,7 +94,7 @@ pub fn reshape_dock(app: &AppHandle, shape: DockShape) -> Result<Growth, String>
 /// Starts dragging the dock, grabbed at `grab` (logical px from its top-left). `true` means the app
 /// runs the drag and `end_dock_drag` must follow on release; `false` means the OS already ran it.
 pub fn begin_dock_drag(window: &WebviewWindow, grab: (f64, f64)) -> bool {
-    drag::begin(window, grab)
+    drag::begin(&window.as_ref().window(), grab)
 }
 
 pub fn end_dock_drag(app: &AppHandle) {
@@ -139,7 +158,7 @@ pub fn on_window_event(window: &Window, event: &WindowEvent) {
                 } else if platform::has_tray() {
                     // Window-manager close on the dock (Alt+F4, the dock's Quit): hide it; the tray
                     // icon brings it back.
-                    if let Some(dock) = app.get_webview_window(&label) {
+                    if let Some(dock) = app.get_window(&label) {
                         let _ = dock.hide();
                     }
                 } else {

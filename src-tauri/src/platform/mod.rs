@@ -29,6 +29,8 @@
 //! - `trim_memory()`: hand freed heap pages back to the system (after a webview closed).
 //!
 //! The webview items are used only by `window::webview`, which calls them in the right order.
+//! - `attach_pill(window, on_input)`: turn a plain window into the native dock pill's surface and
+//!   report pointer input on it. `present_pill(window, frame)`: show a rendered frame on it.
 //! - `documents_dir()`: the user's Documents folder (default parent of the notes folder).
 //! - `system_fonts()`: installed font family names, sorted and deduplicated.
 
@@ -42,7 +44,31 @@ mod unix;
 #[cfg(not(windows))]
 use unix as os;
 
+/// Pointer input on the native pill, in logical px from the window's top-left.
+#[derive(Clone, Copy, Debug, PartialEq)]
+pub enum PillInput {
+    Enter,
+    Leave,
+    Press(f64, f64),
+    Move(f64, f64),
+    Release(f64, f64),
+    /// The secondary button: open the pill's context menu.
+    Menu,
+}
+
+/// One rendered pill frame: premultiplied RGBA rows, `width` x `height` physical px, for a window
+/// at `scale` (physical px per logical px).
+pub struct PillFrame {
+    pub width: u32,
+    pub height: u32,
+    pub scale: f64,
+    pub rgba: Vec<u8>,
+}
+
+pub type PillInputHandler = Box<dyn Fn(PillInput) + Send + Sync>;
+
 pub use os::{
+    attach_pill, present_pill,
     config_dir, dock_drag_by_app, documents_dir, focus_window, has_tray, init, keep_wm_from_moving, monitor_of_window, prepare_webview, release_webview,
     set_webview_memory_level, set_window_bounds,
     system_fonts, trim_memory, work_area,

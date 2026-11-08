@@ -30,10 +30,22 @@ pub fn open_canvas_mode(app: AppHandle) {
     window::show_canvas(&app);
 }
 
+#[derive(serde::Serialize)]
+pub struct DockReady {
+    shape: &'static str,
+    note: Option<String>,
+}
+
 /// Called by the dock page after mount: reveals the (already positioned) window.
 #[tauri::command]
-pub fn tray_ready(window: WebviewWindow) -> String {
-    window::dock_ready(&window).as_str().to_string()
+pub fn tray_ready(window: WebviewWindow) -> DockReady {
+    let (shape, note) = window::dock_ready(&window);
+    DockReady { shape: shape.as_str(), note }
+}
+
+#[tauri::command]
+pub fn set_pill_look(look: window::PillLook) {
+    window::set_pill_look(look);
 }
 
 /// Changes the dock between "panel" and "pill"; the page hides its content while this runs.
@@ -71,16 +83,6 @@ pub fn quit_app(app: AppHandle) {
 
 #[tauri::command]
 pub fn show_tray_context_menu(app: AppHandle, window: WebviewWindow) -> Result<(), String> {
-    use tauri::menu::{MenuBuilder, MenuItemBuilder, PredefinedMenuItem};
-
-    let maximize_item = MenuItemBuilder::with_id("maximize", "Maximize").build(&app).map_err(|e| e.to_string())?;
-    let separator = PredefinedMenuItem::separator(&app).map_err(|e| e.to_string())?;
-    let quit_item = MenuItemBuilder::with_id("quit", "Quit DoIT").build(&app).map_err(|e| e.to_string())?;
-    let menu = MenuBuilder::new(&app)
-        .item(&maximize_item)
-        .item(&separator)
-        .item(&quit_item)
-        .build()
-        .map_err(|e| e.to_string())?;
+    let menu = window::dock_menu(&app).map_err(|e| e.to_string())?;
     window.popup_menu(&menu).map_err(|e| e.to_string())
 }

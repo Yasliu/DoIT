@@ -64,7 +64,7 @@ pub fn config_dir() -> Option<PathBuf> {
     Some(base.join("DoIT"))
 }
 
-pub fn monitor_of_window(_window: &tauri::WebviewWindow) -> Option<tauri::Monitor> {
+pub fn monitor_of_window(_window: &tauri::Window) -> Option<tauri::Monitor> {
     None
 }
 
@@ -79,7 +79,7 @@ pub fn work_area(monitor: &tauri::Monitor) -> (i32, i32, i32, i32) {
 /// Mutter's focus-stealing prevention ignores a focus request without a fresh X user timestamp: the
 /// window stayed behind with a "DoIT is ready" notification whenever a shortcut, the dock or a second
 /// launch raised it. Stamp the window with the current server time so it counts as user-initiated.
-pub fn focus_window(window: &tauri::WebviewWindow) {
+pub fn focus_window(window: &tauri::Window) {
     #[cfg(target_os = "linux")]
     {
         let target = window.clone();
@@ -105,7 +105,7 @@ pub fn focus_window(window: &tauri::WebviewWindow) {
 /// Mutter lets a window being moved slide off the screen, so under X11 the app moves the dock
 /// window itself during a drag (see `window::drag`). A native Wayland compositor ignores client
 /// positions (and GDK cannot report the cursor there), so it keeps running the drag.
-pub fn dock_drag_by_app(_window: &tauri::WebviewWindow) -> bool {
+pub fn dock_drag_by_app(_window: &tauri::Window) -> bool {
     cfg!(target_os = "linux")
         && (std::env::var("GDK_BACKEND").is_ok_and(|b| b == "x11") || std::env::var_os("WAYLAND_DISPLAY").is_none())
 }
@@ -113,7 +113,7 @@ pub fn dock_drag_by_app(_window: &tauri::WebviewWindow) -> bool {
 /// Takes "move" out of the window's Motif functions, so mutter refuses its own move gestures
 /// (Super+drag, Alt+F7, the window menu) that could carry the dock window off the screen.
 /// Moves the app requests itself still go through.
-pub fn keep_wm_from_moving(window: &tauri::WebviewWindow) {
+pub fn keep_wm_from_moving(window: &tauri::Window) {
     #[cfg(target_os = "linux")]
     {
         let target = window.clone();
@@ -140,7 +140,7 @@ pub const DOCK_WINDOW_RESIZABLE: bool = cfg!(target_os = "linux");
 /// window manager could then see the move at the old size and push the window back on screen), so
 /// both happen in one main-thread pass. A mapped window also gets them through GDK directly, because
 /// GTK sends hints only in a later idle pass and skips a move to the position it last requested.
-pub fn set_window_bounds(window: &tauri::WebviewWindow, x: i32, y: i32, w: u32, h: u32) {
+pub fn set_window_bounds(window: &tauri::Window, x: i32, y: i32, w: u32, h: u32) {
     #[cfg(target_os = "linux")]
     {
         let target = window.clone();
@@ -214,6 +214,132 @@ pub fn trim_memory() {
     unsafe {
         libc::malloc_trim(0);
     }
+}
+
+#[cfg(target_os = "linux")]
+thread_local! {
+    /// The pill's drawing area and its latest frame, per window label. GTK objects live on the main
+    /// thread only, so they are kept here rather than passed around.
+    static PILLS: std::cell::RefCell<std::collections::HashMap<String, PillSurface>> = Default::default();
+}
+
+#[cfg(target_os = "linux")]
+struct PillSurface {
+    area: gtk::DrawingArea,
+    frame: std::rc::Rc<std::cell::RefCell<Option<gtk::cairo::ImageSurface>>>,
+}
+
+/// Fills the plain window with a GTK drawing area that paints the latest frame and reports pointer
+/// input on it. GTK keeps the pointer grabbed while a button is held, so moves and the release still
+/// arrive when a drag leaves the window.
+pub fn attach_pill(window: &tauri::Window, on_input: crate::platform::PillInputHandler) {
+    #[cfg(target_os = "linux")]
+    {
+        let target = window.clone();
+        let _ = window.run_on_main_thread(move || {
+            use crate::platform::PillInput;
+            use gtk::gdk::EventMask;
+            use gtk::glib::Propagation;
+            use gtk::prelude::{BoxExt, WidgetExt, WidgetExtManual};
+            let Ok(vbox) = target.default_vbox() else { return };
+            let area = gtk::DrawingArea::new();
+            area.add_events(
+                EventMask::BUTTON_PRESS_MASK
+                    | EventMask::BUTTON_RELEASE_MASK
+                    | EventMask::POINTER_MOTION_MASK
+                    | EventMask::ENTER_NOTIFY_MASK
+                    | EventMask::LEAVE_NOTIFY_MASK,
+            );
+            let frame: std::rc::Rc<std::cell::RefCell<Option<gtk::cairo::ImageSurface>>> = Default::default();
+            let shown = frame.clone();
+            area.connect_draw(move |_, cr| {
+                cr.set_operator(gtk::cairo::Operator::Source);
+                match shown.borrow().as_ref() {
+                    Some(surface) => {
+                        let _ = cr.set_source_surface(surface, 0.0, 0.0);
+                    }
+                    None => cr.set_source_rgba(0.0, 0.0, 0.0, 0.0),
+                }
+                let _ = cr.paint();
+                Propagation::Stop
+            });
+            let on_input = std::rc::Rc::new(on_input);
+            let input = on_input.clone();
+            area.connect_button_press_event(move |_, e| {
+                let (x, y) = e.position();
+                match e.button() {
+                    1 => input(PillInput::Press(x, y)),
+                    3 => input(PillInput::Menu),
+                    _ => {}
+                }
+                Propagation::Stop
+            });
+            let input = on_input.clone();
+            area.connect_button_release_event(move |_, e| {
+                if e.button() == 1 {
+                    let (x, y) = e.position();
+                    input(PillInput::Release(x, y));
+                }
+                Propagation::Stop
+            });
+            let input = on_input.clone();
+            area.connect_motion_notify_event(move |_, e| {
+                let (x, y) = e.position();
+                input(PillInput::Move(x, y));
+                Propagation::Stop
+            });
+            let input = on_input.clone();
+            area.connect_enter_notify_event(move |_, _| {
+                input(PillInput::Enter);
+                Propagation::Proceed
+            });
+            let input = on_input;
+            area.connect_leave_notify_event(move |_, _| {
+                input(PillInput::Leave);
+                Propagation::Proceed
+            });
+            vbox.pack_start(&area, true, true, 0);
+            area.show();
+            let label = target.label().to_string();
+            let gone = label.clone();
+            area.connect_destroy(move |_| {
+                let _ = PILLS.try_with(|pills| pills.borrow_mut().remove(&gone));
+            });
+            PILLS.with(|pills| pills.borrow_mut().insert(label, PillSurface { area, frame }));
+        });
+    }
+    #[cfg(not(target_os = "linux"))]
+    let _ = (window, on_input);
+}
+
+pub fn present_pill(window: &tauri::Window, frame: crate::platform::PillFrame) {
+    #[cfg(target_os = "linux")]
+    {
+        let label = window.label().to_string();
+        let _ = window.run_on_main_thread(move || {
+            use gtk::prelude::WidgetExt;
+            // cairo's ARGB32 is premultiplied BGRA in memory on little-endian machines.
+            let mut bgra = frame.rgba;
+            for px in bgra.chunks_exact_mut(4) {
+                px.swap(0, 2);
+            }
+            let stride = frame.width as i32 * 4;
+            let Ok(surface) =
+                gtk::cairo::ImageSurface::create_for_data(bgra, gtk::cairo::Format::ARgb32, frame.width as i32, frame.height as i32, stride)
+            else {
+                return;
+            };
+            surface.set_device_scale(frame.scale, frame.scale);
+            PILLS.with(|pills| {
+                if let Some(pill) = pills.borrow().get(&label) {
+                    *pill.frame.borrow_mut() = Some(surface);
+                    pill.area.queue_draw();
+                }
+            });
+        });
+    }
+    #[cfg(not(target_os = "linux"))]
+    let _ = (window, frame);
 }
 
 /// Font families from fontconfig, the same source WebKitGTK resolves CSS font names against.

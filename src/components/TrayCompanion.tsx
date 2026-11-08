@@ -8,7 +8,6 @@ import { HeadingSelect } from "./HeadingSelect";
 import { ImageLightbox } from "./ImageLightbox";
 import { InsertMenu } from "./InsertMenu";
 import { ModeToggle } from "./ModeToggle";
-import { TrayPill } from "./TrayPill";
 import { RawEditor } from "./RawEditor";
 import { TableMenu } from "./TableMenu";
 import { EmojiAutocomplete } from "./EmojiAutocomplete";
@@ -315,7 +314,8 @@ export function TrayCompanion() {
 
   // The page just mounted inside a hidden, pre-positioned frame: reveal it and fade the panel in
   useEffect(() => {
-    void tauriApi.trayReady().then((start) => {
+    void tauriApi.trayReady().then(({ shape: start, note }) => {
+      if (note) setActiveNoteId(note);
       if (start === "pill") {
         changeMode("pill");
       } else {
@@ -711,13 +711,9 @@ export function TrayCompanion() {
     window.addEventListener("pointerup", onPointerUp);
   };
 
-  // Floating bar / resize-in-progress share the same frame as the panel
+  // The pill is drawn natively by the backend; while switching or collapsed this window shows nothing.
   if (mode !== "panel") {
-    return (
-      <div className="h-screen w-screen bg-transparent" style={{ background: "transparent" }}>
-        {mode === "pill" && <TrayPill onOpen={() => void expandFromPill()} />}
-      </div>
-    );
+    return <div className="h-screen w-screen bg-transparent" style={{ background: "transparent" }} />;
   }
 
   // ---- RENDER DESK TRAY WORKSPACE ----

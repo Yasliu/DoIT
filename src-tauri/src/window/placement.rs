@@ -7,7 +7,7 @@ use serde::Serialize;
 pub const SCREEN_MARGIN: i32 = 8;
 
 /// The pill's window size in logical px (the drawn pill sits inside it with a little margin).
-const PILL_SIZE: (f64, f64) = (200.0, 52.0);
+pub const PILL_SIZE: (f64, f64) = (200.0, 52.0);
 /// The panel's preferred size in logical px; smaller screens get less (see `dock_size`).
 const PANEL_SIZE: (f64, f64) = (440.0, 620.0);
 /// The canvas's preferred size in logical px when it has no saved geometry.

@@ -14,6 +14,7 @@
 
 import { listen } from "@tauri-apps/api/event";
 import { trackWindowFrame } from "./modern/frame";
+import { trackPillLook } from "./pillLook";
 import { applyModernTheme, restoreModernTheme, themeFromSettings, type ThemeSettings } from "./modern/theme";
 
 export type Platform = "windows" | "linux" | "macos" | "other";
@@ -67,7 +68,10 @@ export function markPlatform(): void {
   root.dataset.platform = platform;
   root.dataset.design = design;
   // The canvas and the dock are separate windows; a design switch in one reloads both.
-  if ("__TAURI_INTERNALS__" in window) void listen(DESIGN_CHANGED_EVENT, () => window.location.reload());
+  if ("__TAURI_INTERNALS__" in window) {
+    void listen(DESIGN_CHANGED_EVENT, () => window.location.reload());
+    trackPillLook();
+  }
   if (!isModern) return;
   restoreModernTheme();
   if (isLinux && !window.location.search.includes("window=tray")) trackWindowFrame();
@@ -106,5 +110,4 @@ export const text = {
   noNotes: pick("An empty canvas. Write the first note and it will find a shelf.", "No notes yet."),
   openNoteToWrite: pick("Open to start writing.", "Empty note"),
   loadingWorkspace: pick("Opening the workspace…", "Loading notes…"),
-  pillTitle: pick("Click to open Docking Mode · Hold and drag to move", "Open · drag to move"),
 };

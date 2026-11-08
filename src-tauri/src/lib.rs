@@ -147,6 +147,7 @@ pub fn run() {
             commands::window::open_tray_mode,
             commands::window::open_canvas_mode,
             commands::window::tray_ready,
+            commands::window::set_pill_look,
             commands::window::set_tray_mode,
             commands::window::canvas_ready,
             commands::window::set_external_dirty,
