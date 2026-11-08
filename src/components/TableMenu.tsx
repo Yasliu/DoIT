@@ -1,5 +1,5 @@
 import { useEffect } from "react";
-import { addTableColumn, addTableRow, deleteTableColumn, deleteTableRow } from "../lib/format";
+import { addTableColumn, addTableRow, deleteTableColumn, deleteTableRow, deleteTable } from "../lib/format";
 import { cx } from "../lib/text";
 
 interface TableMenuProps {
@@ -17,7 +17,7 @@ export function TableMenu({ x, y, cell, onClose, onChanged }: TableMenuProps) {
   const onlyColumn = (cell.closest("tr")?.children.length ?? 1) <= 1;
   const width = 168;
   const posX = Math.max(8, Math.min(x, window.innerWidth - width - 8));
-  const posY = Math.max(8, Math.min(y, window.innerHeight - 170));
+  const posY = Math.max(8, Math.min(y, window.innerHeight - 215));
 
   useEffect(() => {
     const onKey = (e: KeyboardEvent) => {
@@ -94,6 +94,15 @@ export function TableMenu({ x, y, cell, onClose, onChanged }: TableMenuProps) {
           )}
         >
           Delete Row
+        </button>
+        <div className="my-1 h-px bg-white/[0.08]" />
+        <button
+          type="button"
+          onMouseDown={(e) => e.preventDefault()}
+          onClick={() => run(() => deleteTable(cell))}
+          className={cx(item, "text-rose-400 hover:bg-rose-500/15 hover:text-rose-300")}
+        >
+          Delete Table
         </button>
       </div>
     </>
