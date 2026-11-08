@@ -25,6 +25,8 @@ use crate::storage::StorageManager;
 
 /// How long a closed panel's webview is kept (hidden) before it is retired.
 const PANEL_KEEPALIVE: Duration = Duration::from_secs(20);
+/// How long the canvas stays alive (hidden) behind the pill, so a quick trip back is instant.
+const CANVAS_KEEPALIVE: Duration = Duration::from_secs(20);
 
 fn plain(window: &WebviewWindow) -> Window {
     window.as_ref().window()
@@ -64,18 +66,32 @@ pub fn remember_canvas(app: &AppHandle) {
 }
 
 /// Dock mode: the canvas webview is DESTROYED (after the page flushed pending saves), so the engine
-/// reclaims its renderer and whole layout tree. It is rebuilt on the way back.
-fn suspend_canvas(app: &AppHandle) {
+/// reclaims its renderer and whole layout tree. It is rebuilt on the way back. Behind the pill it
+/// lives for `CANVAS_KEEPALIVE` first; the panel retires it at once, to keep to one page.
+fn suspend_canvas(app: &AppHandle, keep_alive: bool) {
     let Some(canvas) = app.get_webview_window(CANVAS) else { return };
     let _ = canvas.hide();
-    {
-        let state = engine();
+    let departure = {
+        let mut state = engine();
         if state.canvas_suspended || state.external_dirty {
             return;
         }
-    }
+        state.canvas_departure += 1;
+        state.canvas_departure
+    };
     flush::pages(app, &[CANVAS]);
-    // The canvas came back in the meantime, or an external file has unsaved edits: leave it alone.
+    if keep_alive {
+        std::thread::sleep(CANVAS_KEEPALIVE);
+        if engine().canvas_departure != departure {
+            return;
+        }
+    }
+    retire_canvas(app);
+}
+
+/// Destroys the hidden canvas, unless it came back or an external file has unsaved edits.
+fn retire_canvas(app: &AppHandle) {
+    let Some(canvas) = app.get_webview_window(CANVAS) else { return };
     if engine().mode == Mode::Canvas || engine().external_dirty {
         return;
     }
@@ -170,7 +186,7 @@ pub fn enter_dock(app: &AppHandle, open: DockOpen) -> Result<(), String> {
             }
         },
     }
-    suspend_canvas(app);
+    suspend_canvas(app, shape == DockShape::Pill);
     Ok(())
 }
 
@@ -242,6 +258,7 @@ fn open_panel_from_pill(app: &AppHandle) {
     if engine().mode != Mode::Dock(DockShape::Pill) {
         return;
     }
+    retire_canvas(app);
     match app.get_webview_window(DOCK) {
         // The kept page expands itself and calls `reshape_dock(Panel)`.
         Some(dock) if engine().dock_page_ready => {

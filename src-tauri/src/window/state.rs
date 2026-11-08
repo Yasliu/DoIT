@@ -17,6 +17,8 @@ pub struct Engine {
     pub canvas: Option<CanvasGeometry>,
     /// The canvas webview was destroyed for the dock and has to be rebuilt.
     pub canvas_suspended: bool,
+    /// Identifies the latest trip from the canvas to the dock; a delayed retire checks it is still current.
+    pub canvas_departure: u64,
     /// A rebuilt canvas is waiting for its page to report ready before it is shown.
     pub canvas_reveal_pending: bool,
     /// An externally opened file has unsaved edits: never destroy the canvas then.
@@ -38,6 +40,7 @@ static ENGINE: Mutex<Engine> = Mutex::new(Engine {
     mode: Mode::Canvas,
     canvas: None,
     canvas_suspended: false,
+    canvas_departure: 0,
     canvas_reveal_pending: false,
     external_dirty: false,
     dock_screen: None,
