@@ -1,0 +1,3 @@
+# Pasted images are files beside the notes
+
+A pasted image used to be stored as base64 inside the note, which kept every note self-contained in one file but copied the image through the editor, undo history, IPC, memory and disk on every keystroke. New images are now saved once in `assets/` in the notes folder, named by their content, and the note links to them with a relative path. This costs the single-file property: moving a note alone loses its images, and nothing removes an image once no note links to it. Notes that already embed images keep working, and external files still embed, because a relative link would break in other apps.

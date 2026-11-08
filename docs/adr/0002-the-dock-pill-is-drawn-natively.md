@@ -1,0 +1,3 @@
+# The dock pill is drawn natively
+
+The pill is the one surface that sits on screen all day, and as a webview it kept a whole page and every note loaded to draw one button: about half of DoIT's memory while docked. It is now a plain window drawn in Rust, with a small adapter per OS, even though that means a piece of UI outside React and a second place to change if the pill's content changes. Its look still comes from CSS, measured by the page and reported to the backend, so themes carry over. Opening the panel from a cold pill now waits for a webview to start; a closed panel's webview is kept for 20 seconds so reopening right away stays instant.
