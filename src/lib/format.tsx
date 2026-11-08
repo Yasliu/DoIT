@@ -120,15 +120,50 @@ export function insertInlineImageAtCaret(editor: HTMLElement, base64OrUrl: strin
   }
   const nextId = `img-${maxN + 1}`;
 
+  const img = createImage(base64OrUrl, alt);
+  img.setAttribute("data-ref", nextId);
+  img.setAttribute("data-md", `![${alt}][${nextId}]`);
+  placeImageAtCaret(editor, img);
+}
+
+function createImage(src: string, alt: string): HTMLImageElement {
   const img = document.createElement("img");
   img.className = "md-img";
   img.contentEditable = "false";
   img.draggable = false;
   img.alt = alt;
-  img.src = base64OrUrl;
-  img.setAttribute("data-ref", nextId);
-  img.setAttribute("data-md", `![${alt}][${nextId}]`);
+  img.src = src;
+  return img;
+}
 
+/** Alt text that cannot end the image's Markdown early. */
+function safeAlt(alt: string): string {
+  return alt.replace(/[[\]]/g, " ").trim() || "Image";
+}
+
+/** Inserts an image saved next to the notes, linked by its relative `path`. */
+export function insertSavedImageAtCaret(editor: HTMLElement, path: string, alt: string): void {
+  const label = safeAlt(alt);
+  const img = createImage(resolveImageSrc(path) ?? path, label);
+  img.setAttribute("data-md", `![${label}](${path})`);
+  placeImageAtCaret(editor, img);
+}
+
+/** The plain-text counterpart of `insertSavedImageAtCaret`. */
+export function insertSavedImageInMarkdown(md: string, path: string, caretPos: number, alt: string): { text: string; newCaret: number } {
+  const before = md.slice(0, caretPos);
+  const segment = `${before.length > 0 && !before.endsWith("\n") ? "\n" : ""}![${safeAlt(alt)}](${path})\n`;
+  return { text: `${before}${segment}${md.slice(caretPos)}`, newCaret: caretPos + segment.length };
+}
+
+/** The image's Markdown with new alt text, keeping its link exactly as the note wrote it. */
+export function imageMarkdownWithAlt(img: HTMLImageElement, alt: string): string {
+  const current = img.getAttribute("data-md") ?? "";
+  const target = current.match(/^!\[[^\]]*\](\(.*\)|\[.*\])$/)?.[1];
+  return `![${safeAlt(alt)}]${target ?? `(${img.getAttribute("src") ?? ""})`}`;
+}
+
+function placeImageAtCaret(editor: HTMLElement, img: HTMLImageElement): void {
   const nextLine = document.createElement("div");
   const br = document.createElement("br");
   nextLine.appendChild(br);

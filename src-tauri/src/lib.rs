@@ -7,9 +7,7 @@ pub mod window;
 
 use actions::Action;
 use commands::files::{file_from_args, LaunchFile};
-use commands::window::{open_canvas_mode, open_tray_mode};
 use storage::StorageManager;
-use window::state::{MainWindowState, SAVED_MAIN_WINDOW_STATE};
 use tauri::{
     image::Image,
     menu::{Menu, MenuItem},
@@ -19,9 +17,24 @@ use tauri::{
 
 const TRAY_ICON_BYTES: &[u8] = include_bytes!("../icons/tray_rgba.bin");
 
+/// Tauri's default async runtime starts one worker per CPU core (16 idle threads on a 16-core
+/// laptop, each with its own allocator arena). DoIT's async commands are a handful of file
+/// pickers, so two workers are plenty.
+fn use_small_async_runtime() {
+    let runtime = tokio::runtime::Builder::new_multi_thread()
+        .worker_threads(2)
+        .enable_all()
+        .build()
+        .expect("async runtime");
+    tauri::async_runtime::set(runtime.handle().clone());
+    // Lives for the whole process; dropping it would stop every async command.
+    std::mem::forget(runtime);
+}
+
 #[cfg_attr(mobile, tauri::mobile_entry_point)]
 pub fn run() {
     platform::init();
+    use_small_async_runtime();
 
     let storage_manager = StorageManager::new();
 
@@ -36,134 +49,31 @@ pub fn run() {
                 action.perform(app);
                 return;
             }
-            let main_visible = app
-                .get_webview_window("main")
-                .map(|w| w.is_visible().unwrap_or(false))
-                .unwrap_or(false);
             let path = file_from_args(&argv);
-            if !main_visible {
-                // canvas may have to be rebuilt: park the path so the fresh page picks it up on mount
-                if let Some(ref p) = path {
-                    if let Ok(mut slot) = app.state::<LaunchFile>().0.lock() {
-                        *slot = Some(p.clone());
-                    }
-                }
-                let _ = open_canvas_mode(app.clone());
-            } else {
-                if let Some(main) = app.get_webview_window("main") {
-                    let _ = main.unminimize();
-                    platform::focus_window(&main);
-                }
+            if window::in_canvas() {
+                window::show_canvas(app);
                 if let Some(p) = path {
                     let _ = app.emit("open-external-file", p);
                 }
+            } else {
+                // The canvas may have to be rebuilt: park the path so the fresh page picks it up on mount.
+                if let Some(p) = path {
+                    if let Ok(mut slot) = app.state::<LaunchFile>().0.lock() {
+                        *slot = Some(p);
+                    }
+                }
+                window::show_canvas(app);
             }
         }))
         .manage(storage_manager)
         .manage(LaunchFile(std::sync::Mutex::new(launch_file)))
         .plugin(tauri_plugin_opener::init())
         .plugin(tauri_plugin_updater::Builder::new().build())
-        .on_window_event(|window, event| {
-            let label = window.label().to_string();
-
-            if let tauri::WindowEvent::Moved(pos) = event {
-                if label == "tray" {
-                    commands::window::track_tray_window_moved(window, *pos);
-                }
-            }
-
-            if let tauri::WindowEvent::Focused(focused) = event {
-                if label == "tray" && *focused {
-                    if let Some(tray) = window.app_handle().get_webview_window("tray") {
-                        platform::ensure_always_on_top(&tray);
-                    }
-                }
-            }
-
-            if let tauri::WindowEvent::Resized(_) = event {
-                if label == "main" {
-                    if let Ok(is_min) = window.is_minimized() {
-                        if !is_min {
-                            if let Ok(is_max) = window.is_maximized() {
-                                let app = window.app_handle();
-                                let storage = app.state::<StorageManager>();
-                                let _ = storage.set_is_maximized(is_max);
-                            }
-                        }
-                    }
-                }
-            }
-
-            if let tauri::WindowEvent::CloseRequested { api, .. } = event {
-                // Always prevent native close — we manage visibility ourselves
-                api.prevent_close();
-
-                let app = window.app_handle().clone();
-
-                // Run on a background thread to avoid blocking the event callback
-                std::thread::spawn(move || {
-                    if label == "main" {
-                        // Save main window exact state before switching to tray
-                        if let Some(main_win) = app.get_webview_window("main") {
-                            let is_fullscreen = main_win.is_fullscreen().unwrap_or(false);
-                            let is_maximized = main_win.is_maximized().unwrap_or(false);
-                            let size = main_win.outer_size().ok();
-                            let position = main_win.outer_position().ok();
-                            let monitor_name = main_win
-                                .current_monitor()
-                                .ok()
-                                .flatten()
-                                .and_then(|m| m.name().cloned());
-
-                            let storage = app.state::<StorageManager>();
-                            let _ = storage.set_is_maximized(is_maximized);
-
-                            *SAVED_MAIN_WINDOW_STATE.lock().unwrap() = Some(MainWindowState {
-                                is_maximized,
-                                is_fullscreen,
-                                position,
-                                size,
-                                monitor_name,
-                            });
-                        }
-
-                        // X button on main: if dock_on_close is true, switch to floating docking mode; else exit
-                        let storage = app.state::<StorageManager>();
-                        if storage.get_dock_on_close() {
-                            let _ = open_tray_mode(app.clone(), None, None);
-                        } else {
-                            app.exit(0);
-                        }
-                    } else if platform::has_tray() {
-                        // Window-manager close (Alt+F4, the dock's Quit) on the pill/panel: hide it;
-                        // the tray icon brings it back.
-                        if let Some(win) = app.get_webview_window(&label) {
-                            let _ = win.hide();
-                        }
-                    } else {
-                        // No tray icon to come back from (stock GNOME): hiding would leave an
-                        // invisible process, so quit as the user asked.
-                        commands::window::quit_app(app.clone());
-                    }
-                });
-            }
-        })
-        .on_menu_event(|app, event| {
-            match event.id.as_ref() {
-                "maximize" | "show" => {
-                    let _ = open_canvas_mode(app.clone());
-                }
-                "quit" => {
-                    if let Some(main_win) = app.get_webview_window("main") {
-                        if let Ok(is_max) = main_win.is_maximized() {
-                            let storage = app.state::<StorageManager>();
-                            let _ = storage.set_is_maximized(is_max);
-                        }
-                    }
-                    app.exit(0);
-                }
-                _ => {}
-            }
+        .on_window_event(window::on_window_event)
+        .on_menu_event(|app, event| match event.id.as_ref() {
+            "maximize" | "show" => window::show_canvas(app),
+            "quit" => window::quit(app),
+            _ => {}
         })
         .setup(move |app| {
             // Reaching setup means no instance was running, so there is nothing to quit.
@@ -171,15 +81,10 @@ pub fn run() {
                 app.handle().exit(0);
                 return Ok(());
             }
-            // Force absolute transparency on window background wrapper layer
-            // Launch Window State Persistence Engine: Restore maximize state
-            if let Some(main_win) = app.get_webview_window("main") {
-                platform::prepare_webview(&main_win);
-                let _ = main_win.set_decorations(false);
-                let storage = app.state::<StorageManager>();
-                if storage.get_is_maximized() {
-                    let _ = main_win.maximize();
-                }
+            commands::settings::allow_note_images(app.handle(), &app.state::<StorageManager>());
+            let canvas = window::open_canvas(app.handle())?;
+            if app.state::<StorageManager>().get_is_maximized() {
+                let _ = canvas.maximize();
             }
             // Native Windows taskbar notification tray icon
             let show_item = MenuItem::with_id(app, "show", "Open Canvas", true, None::<&str>)?;
@@ -194,16 +99,11 @@ pub fn run() {
                 .tooltip("DoIT — click to toggle")
                 .menu(&tray_menu)
                 .show_menu_on_left_click(false)
-                .on_menu_event(|app, event| {
-                    let _ = match event.id.as_ref() {
-                        "show" => open_canvas_mode(app.clone()),
-                        "tray" => open_tray_mode(app.clone(), None, None),
-                        "quit" => {
-                            app.exit(0);
-                            Ok(())
-                        }
-                        _ => Ok(()),
-                    };
+                .on_menu_event(|app, event| match event.id.as_ref() {
+                    "show" => window::show_canvas(app),
+                    "tray" => window::show_dock(app, window::DockOpen::default()),
+                    "quit" => window::quit(app),
+                    _ => {}
                 })
                 .on_tray_icon_event(|tray, event| {
                     if let TrayIconEvent::Click {
@@ -225,11 +125,14 @@ pub fn run() {
             commands::notes::update_note_category,
             commands::notes::update_note_coordinates,
             commands::notes::delete_note,
-            commands::notes::get_categories,
-            commands::notes::add_category,
-            commands::notes::delete_category,
-            commands::notes::rename_category,
-            commands::notes::toggle_category_collapse,
+            commands::notes::get_shelves,
+            commands::notes::create_shelf,
+            commands::notes::rename_shelf,
+            commands::notes::delete_shelf,
+            commands::notes::reorder_shelves,
+            commands::notes::set_shelf_icon,
+            commands::notes::set_shelf_collapsed,
+            commands::files::save_attachment,
             commands::files::take_launch_file,
             commands::files::open_external_file,
             commands::files::save_external_file,
@@ -245,22 +148,28 @@ pub fn run() {
             commands::settings::update_settings,
             commands::settings::get_system_fonts,
             commands::window::toggle_window_minimize,
-            commands::window::set_mini_window_mode,
             commands::window::open_tray_mode,
             commands::window::open_canvas_mode,
             commands::window::tray_ready,
+            commands::window::set_pill_look,
             commands::window::set_tray_mode,
             commands::window::canvas_ready,
             commands::window::set_external_dirty,
-            commands::window::start_drag,
             commands::window::begin_dock_drag,
             commands::window::end_dock_drag,
-            commands::window::ensure_dock_topmost,
             commands::window::save_tray_position,
+            commands::window::ensure_dock_topmost,
             commands::window::restart_app,
             commands::window::quit_app,
+            commands::window::flush_done,
             commands::window::show_tray_context_menu
         ])
-        .run(tauri::generate_context!())
-        .expect("error while running DoIT tauri application");
+        .build(tauri::generate_context!())
+        .expect("error while building DoIT")
+        .run(|app, event| {
+            // Note files are written in the background; let the last edits land before exiting.
+            if let tauri::RunEvent::Exit = event {
+                app.state::<StorageManager>().flush_writes();
+            }
+        });
 }

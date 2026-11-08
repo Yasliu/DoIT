@@ -7,21 +7,25 @@ React + TypeScript frontend, Rust backend. Shipped for Windows; a Linux port is 
 
 - `src/`: React frontend. `api/tauriBridge.ts` is the only place that calls `invoke`; `components/`,
   `hooks/` (`useWorkspace` owns app state), `lib/` (pure helpers), `styles/`.
+  - `editor/`: the note editor shared by the canvas sheet and the dock panel (`useNoteEditor` plus
+    the pieces that render it). Each window keeps only its own chrome and toolbar.
   - `platform/`: the frontend's seam for OS and design. `index.ts` sets `data-platform` and
     `data-design` on `<html>`: `isLinux` is for real OS behaviour only; `isModern`, `pick` and `text`
-    pick the design. Two designs: classic (Windows' original look) and modern (always on Linux; on
-    Windows behind the experimental `design` setting, switched in `DesignSwitch.tsx`). `modern/` holds
+    pick the design. Modern is the design on every OS since v1.2.0 (`isModern` is always true); the
+    classic components are still in the tree but unreachable. `modern/` holds
     the modern look (`modern.css`, themes, Boxy) and the components it swaps in (sidebar, settings,
     Spotlight search, create and shelf dialogs, dock list), chosen in `App`/`TrayCompanion`.
 - `src-tauri/src/`: Rust backend.
   - `lib.rs`: app setup, tray icon, window events, command registration.
   - `models.rs`: data types shared with the frontend over IPC.
-  - `storage.rs`: `StorageManager`, which reads and writes notes, categories and settings on disk.
+  - `storage/`: `StorageManager` (notes and settings on disk), `shelves` (the ordered shelf list),
+    `writer` (one thread writes note files in edit order), `attachments` (images beside the notes).
   - `commands/`: every `#[tauri::command]`, grouped as `notes`, `files`, `settings`, `window`.
     Keep them thin and delegate.
-  - `window/`: canvas/tray window engine: `lifecycle` (create, suspend, rebuild webviews),
-    `geometry` (monitor and placement maths), `drag` (keeps a dragged dock window on screen),
-    `state` (shared statics).
+  - `window/`: owns the mode (canvas, dock pill, dock panel). Callers name the mode they want;
+    `placement` is the pure, tested maths, `webview` builds and retires webviews, `lifecycle` runs
+    the transitions, `pill/` draws the pill natively (no webview runs while it is the only thing
+    showing), `drag` keeps a dragged dock window on screen.
   - `actions/`: mode switches from outside the UI: tray click, or a second launch with
     `--canvas`, `--dock`, `--toggle` or `--quit`.
   - `platform/`: the only place OS-specific code lives. `mod.rs` documents the interface;
@@ -44,6 +48,7 @@ React + TypeScript frontend, Rust backend. Shipped for Windows; a Linux port is 
 
 - Dev: `npm install`, then `npm run tauri dev`.
 - Frontend typecheck and build: `npm run build`.
+- Frontend tests: `npm test`.
 - Rust: `cd src-tauri && cargo check` / `cargo test` (Linux needs the WebKitGTK dev packages, see README).
 - Release: a `v*` tag runs `.github/workflows/release.yml` (Windows), then `release-linux.yml` adds
   the Fedora rpm (self-updating) and an experimental AppImage to the same release and `latest.json`.

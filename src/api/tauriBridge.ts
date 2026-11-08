@@ -38,10 +38,12 @@ export interface NoteItem {
   external_header?: string;
 }
 
-export interface CategoryInfo {
+/** A shelf in display order; the backend keeps "Uncategorized" last. */
+export interface Shelf {
   name: string;
+  /** An icon name or "dot"; absent lets the app pick one from the name. */
+  icon?: string | null;
   collapsed: boolean;
-  color_accent?: string;
 }
 
 /** A folder imported as one shelf (see `importFolderAsShelf`). */
@@ -59,6 +61,18 @@ export interface ScanSummary {
   imported_count: number;
   skipped_count: number;
   imported_notes: NoteItem[];
+}
+
+/** The dock pill's look, measured from CSS for the natively drawn pill (see platform/pillLook.ts). */
+export interface PillLook {
+  width: number;
+  height: number;
+  radius: number;
+  background: [number, number, number, number];
+  border: [number, number, number, number];
+  border_width: number;
+  text: [number, number, number, number];
+  letter_spacing: number;
 }
 
 export interface QuadrantInfo {
@@ -94,7 +108,6 @@ export interface AppSettings {
   theme_mode?: "glass" | "monochrome";
   dock_on_close?: boolean;
   last_seen_version?: string;
-  category_icons?: Record<string, string>;
   /** Modern design only: colour theme and light/dark choice (see src/platform/modern/theme.ts). */
   palette?: string;
   appearance?: string;
@@ -103,8 +116,6 @@ export interface AppSettings {
   boxy?: boolean;
   /** Windows: "modern" opts into the new design (Linux always has it). */
   design?: "classic" | "modern";
-  /** Shelves in the order the user dragged them into; others follow alphabetically. */
-  shelf_order?: string[];
 }
 
 export const DEFAULT_SETTINGS: AppSettings = {
@@ -126,6 +137,15 @@ export const DEFAULT_SETTINGS: AppSettings = {
   theme_mode: "glass",
   dock_on_close: true,
 };
+
+/** The fields of `next` that differ from `prev`, i.e. what a settings screen changed. */
+export function settingsChanges(prev: AppSettings, next: AppSettings): Partial<AppSettings> {
+  const changes: Partial<Record<keyof AppSettings, unknown>> = {};
+  for (const key of Object.keys(next) as (keyof AppSettings)[]) {
+    if (JSON.stringify(prev[key]) !== JSON.stringify(next[key])) changes[key] = next[key];
+  }
+  return changes as Partial<AppSettings>;
+}
 
 export const NOTE_FONTS: Array<{ name: string; label: string; stack: string }> = [
   // Linux's interface typeface, offered for notes too.
@@ -152,13 +172,11 @@ export const isTauri = () =>
   typeof window !== "undefined" && ("__TAURI_INTERNALS__" in window || "__TAURI__" in window);
 
 const NOTES_KEY = "doit.notes.v2";
-const CATS_KEY = "doit.categories.v2";
+const SHELVES_KEY = "doit.shelves.v1";
 
 const DEFAULT_NOTES: NoteItem[] = [];
 
-const DEFAULT_CATEGORIES: CategoryInfo[] = [
-  { name: "Uncategorized", collapsed: false },
-];
+const DEFAULT_SHELVES: Shelf[] = [{ name: "Uncategorized", collapsed: false }];
 
 function readLocal<T>(key: string, fallback: T): T {
   try {
@@ -193,14 +211,14 @@ export const tauriApi = {
     return readLocal<NoteItem[]>(NOTES_KEY, DEFAULT_NOTES);
   },
 
-  async getCategories(): Promise<CategoryInfo[]> {
+  async getShelves(): Promise<Shelf[]> {
     if (isTauri()) {
       try {
-        return await invoke<CategoryInfo[]>("get_categories");
+        return await invoke<Shelf[]>("get_shelves");
       } catch (err) {
       }
     }
-    return readLocal<CategoryInfo[]>(CATS_KEY, DEFAULT_CATEGORIES);
+    return readLocal<Shelf[]>(SHELVES_KEY, DEFAULT_SHELVES);
   },
 
   async getDefaultStoragePath(): Promise<string> {
@@ -224,15 +242,20 @@ export const tauriApi = {
     return stored ? JSON.parse(stored) : DEFAULT_SETTINGS;
   },
 
-  async updateSettings(settings: AppSettings): Promise<AppSettings> {
+  /**
+   * Saves only the given fields; every other setting keeps its saved value. Never send a whole
+   * settings object read earlier: another window may have changed a field since.
+   */
+  async patchSettings(changes: Partial<AppSettings>): Promise<AppSettings> {
     if (isTauri()) {
       try {
-        return await invoke<AppSettings>("update_settings", { settings });
+        return await invoke<AppSettings>("update_settings", { patch: changes });
       } catch (err) {
       }
     }
-    localStorage.setItem("doit.settings", JSON.stringify(settings));
-    return settings;
+    const merged = { ...(await tauriApi.getSettings()), ...changes };
+    localStorage.setItem("doit.settings", JSON.stringify(merged));
+    return merged;
   },
 
   async selectStorageDirectory(): Promise<string | null> {
@@ -288,29 +311,52 @@ export const tauriApi = {
     writeLocal(NOTES_KEY, notes);
   },
 
-  async addCategory(category: string): Promise<boolean> {
-    if (isTauri()) {
-      try {
-        return await invoke<boolean>("add_category", { category });
-      } catch (err) {
-      }
+  async createShelf(name: string): Promise<void> {
+    if (!isTauri()) return;
+    try {
+      await invoke("create_shelf", { name });
+    } catch (err) {
     }
-    return true;
   },
 
-  async deleteCategory(category: string): Promise<boolean> {
-    if (isTauri()) {
-      try {
-        return await invoke<boolean>("delete_category", { category });
-      } catch (err) {
-      }
-    }
-    return true;
-  },
-
-  async renameCategory(category: string, newName: string): Promise<NoteItem[]> {
+  /** Deletes a shelf; returns its notes, now on "Uncategorized". */
+  async deleteShelf(name: string): Promise<NoteItem[]> {
     if (!isTauri()) return [];
-    return await invoke<NoteItem[]>("rename_category", { category, newName });
+    try {
+      return await invoke<NoteItem[]>("delete_shelf", { name });
+    } catch (err) {
+      return [];
+    }
+  },
+
+  /** Renames a shelf; returns its notes, moved along. Rejects with a message the user can read. */
+  async renameShelf(name: string, newName: string): Promise<NoteItem[]> {
+    if (!isTauri()) return [];
+    return await invoke<NoteItem[]>("rename_shelf", { name, newName });
+  },
+
+  async reorderShelves(names: string[]): Promise<void> {
+    if (!isTauri()) return;
+    try {
+      await invoke("reorder_shelves", { names });
+    } catch (err) {
+    }
+  },
+
+  async setShelfIcon(name: string, icon: string | null): Promise<void> {
+    if (!isTauri()) return;
+    try {
+      await invoke("set_shelf_icon", { name, icon });
+    } catch (err) {
+    }
+  },
+
+  async setShelfCollapsed(name: string, collapsed: boolean): Promise<void> {
+    if (!isTauri()) return;
+    try {
+      await invoke("set_shelf_collapsed", { name, collapsed });
+    } catch (err) {
+    }
   },
 
   async minimize(): Promise<void> {
@@ -334,14 +380,6 @@ export const tauriApi = {
     try {
       // Closes window, triggering CloseRequested event in Rust which honors dock_on_close
       await getCurrentWindow().close();
-    } catch (err) {
-    }
-  },
-
-  async setMiniMode(mini: boolean): Promise<void> {
-    if (!isTauri()) return;
-    try {
-      await invoke("set_mini_window_mode", { mini });
     } catch (err) {
     }
   },
@@ -380,12 +418,33 @@ export const tauriApi = {
   },
 
   /** Tray page mounted: the backend shows the (pre-positioned) frame and returns the start mode. */
-  async trayReady(): Promise<"panel" | "pill"> {
-    if (!isTauri()) return "panel";
+  /** The dock page mounted: the backend shows it and says which shape it is in and which note to open. */
+  async trayReady(): Promise<{ shape: "panel" | "pill"; note: string | null }> {
+    if (!isTauri()) return { shape: "panel", note: null };
     try {
-      return (await invoke<string>("tray_ready")) === "pill" ? "pill" : "panel";
+      const ready = await invoke<{ shape: string; note: string | null }>("tray_ready");
+      return { shape: ready.shape === "pill" ? "pill" : "panel", note: ready.note ?? null };
     } catch {
-      return "panel";
+      return { shape: "panel", note: null };
+    }
+  },
+
+  /** Stores an image next to the notes; returns its relative path, or null if it could not be saved. */
+  async saveAttachment(bytes: ArrayBuffer, mime: string): Promise<string | null> {
+    if (!isTauri()) return null;
+    try {
+      return await invoke<string>("save_attachment", new Uint8Array(bytes), { headers: { "x-mime": mime } });
+    } catch {
+      return null;
+    }
+  },
+
+  async setPillLook(look: PillLook): Promise<void> {
+    if (!isTauri()) return;
+    try {
+      await invoke("set_pill_look", { look });
+    } catch {
+      /* the pill keeps its previous look */
     }
   },
 
@@ -400,6 +459,16 @@ export const tauriApi = {
   },
 
   /** Canvas page mounted after a (re)load: lets the backend reveal the window. */
+  /** Tells the backend this page has saved everything it held after a `flush-pending` request. */
+  async flushDone(): Promise<void> {
+    if (!isTauri()) return;
+    try {
+      await invoke("flush_done");
+    } catch {
+      /* not running under Tauri */
+    }
+  },
+
   async canvasReady(): Promise<void> {
     if (!isTauri()) return;
     try {
@@ -421,26 +490,9 @@ export const tauriApi = {
   async beginDrag(): Promise<void> {
     if (!isTauri()) return;
     try {
-      await invoke("start_drag");
+      await getCurrentWindow().startDragging();
     } catch {
-      try {
-        await getCurrentWindow().startDragging();
-      } catch {
-        /* ignore */
-      }
-    }
-  },
-
-  async startDrag(): Promise<void> {
-    if (!isTauri()) return;
-    try {
-      await invoke("start_drag");
-    } catch {
-      try {
-        await getCurrentWindow().startDragging();
-      } catch {
-        /* ignore */
-      }
+      /* ignore */
     }
   },
 

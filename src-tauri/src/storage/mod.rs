@@ -1,3 +1,7 @@
+mod attachments;
+pub mod shelves;
+mod writer;
+
 use std::collections::HashMap;
 use std::fs::{self, File};
 use std::io::{Read, Write};
@@ -12,25 +16,46 @@ use crate::models::{
 pub struct StorageManager {
     settings_path: PathBuf,
     settings: Arc<RwLock<AppSettings>>,
-    data: Arc<RwLock<AppStateData>>,
+    notes: Arc<RwLock<Vec<NoteItem>>>,
+    shelves: RwLock<shelves::Shelves>,
     file_map: Arc<RwLock<HashMap<String, PathBuf>>>,
+    writer: writer::NoteWriter,
 }
 
 impl StorageManager {
     pub fn new() -> Self {
         let settings_path = Self::resolve_settings_path();
-        let settings = Self::load_settings_from_disk(&settings_path).unwrap_or_default();
+        let mut settings = Self::load_settings_from_disk(&settings_path).unwrap_or_default();
         let storage_path = PathBuf::from(&settings.storage_path);
         let _ = fs::create_dir_all(&storage_path);
 
-        let (initial_data, file_map) = Self::load_markdown_repository(&storage_path);
+        let (notes, file_map) = Self::load_markdown_repository(&storage_path);
+        let migrating = settings.shelves.is_none();
+        let shelves = shelves::Shelves::load(
+            settings.shelves.take(),
+            settings.shelf_order.as_deref().unwrap_or_default(),
+            &settings.category_icons.clone().unwrap_or_default(),
+            notes.iter().map(|n| n.category.as_str()),
+        );
+        settings.shelves = Some(shelves.list().to_vec());
 
-        Self {
+        let manager = Self {
             settings_path,
             settings: Arc::new(RwLock::new(settings)),
-            data: Arc::new(RwLock::new(initial_data)),
+            notes: Arc::new(RwLock::new(notes)),
+            shelves: RwLock::new(shelves),
             file_map: Arc::new(RwLock::new(file_map)),
+            writer: writer::NoteWriter::new(),
+        };
+        if migrating {
+            // Shelf order and icons now live in `shelves`; drop the settings they came from.
+            if let Ok(mut settings) = manager.settings.write() {
+                settings.shelf_order = None;
+                settings.category_icons = None;
+            }
+            let _ = manager.persist_settings();
         }
+        manager
     }
 
     fn resolve_settings_path() -> PathBuf {
@@ -102,7 +127,7 @@ impl StorageManager {
     }
 
     /// High-speed memory-optimized indexing of all .md / .txt files in the storage directory
-    fn load_markdown_repository(dir: &PathBuf) -> (AppStateData, HashMap<String, PathBuf>) {
+    fn load_markdown_repository(dir: &PathBuf) -> (Vec<NoteItem>, HashMap<String, PathBuf>) {
         let mut notes: Vec<NoteItem> = Vec::new();
         let mut file_map = HashMap::new();
 
@@ -128,37 +153,24 @@ impl StorageManager {
                 }
             }
         }
-        // If repository is brand new and empty, start with an empty clean repository
-        // Never auto-generate dummy notes or pre-made categories!
-
         notes.sort_by(|a, b| b.last_edited.cmp(&a.last_edited));
+        (notes, file_map)
+    }
 
-        // Reconstruct categories
-        let mut categories_map: HashMap<String, usize> = HashMap::new();
-        for n in &notes {
-            *categories_map.entry(n.category.clone()).or_insert(0) += 1;
-        }
-        // Permanent default category that can never be purged
-        categories_map.entry("Uncategorized".to_string()).or_insert(0);
+    /// Stores an image in the notes folder; returns the relative path a note links to.
+    pub fn save_attachment(&self, bytes: &[u8], mime: &str) -> Result<String, String> {
+        let notes_dir = PathBuf::from(&self.settings.read().map_err(|e| e.to_string())?.storage_path);
+        attachments::save(&notes_dir, bytes, mime)
+    }
 
-        let mut categories: Vec<CategoryInfo> = categories_map
-            .into_keys()
-            .map(|name| CategoryInfo {
-                name,
-                collapsed: false,
-                color_accent: Some("#ffffff".to_string()),
-            })
-            .collect();
-        categories.sort_by(|a, b| a.name.to_lowercase().cmp(&b.name.to_lowercase()));
+    /// The folder notes and their images live in.
+    pub fn notes_dir(&self) -> Result<PathBuf, String> {
+        Ok(PathBuf::from(&self.settings.read().map_err(|e| e.to_string())?.storage_path))
+    }
 
-        (
-            AppStateData {
-                notes,
-                categories,
-                search_history: vec![],
-            },
-            file_map,
-        )
+    /// Blocks until every note change is on disk (call before the process exits).
+    pub fn flush_writes(&self) {
+        self.writer.flush();
     }
 
     pub fn get_settings(&self) -> Result<AppSettings, String> {
@@ -206,12 +218,16 @@ impl StorageManager {
         Ok(())
     }
 
-    pub fn update_settings(&self, new_settings: AppSettings) -> Result<AppSettings, String> {
-        let old_path = {
+    /// Merges `patch` (any subset of the settings fields) into the saved settings. Callers send only
+    /// what they changed, so two windows saving different fields never undo each other.
+    pub fn update_settings(&self, mut patch: serde_json::Map<String, serde_json::Value>) -> Result<AppSettings, String> {
+        // Shelves change only through the shelf methods below.
+        patch.remove("shelves");
+        let (old_path, new_settings) = {
             let mut lock = self.settings.write().map_err(|e| e.to_string())?;
-            let old = lock.storage_path.clone();
-            *lock = new_settings.clone();
-            old
+            let merged = merge_settings(&lock, patch)?;
+            let old = std::mem::replace(&mut *lock, merged.clone());
+            (old.storage_path, merged)
         };
 
         self.persist_settings()?;
@@ -222,10 +238,16 @@ impl StorageManager {
             let _ = fs::create_dir_all(&new_dir);
 
             // Re-index from new directory
-            let (new_data, new_file_map) = Self::load_markdown_repository(&new_dir);
+            let (new_notes, new_file_map) = Self::load_markdown_repository(&new_dir);
+            self.change_shelves(|shelves| {
+                for note in &new_notes {
+                    shelves.ensure(&note.category);
+                }
+                Ok(())
+            })?;
             {
-                let mut data_lock = self.data.write().map_err(|e| e.to_string())?;
-                *data_lock = new_data;
+                let mut notes_lock = self.notes.write().map_err(|e| e.to_string())?;
+                *notes_lock = new_notes;
             }
             {
                 let mut map_lock = self.file_map.write().map_err(|e| e.to_string())?;
@@ -237,68 +259,85 @@ impl StorageManager {
     }
 
     pub fn get_all_notes(&self) -> Result<Vec<NoteItem>, String> {
-        let lock = self.data.read().map_err(|e| e.to_string())?;
-        Ok(lock.notes.clone())
+        let lock = self.notes.read().map_err(|e| e.to_string())?;
+        Ok(lock.clone())
     }
 
-    pub fn get_categories(&self) -> Result<Vec<CategoryInfo>, String> {
-        let lock = self.data.read().map_err(|e| e.to_string())?;
-        let mut cats = lock.categories.clone();
-        if !cats.iter().any(|c| c.name.eq_ignore_ascii_case("uncategorized")) {
-            cats.push(CategoryInfo {
-                name: "Uncategorized".to_string(),
-                collapsed: false,
-                color_accent: Some("#ffffff".to_string()),
-            });
-        }
-        cats.sort_by(|a, b| a.name.to_lowercase().cmp(&b.name.to_lowercase()));
-        Ok(cats)
-    }
-
-    pub fn add_category(&self, category: &str) -> Result<bool, String> {
-        let cat_clean = crate::models::clean_yaml_scalar(category);
-        if cat_clean.is_empty() {
-            return Err("Category name cannot be empty".to_string());
-        }
-        let mut lock = self.data.write().map_err(|e| e.to_string())?;
-        if !lock.categories.iter().any(|c| c.name.eq_ignore_ascii_case(&cat_clean)) {
-            lock.categories.push(CategoryInfo {
-                name: cat_clean,
-                collapsed: false,
-                color_accent: Some("#ffffff".to_string()),
-            });
-        }
-        Ok(true)
-    }
-
-    pub fn delete_category(&self, category: &str) -> Result<bool, String> {
-        if category.eq_ignore_ascii_case("uncategorized") {
-            return Err("Cannot delete the default Uncategorized category".to_string());
-        }
-
-        let notes_to_reassign: Vec<NoteItem> = {
-            let mut lock = self.data.write().map_err(|e| e.to_string())?;
-            lock.categories.retain(|c| !c.name.eq_ignore_ascii_case(category));
-
-            let mut to_update = Vec::new();
-            for note in lock.notes.iter_mut() {
-                if note.category.eq_ignore_ascii_case(category) {
-                    note.category = "Uncategorized".to_string();
-                    note.last_edited = std::time::SystemTime::now()
-                        .duration_since(std::time::UNIX_EPOCH)
-                        .unwrap_or_default()
-                        .as_millis() as i64;
-                    to_update.push(note.clone());
-                }
-            }
-            to_update
+    /// Runs `change` on the shelves and saves them if it changed anything.
+    fn change_shelves<R>(&self, change: impl FnOnce(&mut shelves::Shelves) -> Result<R, String>) -> Result<R, String> {
+        let (result, changed) = {
+            let mut shelves = self.shelves.write().map_err(|e| e.to_string())?;
+            let before = shelves.clone();
+            let result = change(&mut shelves)?;
+            (result, (*shelves != before).then(|| shelves.list().to_vec()))
         };
-
-        for note in notes_to_reassign {
-            let _ = self.upsert_note(note);
+        if let Some(list) = changed {
+            self.settings.write().map_err(|e| e.to_string())?.shelves = Some(list);
+            self.persist_settings()?;
         }
+        Ok(result)
+    }
 
-        Ok(true)
+    /// Every shelf in display order ("Uncategorized" last).
+    pub fn get_shelves(&self) -> Result<Vec<shelves::Shelf>, String> {
+        Ok(self.shelves.read().map_err(|e| e.to_string())?.list().to_vec())
+    }
+
+    /// Makes an empty shelf; `false` if it already existed.
+    pub fn create_shelf(&self, name: &str) -> Result<bool, String> {
+        self.change_shelves(|shelves| shelves.create(name))
+    }
+
+    pub fn reorder_shelves(&self, names: &[String]) -> Result<(), String> {
+        self.change_shelves(|shelves| {
+            shelves.reorder(names);
+            Ok(())
+        })
+    }
+
+    pub fn set_shelf_icon(&self, name: &str, icon: Option<String>) -> Result<(), String> {
+        self.change_shelves(|shelves| {
+            shelves.set_icon(name, icon);
+            Ok(())
+        })
+    }
+
+    pub fn set_shelf_collapsed(&self, name: &str, collapsed: bool) -> Result<(), String> {
+        self.change_shelves(|shelves| {
+            shelves.set_collapsed(name, collapsed);
+            Ok(())
+        })
+    }
+
+    /// The shelf's stored spelling, made if it does not exist yet.
+    fn shelf_for(&self, name: &str) -> Result<String, String> {
+        let name = if name.trim().is_empty() { shelves::UNCATEGORIZED } else { name };
+        self.change_shelves(|shelves| {
+            shelves.ensure(name);
+            Ok(shelves.find(name).unwrap_or(shelves::UNCATEGORIZED).to_string())
+        })
+    }
+
+
+    /// Deletes a shelf; its notes move to "Uncategorized".
+    pub fn delete_shelf(&self, name: &str) -> Result<Vec<NoteItem>, String> {
+        self.change_shelves(|shelves| shelves.delete(name))?;
+        let moved: Vec<NoteItem> = {
+            let mut lock = self.notes.write().map_err(|e| e.to_string())?;
+            let now = std::time::SystemTime::now()
+                .duration_since(std::time::UNIX_EPOCH)
+                .unwrap_or_default()
+                .as_millis() as i64;
+            lock.iter_mut()
+                .filter(|note| note.category.eq_ignore_ascii_case(name))
+                .map(|note| {
+                    note.category = shelves::UNCATEGORIZED.to_string();
+                    note.last_edited = now;
+                    note.clone()
+                })
+                .collect()
+        };
+        moved.into_iter().map(|note| self.upsert_note(note)).collect()
     }
 
     /// Opens any .md / .txt file in place (no copy). A file that already belongs to the repository
@@ -318,10 +357,10 @@ impl StorageManager {
         }
         if let Ok(canon) = path.canonicalize() {
             let map = self.file_map.read().map_err(|e| e.to_string())?;
-            let data = self.data.read().map_err(|e| e.to_string())?;
+            let notes = self.notes.read().map_err(|e| e.to_string())?;
             for (id, p) in map.iter() {
                 if p.canonicalize().map(|c| c == canon).unwrap_or(false) {
-                    if let Some(n) = data.notes.iter().find(|n| &n.id == id) {
+                    if let Some(n) = notes.iter().find(|n| &n.id == id) {
                         return Ok(n.clone());
                     }
                 }
@@ -373,44 +412,20 @@ impl StorageManager {
         saved.source_path = Some(target.to_string_lossy().to_string());
         Ok(saved)
     }
-    pub fn rename_category(&self, old: &str, new_name: &str) -> Result<Vec<NoteItem>, String> {
-        if old.eq_ignore_ascii_case("uncategorized") {
-            return Err("The default Uncategorized category cannot be renamed".to_string());
-        }
-        let new_clean = crate::models::clean_yaml_scalar(new_name);
-        if new_clean.is_empty() {
-            return Err("Category name cannot be empty".to_string());
-        }
-        if new_clean.eq_ignore_ascii_case("uncategorized") {
-            return Err("That name is reserved".to_string());
-        }
-
-        let changed: Vec<NoteItem> = {
-            let mut lock = self.data.write().map_err(|e| e.to_string())?;
-            let same_name = new_clean.eq_ignore_ascii_case(old);
-            if !same_name && lock.categories.iter().any(|c| c.name.eq_ignore_ascii_case(&new_clean)) {
-                return Err("A category with that name already exists".to_string());
-            }
-            for cat in lock.categories.iter_mut() {
-                if cat.name.eq_ignore_ascii_case(old) {
-                    cat.name = new_clean.clone();
-                }
-            }
-            let mut moved = Vec::new();
-            for note in lock.notes.iter_mut() {
-                if note.category.eq_ignore_ascii_case(old) {
-                    note.category = new_clean.clone();
-                    moved.push(note.clone());
-                }
-            }
-            moved
+    /// Renames a shelf and moves its notes along; returns the moved notes.
+    pub fn rename_shelf(&self, old: &str, new_name: &str) -> Result<Vec<NoteItem>, String> {
+        let new_name = self.change_shelves(|shelves| shelves.rename(old, new_name))?;
+        let moved: Vec<NoteItem> = {
+            let mut lock = self.notes.write().map_err(|e| e.to_string())?;
+            lock.iter_mut()
+                .filter(|note| note.category.eq_ignore_ascii_case(old))
+                .map(|note| {
+                    note.category = new_name.clone();
+                    note.clone()
+                })
+                .collect()
         };
-
-        let mut saved = Vec::with_capacity(changed.len());
-        for note in changed {
-            saved.push(self.upsert_note(note)?);
-        }
-        Ok(saved)
+        moved.into_iter().map(|note| self.upsert_note(note)).collect()
     }
     pub fn upsert_note(&self, note: NoteItem) -> Result<NoteItem, String> {
         // External files are edited in place and only ever written by an explicit Save
@@ -419,28 +434,15 @@ impl StorageManager {
         }
         let mut note = note;
         note.title = crate::models::clean_yaml_scalar(&note.title);
-        note.category = crate::models::clean_yaml_scalar(&note.category);
-        if note.category.trim().is_empty() {
-            note.category = "Uncategorized".to_string();
-        }
+        note.category = self.shelf_for(&crate::models::clean_yaml_scalar(&note.category))?;
         if let Some(ref f) = note.font_family {
             note.font_family = Some(crate::models::clean_yaml_scalar(f));
         }
 
-        let mut lock = self.data.write().map_err(|e| e.to_string())?;
-
-        // Auto-register category if not present
-        let cat_exists = lock.categories.iter().any(|c| c.name.eq_ignore_ascii_case(&note.category));
-        if !cat_exists && !note.category.trim().is_empty() {
-            lock.categories.push(CategoryInfo {
-                name: note.category.trim().to_string(),
-                collapsed: false,
-                color_accent: Some("#ffffff".to_string()),
-            });
-        }
+        let mut lock = self.notes.write().map_err(|e| e.to_string())?;
 
         let mut found = false;
-        for existing in lock.notes.iter_mut() {
+        for existing in lock.iter_mut() {
             if existing.id == note.id {
                 *existing = note.clone();
                 found = true;
@@ -449,12 +451,11 @@ impl StorageManager {
         }
 
         if !found {
-            lock.notes.insert(0, note.clone());
+            lock.insert(0, note.clone());
         }
 
         // Calculate repeated title number
         let repeated_num = lock
-            .notes
             .iter()
             .filter(|n| {
                 n.id != note.id
@@ -489,61 +490,28 @@ impl StorageManager {
             old
         };
 
-        // Offload disk write to background thread (high-speed zero-lag execution)
-        std::thread::spawn(move || {
-            if let Some(prev) = previous_path {
-                if prev != target_path && prev.exists() {
-                    let _ = fs::remove_file(prev);
-                }
-            }
-
-            let mut temp_path = target_path.clone();
-            temp_path.set_extension("tmp");
-            if let Ok(mut f) = File::create(&temp_path) {
-                let _ = f.write_all(md_content.as_bytes());
-                let _ = f.sync_all();
-                drop(f);
-                let _ = fs::rename(&temp_path, &target_path);
-            }
-        });
+        self.writer.write(&note.id, target_path, md_content, previous_path);
 
         Ok(note)
     }
 
+    /// Moves a note onto another shelf (made if new).
     pub fn update_category(&self, id: &str, new_category: &str) -> Result<NoteItem, String> {
-        let mut lock = self.data.write().map_err(|e| e.to_string())?;
-        let cat_clean = if new_category.trim().is_empty() {
-            "Uncategorized".to_string()
-        } else {
-            new_category.trim().to_string()
-        };
-
-        if !lock.categories.iter().any(|c| c.name.eq_ignore_ascii_case(&cat_clean)) {
-            lock.categories.push(CategoryInfo {
-                name: cat_clean.clone(),
-                collapsed: false,
-                color_accent: Some("#ffffff".to_string()),
-            });
-        }
-
-        let mut updated: Option<NoteItem> = None;
-        for existing in lock.notes.iter_mut() {
-            if existing.id == id {
-                existing.category = cat_clean.clone();
+        let shelf = self.shelf_for(new_category.trim())?;
+        let updated = {
+            let mut lock = self.notes.write().map_err(|e| e.to_string())?;
+            lock.iter_mut().find(|n| n.id == id).map(|existing| {
+                existing.category = shelf;
                 existing.last_edited = std::time::SystemTime::now()
                     .duration_since(std::time::UNIX_EPOCH)
                     .unwrap_or_default()
                     .as_millis() as i64;
-                updated = Some(existing.clone());
-                break;
-            }
-        }
-        drop(lock);
-
-        if let Some(note) = updated {
-            self.upsert_note(note)
-        } else {
-            Err("Note not found".to_string())
+                existing.clone()
+            })
+        };
+        match updated {
+            Some(note) => self.upsert_note(note),
+            None => Err("Note not found".to_string()),
         }
     }
 
@@ -552,10 +520,10 @@ impl StorageManager {
         id: &str,
         coords: GridCoordinates,
     ) -> Result<NoteItem, String> {
-        let mut lock = self.data.write().map_err(|e| e.to_string())?;
+        let mut lock = self.notes.write().map_err(|e| e.to_string())?;
         let mut updated: Option<NoteItem> = None;
 
-        for existing in lock.notes.iter_mut() {
+        for existing in lock.iter_mut() {
             if existing.id == id {
                 existing.grid_coordinates = coords.clone();
                 updated = Some(existing.clone());
@@ -572,10 +540,10 @@ impl StorageManager {
     }
 
     pub fn delete_note(&self, id: &str) -> Result<bool, String> {
-        let mut lock = self.data.write().map_err(|e| e.to_string())?;
-        let initial_len = lock.notes.len();
-        lock.notes.retain(|n| n.id != id);
-        let removed = lock.notes.len() < initial_len;
+        let mut lock = self.notes.write().map_err(|e| e.to_string())?;
+        let initial_len = lock.len();
+        lock.retain(|n| n.id != id);
+        let removed = lock.len() < initial_len;
         drop(lock);
 
         let path_to_remove = {
@@ -584,45 +552,39 @@ impl StorageManager {
         };
 
         if let Some(p) = path_to_remove {
-            std::thread::spawn(move || {
-                let _ = fs::remove_file(p);
-            });
+            self.writer.delete(id, p);
         }
 
         Ok(removed)
     }
 
-    pub fn toggle_category_collapse(&self, category: &str) -> Result<bool, String> {
-        let mut lock = self.data.write().map_err(|e| e.to_string())?;
-        let mut new_state = false;
-        for cat in lock.categories.iter_mut() {
-            if cat.name.eq_ignore_ascii_case(category) {
-                cat.collapsed = !cat.collapsed;
-                new_state = cat.collapsed;
-                break;
-            }
-        }
-        Ok(new_state)
-    }
 
     pub fn export_raw_json(&self) -> Result<String, String> {
-        let lock = self.data.read().map_err(|e| e.to_string())?;
-        serde_json::to_string_pretty(&*lock).map_err(|e| e.to_string())
+        let export = AppStateData {
+            notes: self.get_all_notes()?,
+            categories: self
+                .get_shelves()?
+                .into_iter()
+                .map(|s| CategoryInfo { name: s.name, collapsed: s.collapsed, color_accent: None })
+                .collect(),
+            search_history: vec![],
+        };
+        serde_json::to_string_pretty(&export).map_err(|e| e.to_string())
     }
 
     pub fn import_raw_json(&self, json: &str) -> Result<bool, String> {
         let parsed: AppStateData = serde_json::from_str(json).map_err(|e| e.to_string())?;
-        let notes_to_write = parsed.notes.clone();
-
-        {
-            let mut lock = self.data.write().map_err(|e| e.to_string())?;
-            *lock = parsed;
-        }
-
-        for note in notes_to_write {
+        self.change_shelves(|shelves| {
+            for category in &parsed.categories {
+                shelves.ensure(&category.name);
+                shelves.set_collapsed(&category.name, category.collapsed);
+            }
+            Ok(())
+        })?;
+        *self.notes.write().map_err(|e| e.to_string())? = parsed.notes.clone();
+        for note in parsed.notes {
             let _ = self.upsert_note(note);
         }
-
         Ok(true)
     }
 
@@ -693,7 +655,7 @@ impl StorageManager {
             .filter(|s| !s.is_empty())
             .unwrap_or_else(|| "Imported".to_string());
         let (notes, total_scanned, skipped_count) = Self::notes_for_shelf(&dir, &shelf);
-        self.add_category(&shelf)?;
+        self.create_shelf(&shelf)?;
         let imported_count = notes.len();
         for note in notes {
             self.upsert_note(note)?;
@@ -742,9 +704,38 @@ impl StorageManager {
     }
 }
 
+/// `current` with every field named in `patch` replaced; `null` clears an optional field.
+fn merge_settings(current: &AppSettings, patch: serde_json::Map<String, serde_json::Value>) -> Result<AppSettings, String> {
+    let mut fields = match serde_json::to_value(current).map_err(|e| e.to_string())? {
+        serde_json::Value::Object(map) => map,
+        _ => return Err("settings are not an object".to_string()),
+    };
+    fields.extend(patch);
+    serde_json::from_value(serde_json::Value::Object(fields)).map_err(|e| format!("Invalid settings: {e}"))
+}
+
 #[cfg(test)]
 mod tests {
-    use super::StorageManager;
+    use super::{merge_settings, StorageManager};
+    use crate::models::AppSettings;
+
+    #[test]
+    fn a_settings_patch_changes_only_the_fields_it_names() {
+        let mut current = AppSettings::default();
+        current.is_maximized = true;
+        current.shelf_order = Some(vec!["Work".into()]);
+        let patch = |json: &str| serde_json::from_str(json).unwrap();
+
+        // Two windows each saving their own field: both survive, and backend-owned fields stay put.
+        let once = merge_settings(&current, patch(r#"{"category_icons":{"work":"briefcase"}}"#)).unwrap();
+        let twice = merge_settings(&once, patch(r#"{"design":"modern"}"#)).unwrap();
+        assert_eq!(twice.shelf_order, Some(vec!["Work".to_string()]));
+        assert_eq!(twice.category_icons.unwrap().get("work").map(String::as_str), Some("briefcase"));
+        assert_eq!(twice.design.as_deref(), Some("modern"));
+        assert!(twice.is_maximized);
+
+        assert!(merge_settings(&current, patch(r#"{"is_maximized":"yes"}"#)).is_err());
+    }
 
     #[test]
     fn a_folder_imports_as_one_shelf_whatever_its_files_say() {

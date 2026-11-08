@@ -3,18 +3,9 @@ import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { motion } from "motion/react";
 import { getCurrentWindow } from "@tauri-apps/api/window";
 import { Mark } from "./Mark";
-import { initCategoryIcons } from "../lib/categoryIcons";
 import { HeadingSelect } from "./HeadingSelect";
-import { ImageLightbox } from "./ImageLightbox";
 import { InsertMenu } from "./InsertMenu";
 import { ModeToggle } from "./ModeToggle";
-import { TrayPill } from "./TrayPill";
-import { RawEditor } from "./RawEditor";
-import { TableMenu } from "./TableMenu";
-import { EmojiAutocomplete } from "./EmojiAutocomplete";
-import { EmojiPickerModal } from "./EmojiPickerModal";
-import { EditImageModal } from "./EditImageModal";
-import { ImageContextMenu } from "./ImageContextMenu";
 import {
   ArrowLeft,
   ArrowUpRight,
@@ -34,27 +25,16 @@ import {
   ZoomOut,
 } from "lucide-react";
 import {
-  ContentItem,
   NOTE_FONTS,
   NoteItem,
   fontStack,
   tauriApi,
 } from "../api/tauriBridge";
 import { useWorkspace } from "../hooks/useWorkspace";
-import { useUndoStack } from "../hooks/useUndoStack";
-import { applyShortcutSettings, getMarkdownShortcuts, matchesCombo } from "../lib/shortcuts";
+import { EditorOverlays, NoteBody, NoteGallery, hasGallery, useNoteEditor } from "../editor";
+import { applyShortcutSettings } from "../lib/shortcuts";
 import {
-  contentToMarkdown,
-  markdownToContent,
-  handleCheckboxClick,
   applyTask,
-  handleRichEditorKeyDown,
-  htmlToMarkdown,
-  isRichBoldActive,
-  isRichItalicActive,
-  markdownToHtml,
-  handleMarkdownPaste,
-  normalizeEditor,
   applyHeading,
   insertTableAtCaret,
   insertCodeBlockAtCaret,
@@ -68,23 +48,16 @@ import {
   applyHighlight,
   applySubscript,
   applySuperscript,
-  insertEmojiAtCaret,
-  insertInlineImageAtCaret,
-  insertInlineImageInMarkdown,
   setMarkdownBaseDir,
-  isCaretAtEditorStart,
   placeCaretAtEditorStart,
-  fixCheckboxCaret,
-  openExternalUrl,
 } from "../lib/format";
 import { applyThemeSettings, isModern, pick } from "../platform";
 import { ModernDockHome } from "../platform/modern/ModernDockHome";
-import { accentFor, cleanText, cx, relativeShort, uid } from "../lib/text";
+import { accentFor, cleanText, cx, relativeShort } from "../lib/text";
 
-const NO_CONTENT: ContentItem[] = [];
 
 export function TrayCompanion() {
-  const { notes, categories, patch, create, remove } = useWorkspace();
+  const { notes, shelves, patch, create, remove } = useWorkspace();
   const [shown, setShown] = useState(false);
   const shownRef = useRef(false);
   const hideTimerRef = useRef<number | null>(null);
@@ -171,57 +144,17 @@ export function TrayCompanion() {
   }, []);
   const [showDeleteConfirm, setShowDeleteConfirm] = useState(false);
   const [shelfOpen, setShelfOpen] = useState(false);
-  const [previewImage, setPreviewImage] = useState<string | null>(null);
   const fileInputRef = useRef<HTMLInputElement | null>(null);
   const grabScrollRef = useRef<HTMLDivElement | null>(null);
   const dragScrollState = useRef({ isDown: false, startX: 0, scrollLeft: 0, moved: false });
-
-  // Rich text formatting state
-  const editorRef = useRef<HTMLDivElement | null>(null);
-  const rawTextareaRef = useRef<HTMLTextAreaElement | null>(null);
-  const [isBoldActive, setIsBoldActive] = useState<boolean>(false);
-  const [isItalicActive, setIsItalicActive] = useState<boolean>(false);
-  const lastActiveNoteIdRef = useRef<string | null>(null);
-
-  // Dedicated Emoji Picker Modal
-  const [showEmojiPicker, setShowEmojiPicker] = useState(false);
-  const [emojiAnchor, setEmojiAnchor] = useState<DOMRect | null>(null);
-
-  // Image context menu & edit modal
-  const [contextMenuImg, setContextMenuImg] = useState<{
-    element: HTMLImageElement;
-    x: number;
-    y: number;
-  } | null>(null);
-  const [editImgModal, setEditImgModal] = useState<{
-    element: HTMLImageElement;
-    alt: string;
-    src: string;
-    refKey?: string;
-  } | null>(null);
-
-  const updateActiveFormatting = () => {
-    setIsBoldActive(isRichBoldActive());
-    setIsItalicActive(isRichItalicActive());
-  };
 
   const activeNote = useMemo(
     () => notes.find((n) => n.id === activeNoteId) ?? null,
     [notes, activeNoteId],
   );
 
-  const shelves = useMemo(() => {
-    const list = categories.map((c) => c.name);
-    return list.sort((a, b) => {
-      const aUn = a.toLowerCase() === "uncategorized";
-      const bUn = b.toLowerCase() === "uncategorized";
-      if (aUn && !bUn) return 1;
-      if (!aUn && bUn) return -1;
-      return a.localeCompare(b, undefined, { sensitivity: "base" });
-    });
-  }, [categories]);
-  const rawMode = activeNote?.format === "txt";
-  const [tableMenu, setTableMenu] = useState<{ x: number; y: number; cell: HTMLElement } | null>(null);
+  const editor = useNoteEditor({ note: activeNote, edit: (changes) => editActive(changes), titleRef });
+  const rawMode = editor.rawMode;
 
   // Dock mode note zoom level (60% - 200%)
   const [dockZoom, setDockZoom] = useState<number>(() => {
@@ -285,7 +218,7 @@ export function TrayCompanion() {
 
   const [quadrant, setQuadrant] = useState<{ grow_x: "right" | "left" | "center"; grow_y: "down" | "up" }>({
     grow_x: "left",
-    grow_y: "up",
+    grow_y: "up"
   });
 
   const expandFromPill = useCallback(async () => {
@@ -315,7 +248,8 @@ export function TrayCompanion() {
 
   // The page just mounted inside a hidden, pre-positioned frame: reveal it and fade the panel in
   useEffect(() => {
-    void tauriApi.trayReady().then((start) => {
+    void tauriApi.trayReady().then(({ shape: start, note }) => {
+      if (note) setActiveNoteId(note);
       if (start === "pill") {
         changeMode("pill");
       } else {
@@ -366,9 +300,6 @@ export function TrayCompanion() {
       if (s.theme_mode) {
         document.documentElement.dataset.theme = s.theme_mode;
       }
-      if (s.category_icons) {
-        initCategoryIcons(s.category_icons);
-      }
       setMarkdownBaseDir(s.storage_path);
       applyShortcutSettings(s);
     });
@@ -402,8 +333,8 @@ export function TrayCompanion() {
 
       if (e.key === "Escape") {
         e.preventDefault();
-        if (previewImage) {
-          setPreviewImage(null);
+        if (editor.previewImage) {
+          editor.setPreviewImage(null);
         } else if (activeNoteId) {
           handleBack();
         } else {
@@ -418,7 +349,7 @@ export function TrayCompanion() {
 
     window.addEventListener("keydown", handleKeyDown);
     return () => window.removeEventListener("keydown", handleKeyDown);
-  }, [activeNoteId, previewImage, toggleMinimize, adjustDockZoom, resetDockZoom]);
+  }, [activeNoteId, editor.previewImage, toggleMinimize, adjustDockZoom, resetDockZoom]);
 
 
 
@@ -450,54 +381,6 @@ export function TrayCompanion() {
     patch(next);
   };
 
-  const syncEditorDom = (content: ContentItem[]) => {
-    if (editorRef.current) {
-      editorRef.current.innerHTML = markdownToHtml(contentToMarkdown(content));
-    }
-  };
-
-  const titleHistory = useUndoStack<string>(activeNote?.id ?? null, activeNote?.title ?? "", (title) =>
-    editActive({ title }),
-  );
-  const bodyHistory = useUndoStack<ContentItem[]>(activeNote?.id ?? null, activeNote?.content ?? NO_CONTENT, (content) => {
-    editActive({ content });
-    syncEditorDom(content);
-  });
-
-  // Title and body keep separate undo/redo stacks; the focused field decides which one runs.
-  const handleUndoKeys = (e: React.KeyboardEvent) => {
-    if (!(e.ctrlKey || e.metaKey) || !activeNote) return;
-    const k = e.key.toLowerCase();
-    const isUndo = k === "z" && !e.shiftKey;
-    const isRedo = k === "y" || (k === "z" && e.shiftKey);
-    if (!isUndo && !isRedo) return;
-    const zone = (e.target as HTMLElement).closest("[data-undo]")?.getAttribute("data-undo");
-    if (!zone) return;
-    e.preventDefault();
-    e.stopPropagation();
-    const history = zone === "title" ? titleHistory : bodyHistory;
-    if (isUndo) history.undo();
-    else history.redo();
-  };
-
-  const appendActiveImages = (newUrls: string[]) => {
-    if (!activeNote) return;
-    const existing = (activeNote.media_urls && activeNote.media_urls.length > 0)
-      ? activeNote.media_urls
-      : (activeNote.media_url ? [activeNote.media_url] : []);
-    const merged = [...existing, ...newUrls];
-    editActive({ media_urls: merged, media_url: merged[0] });
-  };
-
-  const removeActiveImageAt = (index: number) => {
-    if (!activeNote) return;
-    const existing = (activeNote.media_urls && activeNote.media_urls.length > 0)
-      ? activeNote.media_urls
-      : (activeNote.media_url ? [activeNote.media_url] : []);
-    const next = existing.filter((_, i) => i !== index);
-    editActive({ media_urls: next, media_url: next[0] || undefined });
-  };
-
   // Grabbable horizontal category scroll (No scrollbar!)
   const onPointerDownGrab = (e: React.PointerEvent) => {
     if (!grabScrollRef.current || e.button !== 0) return;
@@ -505,7 +388,7 @@ export function TrayCompanion() {
       isDown: true,
       startX: e.pageX - grabScrollRef.current.offsetLeft,
       scrollLeft: grabScrollRef.current.scrollLeft,
-      moved: false,
+      moved: false
     };
     grabScrollRef.current.style.cursor = "grabbing";
   };
@@ -523,147 +406,6 @@ export function TrayCompanion() {
     if (!grabScrollRef.current) return;
     dragScrollState.current.isDown = false;
     grabScrollRef.current.style.cursor = "grab";
-  };
-
-  // Clipboard paste for images
-  const handlePaste = (e: React.ClipboardEvent) => {
-    const items = e.clipboardData?.items;
-    if (!items) return;
-    const files: File[] = [];
-    for (let i = 0; i < items.length; i++) {
-      if (items[i].type.startsWith("image/")) {
-        const file = items[i].getAsFile();
-        if (file) files.push(file);
-      }
-    }
-    if (files.length === 0) return;
-    e.preventDefault();
-    files.forEach((file) => {
-      const reader = new FileReader();
-      reader.onload = (loadEvt) => {
-        const dataUrl = loadEvt.target?.result as string;
-        if (!dataUrl || !activeNote) return;
-        const altText = file.name ? file.name.replace(/\.[^.]+$/, "") : "Pasted Image";
-        if (rawMode) {
-          const ed = rawTextareaRef.current;
-          const pos = ed?.selectionStart ?? activeNote.content.length;
-          const { text, newCaret } = insertInlineImageInMarkdown(contentToMarkdown(activeNote.content), dataUrl, pos, altText);
-          editActive({ content: markdownToContent(text, activeNote.content, () => uid("line")) });
-          if (ed) {
-            requestAnimationFrame(() => {
-              ed.selectionStart = newCaret;
-              ed.selectionEnd = newCaret;
-            });
-          }
-        } else {
-          const ed = editorRef.current;
-          if (ed) {
-            insertInlineImageAtCaret(ed, dataUrl, altText);
-            handleEditorInput();
-          }
-        }
-      };
-      reader.readAsDataURL(file);
-    });
-  };
-
-  // Synchronize HTML into contenteditable when opening or switching notes
-  const initEditor = useCallback((node: HTMLDivElement | null) => {
-    editorRef.current = node;
-    if (node && activeNote) {
-      if (lastActiveNoteIdRef.current !== activeNote.id || !node.innerHTML || node.innerHTML === "<div><br></div>") {
-        lastActiveNoteIdRef.current = activeNote.id;
-        node.innerHTML = markdownToHtml(contentToMarkdown(activeNote.content));
-      }
-    }
-  }, [activeNote]);
-
-  useEffect(() => {
-    if (!activeNote) {
-      lastActiveNoteIdRef.current = null;
-      return;
-    }
-    if (lastActiveNoteIdRef.current !== activeNote.id) {
-      lastActiveNoteIdRef.current = activeNote.id;
-      if (editorRef.current) {
-        editorRef.current.innerHTML = markdownToHtml(contentToMarkdown(activeNote.content));
-      }
-    }
-  }, [activeNote]);
-
-  const handleEditorInput = () => {
-    if (!editorRef.current || !activeNote) return;
-    normalizeEditor(editorRef.current);
-    const content = markdownToContent(htmlToMarkdown(editorRef.current), activeNote.content, () => uid("line"));
-    editActive({ content });
-    updateActiveFormatting();
-  };
-
-  const handleToolbarFormat = (style: "bold" | "italic") => {
-    const activeEl = document.activeElement;
-
-    if (activeEl instanceof HTMLInputElement) {
-      const start = activeEl.selectionStart ?? 0;
-      const end = activeEl.selectionEnd ?? 0;
-      if (start !== end) {
-        const val = activeEl.value;
-        const selected = val.slice(start, end);
-        const marker = style === "bold" ? "**" : "*";
-
-        let nextVal: string;
-        let newStart: number;
-        let newEnd: number;
-
-        if (selected.startsWith(marker) && selected.endsWith(marker) && selected.length >= marker.length * 2) {
-          const unwrapped = selected.slice(marker.length, selected.length - marker.length);
-          nextVal = val.slice(0, start) + unwrapped + val.slice(end);
-          newStart = start;
-          newEnd = start + unwrapped.length;
-        } else {
-          const wrapped = `${marker}${selected}${marker}`;
-          nextVal = val.slice(0, start) + wrapped + val.slice(end);
-          newStart = start;
-          newEnd = start + wrapped.length;
-        }
-
-        activeEl.value = nextVal;
-        activeEl.dispatchEvent(new Event("input", { bubbles: true }));
-        requestAnimationFrame(() => {
-          activeEl.setSelectionRange(newStart, newEnd);
-        });
-        return;
-      }
-    }
-
-    if (activeEl instanceof HTMLElement && activeEl.dataset.taskLine) {
-      document.execCommand(style, false);
-      updateActiveFormatting();
-      return;
-    }
-
-    if (editorRef.current) {
-      const sel = window.getSelection();
-      const hasSelection = sel && sel.rangeCount > 0 && !sel.isCollapsed && editorRef.current.contains(sel.anchorNode);
-
-      if (hasSelection) {
-        document.execCommand(style, false);
-        handleEditorInput();
-        updateActiveFormatting();
-      } else {
-        if (!editorRef.current.contains(document.activeElement)) {
-          editorRef.current.focus();
-        }
-        document.execCommand(style, false);
-        updateActiveFormatting();
-      }
-    }
-  };
-
-  const runEditorCommand = (fn: (editor: HTMLElement) => void) => {
-    const ed = editorRef.current;
-    if (!ed) return;
-    fn(ed);
-    handleEditorInput();
   };
 
   const handleContextMenu = (e: React.MouseEvent) => {
@@ -713,13 +455,9 @@ export function TrayCompanion() {
     window.addEventListener("pointerup", onPointerUp);
   };
 
-  // Floating bar / resize-in-progress share the same frame as the panel
+  // The pill is drawn natively by the backend; while switching or collapsed this window shows nothing.
   if (mode !== "panel") {
-    return (
-      <div className="h-screen w-screen bg-transparent" style={{ background: "transparent" }}>
-        {mode === "pill" && <TrayPill onOpen={() => void expandFromPill()} />}
-      </div>
-    );
+    return <div className="h-screen w-screen bg-transparent" style={{ background: "transparent" }} />;
   }
 
   // ---- RENDER DESK TRAY WORKSPACE ----
@@ -734,12 +472,12 @@ export function TrayCompanion() {
         initial={{
           x: quadrant.grow_x === "right" ? -24 : quadrant.grow_x === "left" ? 24 : 0,
           y: quadrant.grow_y === "down" ? -24 : 24,
-          opacity: 0,
+          opacity: 0
         }}
         animate={{
           x: 0,
           y: 0,
-          opacity: shown ? 1 : 0,
+          opacity: shown ? 1 : 0
         }}
         transition={{ type: "spring", stiffness: 420, damping: 32 }}
         onAnimationComplete={() => {
@@ -747,8 +485,13 @@ export function TrayCompanion() {
             hideNow();
           }
         }}
-        onPaste={handlePaste}
-        onKeyDownCapture={handleUndoKeys}
+        onPaste={editor.onPaste}
+        onDragOver={(e) => {
+          e.preventDefault();
+          e.dataTransfer.dropEffect = "copy";
+        }}
+        onDrop={editor.onDrop}
+        onKeyDownCapture={editor.onKeyDown}
         onContextMenu={handleContextMenu}
         className="box-border flex h-full w-full flex-col overflow-hidden whitespace-nowrap text-ink-1 rounded-2xl border border-white/10 select-none p-2.5 shadow-none scale-100"
         style={{
@@ -756,7 +499,7 @@ export function TrayCompanion() {
           backgroundColor: "var(--theme-tray-bg)",
           backdropFilter: "var(--theme-tray-blur)",
           WebkitBackdropFilter: "var(--theme-tray-blur)",
-          boxShadow: "inset 0 0 0 1px var(--theme-tray-border)",
+          boxShadow: "inset 0 0 0 1px var(--theme-tray-border)"
         }}
       >
         {/* 1. Fluid permanent top bar: Hold and drag to move, click to toggle minimize */}
@@ -946,9 +689,9 @@ export function TrayCompanion() {
                             onClick={(e) => {
                               e.stopPropagation();
                               editActive({ font_family: font.name });
-                              if (editorRef.current) {
-                                editorRef.current.style.fontFamily = font.stack;
-                                editorRef.current.focus();
+                              if (editor.bodyRef.current) {
+                                editor.bodyRef.current.style.fontFamily = font.stack;
+                                editor.bodyRef.current.focus();
                               }
                               setFontOpen(false);
                             }}
@@ -1001,9 +744,9 @@ export function TrayCompanion() {
                                   onClick={(e) => {
                                     e.stopPropagation();
                                     editActive({ font_family: fontName });
-                                    if (editorRef.current) {
-                                      editorRef.current.style.fontFamily = fontStack(fontName);
-                                      editorRef.current.focus();
+                                    if (editor.bodyRef.current) {
+                                      editor.bodyRef.current.style.fontFamily = fontStack(fontName);
+                                      editor.bodyRef.current.focus();
                                     }
                                     setFontOpen(false);
                                   }}
@@ -1034,8 +777,8 @@ export function TrayCompanion() {
               <button
                 type="button"
                 onMouseDown={(e) => e.preventDefault()}
-                onClick={() => handleToolbarFormat("bold")}
-                className={cx("icon-btn !size-6 cursor-pointer", isBoldActive && "!bg-white/20 !text-white")}
+                onClick={() => editor.format("bold")}
+                className={cx("icon-btn !size-6 cursor-pointer", editor.bold && "!bg-white/20 !text-white")}
                 title="Toggle Bold (Ctrl+B)"
               >
                 <Bold size={11.5} strokeWidth={2.4} />
@@ -1043,8 +786,8 @@ export function TrayCompanion() {
               <button
                 type="button"
                 onMouseDown={(e) => e.preventDefault()}
-                onClick={() => handleToolbarFormat("italic")}
-                className={cx("icon-btn !size-6 cursor-pointer", isItalicActive && "!bg-white/20 !text-white")}
+                onClick={() => editor.format("italic")}
+                className={cx("icon-btn !size-6 cursor-pointer", editor.italic && "!bg-white/20 !text-white")}
                 title="Toggle Italic (Ctrl+I)"
               >
                 <Italic size={11.5} strokeWidth={2.4} />
@@ -1052,31 +795,31 @@ export function TrayCompanion() {
 
               <span className="mx-0.5 h-3 w-px bg-white/10" />
               <HeadingSelect
-                editorRef={editorRef}
+                editorRef={editor.bodyRef}
                 compact
-                onSelect={(level) => runEditorCommand((ed) => applyHeading(ed, level))}
+                onSelect={(level) => editor.run((ed) => applyHeading(ed, level))}
               />
 
               <InsertMenu
-                editorRef={editorRef}
-                onInsertTable={() => runEditorCommand((ed) => insertTableAtCaret(ed))}
-                onInsertTask={() => runEditorCommand((ed) => applyTask(ed))}
-                onInsertOrderedList={() => runEditorCommand((ed) => applyOrderedList(ed))}
-                onInsertBlockquote={() => runEditorCommand((ed) => applyBlockquote(ed))}
-                onInsertCode={() => runEditorCommand((ed) => insertCodeBlockAtCaret(ed))}
-                onInsertDefinitionList={() => runEditorCommand((ed) => applyDefinitionList(ed))}
+                editorRef={editor.bodyRef}
+                onInsertTable={() => editor.run((ed) => insertTableAtCaret(ed))}
+                onInsertTask={() => editor.run((ed) => applyTask(ed))}
+                onInsertOrderedList={() => editor.run((ed) => applyOrderedList(ed))}
+                onInsertBlockquote={() => editor.run((ed) => applyBlockquote(ed))}
+                onInsertCode={() => editor.run((ed) => insertCodeBlockAtCaret(ed))}
+                onInsertDefinitionList={() => editor.run((ed) => applyDefinitionList(ed))}
                 onAttachImage={() => fileInputRef.current?.click()}
-                onInsertInlineCode={() => runEditorCommand((ed) => applyInlineCode(ed))}
-                onInsertLink={() => runEditorCommand((ed) => applyLink(ed))}
-                onInsertFootnote={() => runEditorCommand((ed) => applyFootnote(ed))}
-                onInsertStrikethrough={() => runEditorCommand((ed) => applyStrikethrough(ed))}
-                onInsertHighlight={() => runEditorCommand((ed) => applyHighlight(ed))}
-                onInsertSubscript={() => runEditorCommand((ed) => applySubscript(ed))}
-                onInsertSuperscript={() => runEditorCommand((ed) => applySuperscript(ed))}
-                hasMedia={Boolean((activeNote.media_urls && activeNote.media_urls.length > 0) || activeNote.media_url)}
+                onInsertInlineCode={() => editor.run((ed) => applyInlineCode(ed))}
+                onInsertLink={() => editor.run((ed) => applyLink(ed))}
+                onInsertFootnote={() => editor.run((ed) => applyFootnote(ed))}
+                onInsertStrikethrough={() => editor.run((ed) => applyStrikethrough(ed))}
+                onInsertHighlight={() => editor.run((ed) => applyHighlight(ed))}
+                onInsertSubscript={() => editor.run((ed) => applySubscript(ed))}
+                onInsertSuperscript={() => editor.run((ed) => applySuperscript(ed))}
+                hasMedia={hasGallery(activeNote)}
                 compact
                 onOpenChange={(isOpen) => {
-                  if (isOpen) setShowEmojiPicker(false);
+                  if (isOpen) editor.closeEmojiPicker();
                 }}
               />
 
@@ -1085,10 +828,9 @@ export function TrayCompanion() {
                 onMouseDown={(e) => e.preventDefault()}
                 onClick={(e) => {
                   const rect = e.currentTarget.getBoundingClientRect();
-                  setEmojiAnchor(rect);
-                  setShowEmojiPicker((v) => !v);
+                  editor.toggleEmojiPicker(rect);
                 }}
-                className={cx("icon-btn !size-6 cursor-pointer shrink-0", showEmojiPicker && "!bg-white/20 !text-white")}
+                className={cx("icon-btn !size-6 cursor-pointer shrink-0", Boolean(editor.emojiAnchor) && "!bg-white/20 !text-white")}
                 title="Insert Emoji (:name:)"
               >
                 <Smile size={12} strokeWidth={2.2} />
@@ -1146,22 +888,7 @@ export function TrayCompanion() {
                 className="hidden"
                 onChange={(e) => {
                   const files = e.target.files;
-                  if (!files || files.length === 0) return;
-                  const imageFiles = Array.from(files);
-                  const loaded: string[] = [];
-                  let pending = imageFiles.length;
-                  imageFiles.forEach((file) => {
-                    const reader = new FileReader();
-                    reader.onload = (loadEvt) => {
-                      const dataUrl = loadEvt.target?.result as string;
-                      if (dataUrl) loaded.push(dataUrl);
-                      pending -= 1;
-                      if (pending === 0 && loaded.length > 0) {
-                        appendActiveImages(loaded);
-                      }
-                    };
-                    reader.readAsDataURL(file);
-                  });
+                  if (files && files.length > 0) editor.insertImages(Array.from(files), "Attached Image");
                   e.target.value = "";
                 }}
               />
@@ -1217,13 +944,12 @@ export function TrayCompanion() {
                       textarea.setSelectionRange(0, 0);
                       return;
                     }
-                  } else if (editorRef.current) {
+                  } else if (editor.bodyRef.current) {
                     e.preventDefault();
-                    placeCaretAtEditorStart(editorRef.current);
+                    placeCaretAtEditorStart(editor.bodyRef.current);
                     return;
                   }
                 }
-                handleUndoKeys(e);
               }}
               data-undo="title"
               placeholder="Untitled"
@@ -1231,161 +957,13 @@ export function TrayCompanion() {
               className="w-full bg-transparent text-[16px] font-semibold text-ink-1 outline-none placeholder:text-ink-4/60 shrink-0"
               style={{
                 fontFamily: fontStack(activeNote.font_family),
-                fontWeight: 560,
+                fontWeight: 560
               }}
             />
 
-            {/* Media preview if present */}
-            {(() => {
-              const rawImages = (activeNote.media_urls && activeNote.media_urls.length > 0)
-                ? activeNote.media_urls
-                : (activeNote.media_url ? [activeNote.media_url] : []);
-              const images = rawImages.filter((img) => img && typeof img === "string" && img.trim().length > 0);
-              if (images.length === 0) return null;
-              return (
-                <div className="shrink-0">
-                  <div className="grid grid-cols-2 gap-2 max-h-[140px] overflow-y-auto scrollbar-thin pr-1">
-                    {images.map((imgUrl, idx) => (
-                      <div
-                        key={`tray-img-${idx}`}
-                        onClick={() => {
-                          setPreviewImage(imgUrl);
-                        }}
-                        className="relative group aspect-video min-h-[80px] rounded-lg overflow-hidden bg-black/50 border border-white/10 flex items-center justify-center cursor-pointer hover:border-white/30 transition-all"
-                        title="Click to zoom & inspect full image"
-                      >
-                        <img
-                          src={imgUrl}
-                          alt=""
-                          className="w-full h-full object-contain rounded opacity-95 transition-transform duration-200 group-hover:scale-105"
-                          onError={(e) => {
-                            const parent = e.currentTarget.parentElement;
-                            if (parent) parent.style.display = "none";
-                          }}
-                        />
-                        <button
-                          type="button"
-                          onClick={(e) => {
-                            e.stopPropagation();
-                            removeActiveImageAt(idx);
-                          }}
-                          className="absolute right-1 top-1 grid size-5 place-items-center rounded bg-black/80 text-white/80 hover:text-white opacity-0 group-hover:opacity-100 transition-opacity border border-white/10 z-10"
-                          title="Remove image"
-                        >
-                          <X size={10} strokeWidth={2.2} />
-                        </button>
-                      </div>
-                    ))}
-                  </div>
-                </div>
-              );
-            })()}
+            <NoteGallery editor={editor} variant="dock" />
 
-            {/* Editor: Basic Note freeform writing vs Tasks mode */}
-            <div data-undo="body" className="min-h-[180px] pb-6">
-              {rawMode ? (
-                <RawEditor
-                  content={activeNote.content}
-                  textareaRef={rawTextareaRef}
-                  minHeight={180}
-                  className="text-[11.5px]"
-                  onChange={(content) => editActive({ content })}
-                  onArrowUpAtStart={() => {
-                    if (titleRef.current) {
-                      titleRef.current.focus();
-                      const len = titleRef.current.value.length;
-                      titleRef.current.setSelectionRange(len, len);
-                    }
-                  }}
-                />
-              ) : (
-              <div
-                ref={initEditor}
-                onPaste={(e) => {
-                  if (handleMarkdownPaste(e)) handleEditorInput();
-                }}
-                contentEditable
-                suppressContentEditableWarning
-                onInput={handleEditorInput}
-                onContextMenu={(e) => {
-                  const img = (e.target as HTMLElement).closest("img.md-img") as HTMLImageElement | null;
-                  if (img) {
-                    e.preventDefault();
-                    e.stopPropagation();
-                    setContextMenuImg({
-                      element: img,
-                      x: e.clientX,
-                      y: e.clientY,
-                    });
-                    return;
-                  }
-                  const cell = (e.target as HTMLElement).closest("td,th") as HTMLElement | null;
-                  if (cell && editorRef.current?.contains(cell)) {
-                    e.preventDefault();
-                    e.stopPropagation();
-                    setTableMenu({ x: e.clientX, y: e.clientY, cell });
-                  }
-                }}
-                onMouseDown={(e) => {
-                  if ((e.target as HTMLElement).closest(".md-cb")) e.preventDefault();
-                }}
-                onClick={(e) => {
-                  const img = (e.target as HTMLElement).closest("img.md-img") as HTMLImageElement | null;
-                  if (img) {
-                    e.preventDefault();
-                    setPreviewImage(img.src);
-                    return;
-                  }
-                  const link = (e.target as HTMLElement).closest("a.md-link") as HTMLAnchorElement | null;
-                  if (link && (e.ctrlKey || e.metaKey)) {
-                    e.preventDefault();
-                    const href = link.getAttribute("href");
-                    if (href) openExternalUrl(href);
-                    return;
-                  }
-                  if (handleCheckboxClick(e, editorRef.current)) handleEditorInput();
-                  if (editorRef.current) fixCheckboxCaret(editorRef.current);
-                }}
-                onKeyDown={(e) => {
-                  if (e.key === "ArrowUp" && editorRef.current && isCaretAtEditorStart(editorRef.current)) {
-                    e.preventDefault();
-                    if (titleRef.current) {
-                      titleRef.current.focus();
-                      const len = titleRef.current.value.length;
-                      titleRef.current.setSelectionRange(len, len);
-                    }
-                    return;
-                  }
-                  const sc = getMarkdownShortcuts();
-                  if (matchesCombo(e, sc.bold)) {
-                    e.preventDefault();
-                    handleToolbarFormat("bold");
-                    return;
-                  }
-                  if (matchesCombo(e, sc.italic)) {
-                    e.preventDefault();
-                    handleToolbarFormat("italic");
-                    return;
-                  }
-                  if (editorRef.current && handleRichEditorKeyDown(e, editorRef.current, handleEditorInput)) {
-                    return;
-                  }
-                }}
-                onKeyUp={() => {
-                  updateActiveFormatting();
-                  if (editorRef.current) fixCheckboxCaret(editorRef.current);
-                }}
-                onMouseUp={() => {
-                  updateActiveFormatting();
-                  if (editorRef.current) fixCheckboxCaret(editorRef.current);
-                }}
-                className="w-full min-h-[180px] whitespace-pre-wrap break-words bg-transparent text-[12.5px] leading-relaxed text-ink-2 outline-none select-text"
-                style={{
-                  fontFamily: fontStack(activeNote.font_family),
-                }}
-              />
-              )}
-            </div>
+            <NoteBody editor={editor} variant="dock" />
             </div>
           </div>
         </div>
@@ -1589,93 +1167,7 @@ export function TrayCompanion() {
       )}
       </div>
 
-      <EmojiAutocomplete editorRef={editorRef} onEmojiInserted={handleEditorInput} />
-
-      <EmojiPickerModal
-        isOpen={showEmojiPicker}
-        onClose={() => setShowEmojiPicker(false)}
-        anchorRect={emojiAnchor}
-        onSelect={(emoji) => {
-          if (rawMode && activeNote) {
-            const ed = rawTextareaRef.current;
-            if (ed) {
-              const start = ed.selectionStart;
-              const end = ed.selectionEnd;
-              const val = ed.value;
-              const next = val.slice(0, start) + emoji + val.slice(end);
-              editActive({ content: markdownToContent(next, activeNote.content, () => uid("line")) });
-              requestAnimationFrame(() => {
-                ed.selectionStart = start + emoji.length;
-                ed.selectionEnd = start + emoji.length;
-                ed.focus();
-              });
-            }
-          } else {
-            runEditorCommand((ed) => insertEmojiAtCaret(ed, emoji));
-            handleEditorInput();
-          }
-        }}
-      />
-
-      {contextMenuImg && (
-        <ImageContextMenu
-          isOpen={Boolean(contextMenuImg)}
-          x={contextMenuImg.x}
-          y={contextMenuImg.y}
-          imgElement={contextMenuImg.element}
-          onClose={() => setContextMenuImg(null)}
-          onZoom={() => {
-            setPreviewImage(contextMenuImg.element.src);
-            setContextMenuImg(null);
-          }}
-          onEdit={() => {
-            setEditImgModal({
-              element: contextMenuImg.element,
-              alt: contextMenuImg.element.alt || "Image",
-              src: contextMenuImg.element.src,
-              refKey: contextMenuImg.element.getAttribute("data-ref") || undefined,
-            });
-            setContextMenuImg(null);
-          }}
-          onDelete={() => {
-            contextMenuImg.element.remove();
-            handleEditorInput();
-            setContextMenuImg(null);
-          }}
-        />
-      )}
-
-      <EditImageModal
-        isOpen={Boolean(editImgModal)}
-        onClose={() => setEditImgModal(null)}
-        alt={editImgModal?.alt ?? ""}
-        src={editImgModal?.src ?? ""}
-        refKey={editImgModal?.refKey}
-        onSave={(newAlt) => {
-          if (!editImgModal) return;
-          editImgModal.element.alt = newAlt;
-          const ref = editImgModal.element.getAttribute("data-ref");
-          if (ref) {
-            editImgModal.element.setAttribute("data-md", `![${newAlt}][${ref}]`);
-          } else {
-            editImgModal.element.setAttribute("data-md", `![${newAlt}](${editImgModal.element.src})`);
-          }
-          handleEditorInput();
-          setEditImgModal(null);
-        }}
-      />
-
-      {tableMenu && (
-        <TableMenu
-          x={tableMenu.x}
-          y={tableMenu.y}
-          cell={tableMenu.cell}
-          onClose={() => setTableMenu(null)}
-          onChanged={handleEditorInput}
-        />
-      )}
-
-      {previewImage && <ImageLightbox src={previewImage} onClose={() => setPreviewImage(null)} />}
+      <EditorOverlays editor={editor} />
 
       {/* Theme-matched delete confirmation popover modal */}
       {showDeleteConfirm && activeNote && (

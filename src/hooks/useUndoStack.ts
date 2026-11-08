@@ -31,6 +31,22 @@ function isWordOrStructuralBoundary(prev: unknown, next: unknown): boolean {
 }
 
 /**
+ * Equal titles, or equal line lists compared field by field. Serialising the whole note to compare
+ * it cost two full copies of it (pasted images included) on every keystroke.
+ */
+export function sameValue(a: unknown, b: unknown): boolean {
+  if (Object.is(a, b)) return true;
+  if (!Array.isArray(a) || !Array.isArray(b) || a.length !== b.length) return false;
+  return a.every((item, i) => {
+    const other = b[i];
+    if (Object.is(item, other)) return true;
+    if (!item || !other || typeof item !== "object" || typeof other !== "object") return false;
+    const keys = Object.keys(item);
+    return keys.length === Object.keys(other).length && keys.every((k) => Object.is(item[k], other[k]));
+  });
+}
+
+/**
  * Independent deep undo/redo history for editable fields (title or body).
  * Tracks and stores up to 50 distinct structural state mutations chronologically.
  * Replaces coalesce locks with responsive snapshot tracking on word boundaries,
@@ -61,9 +77,7 @@ export function useUndoStack<T>(resetKey: string | null, value: T, apply: (v: T)
       last.current = value;
       return;
     }
-    const prevJson = JSON.stringify(last.current);
-    const nextJson = JSON.stringify(value);
-    if (prevJson === nextJson) return;
+    if (sameValue(last.current, value)) return;
 
     const now = Date.now();
     const shouldSnapshot =

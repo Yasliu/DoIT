@@ -7,8 +7,8 @@ import { ContextMenu } from "./components/ContextMenu";
 import { CategoryMenu } from "./components/CategoryMenu";
 import { IconPickerModal } from "./components/IconPickerModal";
 import { setMarkdownBaseDir } from "./lib/format";
-import { applyShortcutSettings } from "./lib/shortcuts";
-import { initCategoryIcons, setCategoryIcon } from "./lib/categoryIcons";
+import { applyShortcutSettings, canvasShortcut } from "./lib/shortcuts";
+import { setCategoryIcon } from "./lib/categoryIcons";
 import { suggestShelfIcon } from "./platform/modern/ShelfIcons";
 import { NoteSheet } from "./components/NoteSheet";
 import { SettingsPanel } from "./components/SettingsPanel";
@@ -39,7 +39,6 @@ interface Toast {
   undo?: NoteItem;
 }
 
-const COLLAPSE_KEY = "doit.collapsed";
 const CURRENT_VERSION = "1.1.7";
 const VERSION_TRACKER_KEY = "doit.release_notes_version";
 
@@ -54,15 +53,6 @@ function isVersionLower(current: string | null, target: string): boolean {
     if (cv > tv) return false;
   }
   return false;
-}
-
-function readCollapsed(): Record<string, boolean> {
-  try {
-    const raw = window.localStorage.getItem(COLLAPSE_KEY);
-    return raw ? (JSON.parse(raw) as Record<string, boolean>) : {};
-  } catch {
-    return {};
-  }
 }
 
 export function getAdaptiveMinDrawerWidth(): number {
@@ -121,7 +111,6 @@ export default function App() {
   const [isSettings, setIsSettings] = useState(false);
   const [mini] = useState(false);
   const [railOpen, setRailOpen] = useState(true);
-  const [collapsed, setCollapsed] = useState<Record<string, boolean>>(readCollapsed);
   const [toast, setToast] = useState<Toast | null>(null);
   const [themeMode, setThemeMode] = useState<"glass" | "monochrome">("glass");
   const [availableUpdate, setAvailableUpdate] = useState<UpdateInfo | null>(null);
@@ -207,9 +196,7 @@ export default function App() {
     try {
       sessionStorage.setItem("doit.release_notes_seen", CURRENT_VERSION);
       localStorage.setItem(VERSION_TRACKER_KEY, CURRENT_VERSION);
-      void tauriApi.getSettings().then((s) => {
-        void tauriApi.updateSettings({ ...s, last_seen_version: CURRENT_VERSION });
-      });
+      void tauriApi.patchSettings({ last_seen_version: CURRENT_VERSION });
     } catch {
       /* ignore */
     }
@@ -233,7 +220,7 @@ export default function App() {
         if (!diskSeen && !localSeen) {
           localStorage.setItem(VERSION_TRACKER_KEY, CURRENT_VERSION);
           sessionStorage.setItem("doit.release_notes_seen", CURRENT_VERSION);
-          void tauriApi.updateSettings({ ...s, last_seen_version: CURRENT_VERSION });
+          void tauriApi.patchSettings({ last_seen_version: CURRENT_VERSION });
           return;
         }
 
@@ -243,11 +230,11 @@ export default function App() {
           setShowReleaseModal(true);
           sessionStorage.setItem("doit.release_notes_seen", CURRENT_VERSION);
           localStorage.setItem(VERSION_TRACKER_KEY, CURRENT_VERSION);
-          void tauriApi.updateSettings({ ...s, last_seen_version: CURRENT_VERSION });
+          void tauriApi.patchSettings({ last_seen_version: CURRENT_VERSION });
         } else {
           sessionStorage.setItem("doit.release_notes_seen", CURRENT_VERSION);
           if (!diskSeen) {
-            void tauriApi.updateSettings({ ...s, last_seen_version: CURRENT_VERSION });
+            void tauriApi.patchSettings({ last_seen_version: CURRENT_VERSION });
           }
         }
       } catch {
@@ -265,19 +252,9 @@ export default function App() {
         setThemeMode(s.theme_mode as "glass" | "monochrome");
         document.documentElement.dataset.theme = s.theme_mode;
       }
-      if (s.category_icons) {
-        initCategoryIcons(s.category_icons);
-      }
     });
   }, []);
 
-  useEffect(() => {
-    try {
-      window.localStorage.setItem(COLLAPSE_KEY, JSON.stringify(collapsed));
-    } catch {
-      /* ignore */
-    }
-  }, [collapsed]);
 
   const dismissToast = useCallback(() => {
     window.clearTimeout(toastTimer.current);
@@ -463,9 +440,7 @@ export default function App() {
     [patch],
   );
 
-  const toggleCollapse = useCallback((shelf: string) => {
-    setCollapsed((prev) => ({ ...prev, [shelf]: !prev[shelf] }));
-  }, []);
+  const { collapsed, toggleCollapsed: toggleCollapse } = workspace;
 
   const toggleMini = useCallback(() => {
     void tauriApi.openTrayMode(Boolean(openNote), openNote?.note.id);
@@ -508,26 +483,19 @@ export default function App() {
 
   useEffect(() => {
     const onKey = (event: KeyboardEvent) => {
-      const meta = event.ctrlKey || event.metaKey;
-      if (meta && event.key.toLowerCase() === "n") {
-        event.preventDefault();
+      const shortcut = canvasShortcut(event);
+      if (!shortcut || (shortcut === "search" && !isModern)) return;
+      event.preventDefault();
+      if (shortcut === "new-note") {
         if (isSettings) setIsSettings(false);
         if (!openNote) requestNewNote();
-      }
-      if (isModern && meta && event.key.toLowerCase() === "k") {
-        event.preventDefault();
+      } else if (shortcut === "search") {
         setModernDialog((d) => (d === "search" ? null : "search"));
-      }
-      if (meta && event.key.toLowerCase() === "o") {
-        event.preventDefault();
+      } else if (shortcut === "import-file") {
         void handleImportNote();
-      }
-      if (meta && event.key.toLowerCase() === "j") {
-        event.preventDefault();
+      } else if (shortcut === "dock") {
         toggleMini();
-      }
-      if (meta && (event.key === "," || (event.key.toLowerCase() === "s" && event.shiftKey))) {
-        event.preventDefault();
+      } else {
         setIsSettings((prev) => !prev);
       }
     };
@@ -866,11 +834,6 @@ export default function App() {
             const err = await renameCategory(shelf, newName);
             if (!err) {
               setActive((cur) => (cur === shelf ? newName : cur));
-              setCollapsed((prev) => {
-                if (!(shelf in prev)) return prev;
-                const { [shelf]: was, ...rest } = prev;
-                return { ...rest, [newName]: was };
-              });
             }
             return err;
           }}

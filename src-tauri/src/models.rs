@@ -70,6 +70,18 @@ pub struct QuadrantInfo {
     pub grow_y: String,
 }
 
+/// A shelf as settings.json stores it and the frontend sees it (see `storage::shelves`).
+#[derive(Clone, Debug, Serialize, Deserialize, PartialEq)]
+pub struct Shelf {
+    pub name: String,
+    /// An icon name, or "dot"; `None` lets the app pick one from the name.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub icon: Option<String>,
+    #[serde(default)]
+    pub collapsed: bool,
+}
+
+/// The export format's shelf entry (kept for exports from older versions).
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct CategoryInfo {
     pub name: String,
@@ -130,9 +142,12 @@ pub struct AppSettings {
     /// "modern" opts Windows into the new design; Linux always uses it.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub design: Option<String>,
-    /// Shelves in the order the user dragged them into (others follow alphabetically).
+    /// Before `shelves`: the order the user dragged shelves into. Read once to migrate.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub shelf_order: Option<Vec<String>>,
+    /// Every shelf in display order, with its icon and collapsed state. Owned by the backend.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub shelves: Option<Vec<Shelf>>,
 }
 
 fn default_dock_on_close() -> bool {
@@ -218,6 +233,7 @@ impl Default for AppSettings {
             boxy: None,
             design: None,
             shelf_order: None,
+            shelves: None,
         }
     }
 }

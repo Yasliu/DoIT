@@ -142,3 +142,44 @@ export function matchesCombo(e: KeyEventLike, combo: string): boolean {
   const label = comboFromEvent(e);
   return !!label && normalizeCombo(label) === normalizeCombo(combo);
 }
+
+export type CanvasShortcut = "new-note" | "search" | "import-file" | "dock" | "settings";
+
+/**
+ * The canvas window's own shortcuts. A key that something closer to the focus already handled
+ * (a dialog's Ctrl+O, a palette's Ctrl+N) is theirs, so it never runs the canvas action as well.
+ */
+export function canvasShortcut(e: KeyEventLike & { defaultPrevented: boolean }): CanvasShortcut | null {
+  if (e.defaultPrevented || !(e.ctrlKey || e.metaKey)) return null;
+  const key = e.key.toLowerCase();
+  if (key === "n") return "new-note";
+  if (key === "k") return "search";
+  if (key === "o") return "import-file";
+  if (key === "j") return "dock";
+  if (e.key === "," || (key === "s" && e.shiftKey)) return "settings";
+  return null;
+}
+
+export const TEXT_MARKS_SHORTCUT_ROWS = [
+  { key: "hotkey_bold", label: "Bold", hint: "Wrap selection in **bold**", def: DEFAULT_MD_SHORTCUTS.bold },
+  { key: "hotkey_italic", label: "Italic", hint: "Wrap selection in *italic*", def: DEFAULT_MD_SHORTCUTS.italic },
+  { key: "hotkey_strikethrough", label: "Strikethrough", hint: "Wrap selection in ~~strikethrough~~", def: DEFAULT_MD_SHORTCUTS.strikethrough },
+  { key: "hotkey_highlight", label: "Highlight", hint: "Wrap selection in ==highlight==", def: DEFAULT_MD_SHORTCUTS.highlight },
+  { key: "hotkey_inline_code", label: "Inline Code", hint: "Format selection as `code`", def: DEFAULT_MD_SHORTCUTS.inlineCode },
+  { key: "hotkey_subscript", label: "Subscript", hint: "Wrap selection in ~subscript~ (e.g. H~2~O)", def: DEFAULT_MD_SHORTCUTS.subscript },
+  { key: "hotkey_superscript", label: "Superscript", hint: "Wrap selection in ^superscript^ (e.g. x^2)", def: DEFAULT_MD_SHORTCUTS.superscript },
+  { key: "hotkey_link", label: "Insert Link", hint: "Wrap selection in [title](url)", def: DEFAULT_MD_SHORTCUTS.link },
+] as const;
+
+export const BLOCKS_STRUCTURE_SHORTCUT_ROWS = [
+  { key: "hotkey_h1", label: "Heading 1 (H1)", hint: "Toggle # H1 heading on the current line", def: DEFAULT_MD_SHORTCUTS.h1 },
+  { key: "hotkey_h2", label: "Heading 2 (H2)", hint: "Toggle ## H2 heading on the current line", def: DEFAULT_MD_SHORTCUTS.h2 },
+  { key: "hotkey_h3", label: "Heading 3 (H3)", hint: "Toggle ### H3 heading on the current line", def: DEFAULT_MD_SHORTCUTS.h3 },
+  { key: "hotkey_task", label: "Checklist Task", hint: "Turn the line into a - [ ] task", def: DEFAULT_MD_SHORTCUTS.task },
+  { key: "hotkey_ordered_list", label: "Numbered List", hint: "Toggle numbered list (or type 1. at start)", def: DEFAULT_MD_SHORTCUTS.orderedList },
+  { key: "hotkey_blockquote", label: "Blockquote", hint: "Toggle blockquote (or type > at line start)", def: DEFAULT_MD_SHORTCUTS.blockquote },
+  { key: "hotkey_footnote", label: "Footnote", hint: "Insert footnote reference [^1] and definition", def: DEFAULT_MD_SHORTCUTS.footnote },
+  { key: "hotkey_table", label: "Insert Table", hint: "Drop a markdown table at the cursor", def: DEFAULT_MD_SHORTCUTS.table },
+  { key: "hotkey_table_col", label: "Table: Add Column", hint: "Inside a table cell: new column on every row", def: DEFAULT_MD_SHORTCUTS.tableCol },
+  { key: "hotkey_table_row", label: "Table: Add Row", hint: "Inside a table cell: new row at the bottom", def: DEFAULT_MD_SHORTCUTS.tableRow },
+] as const;

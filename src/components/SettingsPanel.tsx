@@ -23,7 +23,7 @@ import {
 } from "lucide-react";
 import { motion, AnimatePresence } from "motion/react";
 import { AppSettings, DEFAULT_SETTINGS, tauriApi } from "../api/tauriBridge";
-import { applyShortcutSettings, DEFAULT_MD_SHORTCUTS } from "../lib/shortcuts";
+import { applyShortcutSettings, BLOCKS_STRUCTURE_SHORTCUT_ROWS, TEXT_MARKS_SHORTCUT_ROWS } from "../lib/shortcuts";
 import { ShortcutField } from "./ShortcutField";
 import { cx } from "../lib/text";
 import { NewDesignOptIn } from "../platform/DesignSwitch";
@@ -40,30 +40,6 @@ const GENERAL_SHORTCUT_ROWS = [
   { key: "hotkey_search", label: "Global Search", hint: "Focus search query input", def: "Ctrl+F" },
   { key: "hotkey_settings", label: "Open Settings", hint: "Toggles this settings panel", def: "Ctrl+," },
   { key: "hotkey_open_file", label: "Open / Ingest File", hint: "Native file picker to import note", def: "Ctrl+O" },
-] as const;
-
-export const TEXT_MARKS_SHORTCUT_ROWS = [
-  { key: "hotkey_bold", label: "Bold", hint: "Wrap selection in **bold**", def: DEFAULT_MD_SHORTCUTS.bold },
-  { key: "hotkey_italic", label: "Italic", hint: "Wrap selection in *italic*", def: DEFAULT_MD_SHORTCUTS.italic },
-  { key: "hotkey_strikethrough", label: "Strikethrough", hint: "Wrap selection in ~~strikethrough~~", def: DEFAULT_MD_SHORTCUTS.strikethrough },
-  { key: "hotkey_highlight", label: "Highlight", hint: "Wrap selection in ==highlight==", def: DEFAULT_MD_SHORTCUTS.highlight },
-  { key: "hotkey_inline_code", label: "Inline Code", hint: "Format selection as `code`", def: DEFAULT_MD_SHORTCUTS.inlineCode },
-  { key: "hotkey_subscript", label: "Subscript", hint: "Wrap selection in ~subscript~ (e.g. H~2~O)", def: DEFAULT_MD_SHORTCUTS.subscript },
-  { key: "hotkey_superscript", label: "Superscript", hint: "Wrap selection in ^superscript^ (e.g. x^2)", def: DEFAULT_MD_SHORTCUTS.superscript },
-  { key: "hotkey_link", label: "Insert Link", hint: "Wrap selection in [title](url)", def: DEFAULT_MD_SHORTCUTS.link },
-] as const;
-
-export const BLOCKS_STRUCTURE_SHORTCUT_ROWS = [
-  { key: "hotkey_h1", label: "Heading 1 (H1)", hint: "Toggle # H1 heading on the current line", def: DEFAULT_MD_SHORTCUTS.h1 },
-  { key: "hotkey_h2", label: "Heading 2 (H2)", hint: "Toggle ## H2 heading on the current line", def: DEFAULT_MD_SHORTCUTS.h2 },
-  { key: "hotkey_h3", label: "Heading 3 (H3)", hint: "Toggle ### H3 heading on the current line", def: DEFAULT_MD_SHORTCUTS.h3 },
-  { key: "hotkey_task", label: "Checklist Task", hint: "Turn the line into a - [ ] task", def: DEFAULT_MD_SHORTCUTS.task },
-  { key: "hotkey_ordered_list", label: "Numbered List", hint: "Toggle numbered list (or type 1. at start)", def: DEFAULT_MD_SHORTCUTS.orderedList },
-  { key: "hotkey_blockquote", label: "Blockquote", hint: "Toggle blockquote (or type > at line start)", def: DEFAULT_MD_SHORTCUTS.blockquote },
-  { key: "hotkey_footnote", label: "Footnote", hint: "Insert footnote reference [^1] and definition", def: DEFAULT_MD_SHORTCUTS.footnote },
-  { key: "hotkey_table", label: "Insert Table", hint: "Drop a markdown table at the cursor", def: DEFAULT_MD_SHORTCUTS.table },
-  { key: "hotkey_table_col", label: "Table: Add Column", hint: "Inside a table cell: new column on every row", def: DEFAULT_MD_SHORTCUTS.tableCol },
-  { key: "hotkey_table_row", label: "Table: Add Row", hint: "Inside a table cell: new row at the bottom", def: DEFAULT_MD_SHORTCUTS.tableRow },
 ] as const;
 
 function CollapsibleShortcutCategory({
@@ -230,7 +206,7 @@ export function SettingsPanel({ onBack, onStoragePathChanged, onThemeChanged }: 
     setSettings(updated);
     document.documentElement.dataset.theme = mode;
     if (onThemeChanged) onThemeChanged(mode);
-    void tauriApi.updateSettings(updated);
+    void tauriApi.patchSettings({ theme_mode: mode });
   };
 
   const handleBrowseFolder = async () => {
@@ -268,7 +244,7 @@ export function SettingsPanel({ onBack, onStoragePathChanged, onThemeChanged }: 
       dock_on_close: checked,
     };
     setSettings(nextSettings);
-    await tauriApi.updateSettings(nextSettings);
+    await tauriApi.patchSettings({ dock_on_close: checked });
   };
 
   const handleSave = async () => {
@@ -278,7 +254,12 @@ export function SettingsPanel({ onBack, onStoragePathChanged, onThemeChanged }: 
       dock_on_close: settings.dock_on_close ?? true,
     };
     const pathChanged = nextSettings.storage_path !== settings.storage_path;
-    const res = await tauriApi.updateSettings(nextSettings);
+    const hotkeys = Object.fromEntries(Object.entries(nextSettings).filter(([key]) => key.startsWith("hotkey_")));
+    const res = await tauriApi.patchSettings({
+      ...hotkeys,
+      storage_path: nextSettings.storage_path,
+      dock_on_close: nextSettings.dock_on_close,
+    });
     applyShortcutSettings(res);
     setSettings(res);
     setSaved(true);
@@ -290,10 +271,8 @@ export function SettingsPanel({ onBack, onStoragePathChanged, onThemeChanged }: 
   };
 
   const handleResetDefaults = async () => {
-    const res = await tauriApi.updateSettings({
-      ...DEFAULT_SETTINGS,
-      storage_path: settings.storage_path, // Keep path, reset hotkeys
-    });
+    const { storage_path: _keepPath, ...defaults } = DEFAULT_SETTINGS;
+    const res = await tauriApi.patchSettings(defaults);
     applyShortcutSettings(res);
     setSettings(res);
     setSaved(true);

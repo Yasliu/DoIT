@@ -1,8 +1,8 @@
 import { useEffect, useState } from "react";
 import { motion } from "motion/react";
 import { ArrowLeft, Check, ChevronRight, ExternalLink, FolderOpen, Monitor, Moon, RefreshCw, Sun } from "lucide-react";
-import { AppSettings, DEFAULT_SETTINGS, tauriApi } from "../../api/tauriBridge";
-import { BLOCKS_STRUCTURE_SHORTCUT_ROWS, TEXT_MARKS_SHORTCUT_ROWS } from "../../components/SettingsPanel";
+import { AppSettings, DEFAULT_SETTINGS, settingsChanges, tauriApi } from "../../api/tauriBridge";
+import { BLOCKS_STRUCTURE_SHORTCUT_ROWS, TEXT_MARKS_SHORTCUT_ROWS } from "../../lib/shortcuts";
 import { ShortcutField } from "../../components/ShortcutField";
 import { applyShortcutSettings } from "../../lib/shortcuts";
 import { cx } from "../../lib/text";
@@ -157,8 +157,9 @@ export function ModernSettings({ onBack, onStoragePathChanged }: ModernSettingsP
 
   /** Every control saves as soon as it changes. */
   const save = (next: AppSettings) => {
+    const changes = settingsChanges(settings, next);
     setSettings(next);
-    void tauriApi.updateSettings(next).then(applyShortcutSettings);
+    void tauriApi.patchSettings(changes).then(applyShortcutSettings);
   };
 
   const theme = themeFromSettings(settings);
@@ -171,7 +172,7 @@ export function ModernSettings({ onBack, onStoragePathChanged }: ModernSettingsP
 
   const pathChanged = pathInput.trim() !== "" && pathInput.trim() !== settings.storage_path;
   const applyPath = async () => {
-    const res = await tauriApi.updateSettings({ ...settings, storage_path: pathInput.trim() });
+    const res = await tauriApi.patchSettings({ storage_path: pathInput.trim() });
     setSettings(res);
     setPathInput(res.storage_path);
     onStoragePathChanged();

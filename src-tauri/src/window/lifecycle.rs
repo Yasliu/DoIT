@@ -1,273 +1,392 @@
-//! Creating, revealing, suspending and rebuilding the canvas and tray webviews.
+//! Moving between the canvas, the pill and the panel: showing and hiding their windows, building and
+//! retiring webviews, and placing everything through `placement`.
+//!
+//! Which surface is live in each mode:
+//! - Canvas: the canvas webview. The pill window and the dock webview do not exist.
+//! - Dock(Pill): the native pill only. The dock webview stays hidden for `PANEL_KEEPALIVE` after the
+//!   panel closes (so reopening is instant), then is retired.
+//! - Dock(Panel): the dock webview. The pill window is hidden.
 
-use std::sync::atomic::Ordering;
-use tauri::{AppHandle, Emitter, Manager};
+use std::time::Duration;
+use tauri::{AppHandle, Emitter, Manager, WebviewWindow, Window};
 
-use super::geometry::{get_window_active_monitor, position_tray_on_monitor, TRAY_PANEL_H, TRAY_PANEL_W};
-use super::state::*;
+use super::flush;
+use super::geometry::{primary_screen, rect_of, screen_named, screen_of};
+use super::placement::{
+    canvas_placement, clamp_into, dock_home, dock_size, reshape, CanvasGeometry, CanvasPlacement, DockShape, Growth, Rect, Screen,
+};
+use super::pill;
+use super::state::{engine, Mode};
+use super::webview::{self, Surface};
+use super::{DockOpen, CANVAS, DOCK};
 use crate::platform;
 use crate::storage::StorageManager;
 
-/// Identical browser arguments on EVERY window: WebView2 shares one browser/GPU process tree per
-/// (user-data-folder + arguments) pair, so mismatching args would spawn a second tree.
-pub const WEBVIEW_ARGS: &str = "--disable-features=msWebOOUI,msPdfOOUI,msSmartScreenProtection --js-flags=--expose-gc --disable-background-networking --disk-cache-size=8388608 --in-process-gpu";
+/// How long a closed panel's webview is kept (hidden) before it is retired.
+const PANEL_KEEPALIVE: Duration = Duration::from_secs(20);
 
-/// Forces a V8 garbage collection inside the page (needs --js-flags=--expose-gc).
-pub fn flush_webview_memory(window: &tauri::WebviewWindow) {
-    let _ = window.eval("try{if(window.gc){window.gc();}}catch(e){}");
+fn plain(window: &WebviewWindow) -> Window {
+    window.as_ref().window()
 }
 
-/// Tray mode: the canvas webview is DESTROYED (after the frontend flushed pending saves), so WebView2
-/// reclaims its renderer + whole layout tree. It is rebuilt from the window config on demand.
-pub fn suspend_main(app: &AppHandle) {
-    let Some(main) = app.get_webview_window("main") else {
-        return;
-    };
-    let _ = main.hide();
-    if MAIN_SUSPENDED.load(Ordering::SeqCst) || EXTERNAL_DIRTY.load(Ordering::SeqCst) {
-        return;
-    }
-    let app2 = app.clone();
-    std::thread::spawn(move || {
-        let Some(main) = app2.get_webview_window("main") else {
-            return;
-        };
-        let _ = app2.emit_to("main", "flush-pending", ());
-        std::thread::sleep(std::time::Duration::from_millis(350));
-        // canvas re-opened in the meantime (or an external file has unsaved edits): leave it alone
-        if main.is_visible().unwrap_or(false) || EXTERNAL_DIRTY.load(Ordering::SeqCst) {
+fn place(window: &Window, rect: Rect) {
+    platform::set_window_bounds(window, rect.x, rect.y, rect.w as u32, rect.h as u32);
+}
+
+fn focus(window: &Window) {
+    let _ = window.unminimize();
+    let _ = window.show();
+    platform::focus_window(window);
+}
+
+fn screen_or_primary(app: &AppHandle, window: Option<&Window>) -> Option<Screen> {
+    window.and_then(screen_of).or_else(|| primary_screen(app))
+}
+
+/// Saves how the canvas looks, so coming back from the dock restores it.
+pub fn remember_canvas(app: &AppHandle) {
+    let Some(canvas) = app.get_webview_window(CANVAS) else { return };
+    let canvas = plain(&canvas);
+    let maximized = canvas.is_maximized().unwrap_or(false);
+    // `set_size` takes the inner size, so remember that (the outer frame can be larger on Linux,
+    // which grew the canvas on every trip through the dock).
+    let rect = rect_of(&canvas)
+        .zip(canvas.inner_size().ok())
+        .map(|(outer, inner)| Rect { w: inner.width as i32, h: inner.height as i32, ..outer });
+    engine().canvas = Some(CanvasGeometry {
+        maximized,
+        fullscreen: canvas.is_fullscreen().unwrap_or(false),
+        rect,
+        screen: screen_of(&canvas).and_then(|s| s.name),
+    });
+    let _ = app.state::<StorageManager>().set_is_maximized(maximized);
+}
+
+/// Dock mode: the canvas webview is DESTROYED (after the page flushed pending saves), so the engine
+/// reclaims its renderer and whole layout tree. It is rebuilt on the way back.
+fn suspend_canvas(app: &AppHandle) {
+    let Some(canvas) = app.get_webview_window(CANVAS) else { return };
+    let _ = canvas.hide();
+    {
+        let state = engine();
+        if state.canvas_suspended || state.external_dirty {
             return;
         }
-        flush_webview_memory(&main);
-        platform::release_webview(&main);
-        if main.destroy().is_ok() {
-            MAIN_SUSPENDED.store(true, Ordering::SeqCst);
+    }
+    flush::pages(app, &[CANVAS]);
+    // The canvas came back in the meantime, or an external file has unsaved edits: leave it alone.
+    if engine().mode == Mode::Canvas || engine().external_dirty {
+        return;
+    }
+    if webview::retire(&canvas) {
+        engine().canvas_suspended = true;
+    }
+}
+
+/// Rebuilds the (hidden) canvas; its page calls `canvas_ready` when mounted.
+fn rebuild_canvas(app: &AppHandle) -> Option<WebviewWindow> {
+    let window = webview::open(app, Surface::Canvas, false).ok()?;
+    engine().canvas_suspended = false;
+    Some(window)
+}
+
+/// Shows the canvas and tears the dock down completely: pill window, panel webview and all.
+fn reveal_canvas(app: &AppHandle) {
+    if let Some(canvas) = app.get_webview_window(CANVAS) {
+        focus(&plain(&canvas));
+    }
+    if let Some(dock) = app.get_webview_window(DOCK) {
+        webview::retire(&dock);
+    }
+    pill::close(app);
+}
+
+fn pill_actions() -> pill::Actions {
+    pill::Actions {
+        open_panel: open_panel_from_pill,
+        begin_drag: super::drag::begin,
+        end_drag: |app| {
+            super::drag::end();
+            settle_pill(app);
+        },
+        open_menu: open_pill_menu,
+    }
+}
+
+fn show_pill(app: &AppHandle, rect: Rect) {
+    let _ = pill::show(app, rect, pill_actions());
+}
+
+pub fn enter_dock(app: &AppHandle, open: DockOpen) -> Result<(), String> {
+    if let Mode::Dock(shape) = engine().mode {
+        let live = match shape {
+            DockShape::Pill => pill::window(app),
+            DockShape::Panel => app.get_webview_window(DOCK).map(|w| plain(&w)),
+        };
+        if let Some(window) = live {
+            focus(&window);
+            return Ok(());
+        }
+    }
+    let canvas = app.get_webview_window(CANVAS).map(|c| plain(&c)).filter(|c| c.is_visible().unwrap_or(false));
+    if canvas.is_some() {
+        remember_canvas(app);
+    }
+    let shape = if open.panel { DockShape::Panel } else { DockShape::Pill };
+    let screen = screen_or_primary(app, canvas.as_ref());
+    {
+        let mut state = engine();
+        state.mode = Mode::Dock(shape);
+        state.dock_screen = screen.as_ref().and_then(|s| s.name.clone());
+        state.dock_note = open.note.clone();
+        state.dock_anchor = None;
+        state.dock_generation += 1;
+        state.hold_moves(Duration::from_millis(350));
+    }
+    let home = screen.as_ref().map(|s| dock_home(shape, s));
+    match shape {
+        // The pill needs no webview at all.
+        DockShape::Pill => {
+            if let Some(home) = home {
+                show_pill(app, home);
+            }
+        }
+        DockShape::Panel => match app.get_webview_window(DOCK) {
+            // The page calls `dock_ready` once it has loaded, which places and shows the window.
+            None => {
+                webview::open(app, Surface::Dock, false)?;
+            }
+            Some(dock) => {
+                if let Some(home) = home {
+                    place(&plain(&dock), home);
+                }
+                webview::idle(&dock, false);
+                focus(&plain(&dock));
+                platform::ensure_always_on_top(&plain(&dock));
+                let _ = dock.emit("set-expanded", true);
+                if let Some(id) = open.note {
+                    let _ = dock.emit("open-note", id);
+                }
+            }
+        },
+    }
+    suspend_canvas(app);
+    Ok(())
+}
+
+/// The dock page mounted: shows the panel where it belongs and tells the page which shape it is in
+/// and which note to open. A page that reloads while the dock is a pill stays hidden.
+pub fn dock_ready(window: &WebviewWindow) -> (DockShape, Option<String>) {
+    let app = window.app_handle();
+    let (mode, screen_name, anchor, note) = {
+        let mut state = engine();
+        (state.mode, state.dock_screen.take(), state.dock_anchor.take(), state.dock_note.take())
+    };
+    if mode != Mode::Dock(DockShape::Panel) {
+        return (DockShape::Pill, None);
+    }
+    let dock = plain(window);
+    let screen = screen_name.and_then(|name| screen_named(&dock, &name)).or_else(|| screen_or_primary(app, Some(&dock)));
+    if let Some(screen) = &screen {
+        let rect = match anchor {
+            // Opened from the pill: grow out of it.
+            Some(pill) => reshape(pill, dock_size(DockShape::Panel, screen), screen).0,
+            None => dock_home(DockShape::Panel, screen),
+        };
+        place(&dock, rect);
+    }
+    let _ = dock.show();
+    platform::ensure_always_on_top(&dock);
+    platform::keep_wm_from_moving(&dock);
+    platform::focus_window(&dock);
+    pill::hide(app);
+    (DockShape::Panel, note)
+}
+
+/// The pill was clicked: open the panel, reusing a kept webview or building one.
+fn open_panel_from_pill(app: &AppHandle) {
+    if engine().mode != Mode::Dock(DockShape::Pill) {
+        return;
+    }
+    match app.get_webview_window(DOCK) {
+        // The kept page expands itself and calls `reshape_dock(Panel)`.
+        Some(dock) => {
+            let _ = dock.emit("set-expanded", true);
+        }
+        None => {
+            {
+                let mut state = engine();
+                state.mode = Mode::Dock(DockShape::Panel);
+                state.dock_anchor = pill::window(app).and_then(|w| rect_of(&w));
+                state.dock_screen = None;
+                state.dock_generation += 1;
+            }
+            if webview::open(app, Surface::Dock, false).is_err() {
+                engine().mode = Mode::Dock(DockShape::Pill);
+            }
+        }
+    }
+}
+
+/// The page switches the dock between pill and panel: the panel grows out of the pill (and shrinks
+/// back into it), each keeping the corner nearest the screen edge.
+pub fn reshape_dock(app: &AppHandle, shape: DockShape) -> Result<Growth, String> {
+    let dock = app.get_webview_window(DOCK).ok_or_else(|| "the dock is not open".to_string())?;
+    let panel = plain(&dock);
+    let pill_window = pill::window(app).filter(|_| pill::is_visible(app));
+    let from = match shape {
+        DockShape::Panel => pill_window.as_ref().unwrap_or(&panel),
+        DockShape::Pill => &panel,
+    };
+    let current = rect_of(from).ok_or_else(|| "the dock has no position".to_string())?;
+    let screen = screen_or_primary(app, Some(from)).ok_or_else(|| "monitor not found".to_string())?;
+    let (rect, growth) = reshape(current, dock_size(shape, &screen), &screen);
+    let generation = {
+        let mut state = engine();
+        state.mode = Mode::Dock(shape);
+        state.dock_generation += 1;
+        state.hold_moves(Duration::from_millis(250));
+        state.dock_generation
+    };
+    match shape {
+        DockShape::Panel => {
+            place(&panel, rect);
+            webview::idle(&dock, false);
+            let _ = panel.show();
+            platform::ensure_always_on_top(&panel);
+            platform::focus_window(&panel);
+            pill::hide(app);
+        }
+        DockShape::Pill => {
+            show_pill(app, rect);
+            let _ = panel.hide();
+            webview::idle(&dock, true);
+            retire_panel_later(app, generation);
+        }
+    }
+    Ok(growth)
+}
+
+/// Retires the hidden panel webview unless the panel reopened (or anything else moved the dock on).
+fn retire_panel_later(app: &AppHandle, generation: u64) {
+    let app = app.clone();
+    std::thread::spawn(move || {
+        std::thread::sleep(PANEL_KEEPALIVE);
+        let still_idle = |queued: u64| {
+            let state = engine();
+            state.dock_generation == queued && state.mode == Mode::Dock(DockShape::Pill)
+        };
+        if !still_idle(generation) {
+            return;
+        }
+        if let Some(dock) = app.get_webview_window(DOCK) {
+            flush::pages(&app, &[DOCK]);
+            if still_idle(generation) {
+                webview::retire(&dock);
+            }
         }
     });
 }
 
-/// Rebuilds the (hidden) canvas window from its config; the page calls `canvas_ready` when mounted.
-fn recreate_main(app: &AppHandle) -> Option<tauri::WebviewWindow> {
-    let cfg = app
-        .config()
-        .app
-        .windows
-        .iter()
-        .find(|w| w.label == "main")?
-        .clone();
-    let window = tauri::WebviewWindowBuilder::from_config(app, &cfg)
-        .ok()?
-        .visible(false)
-        .build()
-        .ok()?;
-    platform::prepare_webview(&window);
-    MAIN_SUSPENDED.store(false, Ordering::SeqCst);
-    Some(window)
-}
-/// Shows the canvas and tears the tray webview down completely (frees its renderer).
-pub fn reveal_canvas(app: &AppHandle) {
-    if let Some(main) = app.get_webview_window("main") {
-        let _ = main.show();
-        let _ = main.unminimize();
-        platform::focus_window(&main);
-    }
-    if let Some(tray) = app.get_webview_window("tray") {
-        platform::release_webview(&tray);
-        let _ = tray.destroy();
-    }
-}
-
-/// Creates the single tray frame on demand (hidden until its page reports ready).
-fn ensure_tray(app: &AppHandle) -> Result<(tauri::WebviewWindow, bool), String> {
-    if let Some(existing) = app.get_webview_window("tray") {
-        return Ok((existing, false));
-    }
-    let window = tauri::WebviewWindowBuilder::new(app, "tray", tauri::WebviewUrl::App("index.html?window=tray".into()))
-        .title("DoIT Companion")
-        .inner_size(TRAY_PANEL_W, TRAY_PANEL_H)
-        .decorations(false)
-        .transparent(true)
-        .shadow(false)
-        .always_on_top(true)
-        .resizable(platform::DOCK_WINDOW_RESIZABLE)
-        .skip_taskbar(platform::TRAY_SKIPS_TASKBAR)
-        .visible(false)
-        .additional_browser_args(WEBVIEW_ARGS)
-        .build()
-        .map_err(|e| e.to_string())?;
-    platform::prepare_webview(&window);
-    Ok((window, true))
-}
-
-pub fn open_tray_mode_inner(
-    app: &AppHandle,
-    should_expand: bool,
-    note_id: Option<String>,
-) -> Result<(), String> {
-    let main_win_opt = app.get_webview_window("main");
-
-    let active_monitor = if let Some(ref main_win) = main_win_opt {
-        if main_win.is_visible().unwrap_or(false) {
-            let is_fullscreen = main_win.is_fullscreen().unwrap_or(false);
-            let is_maximized = main_win.is_maximized().unwrap_or(false);
-            let size = main_win.outer_size().ok();
-            let position = main_win.outer_position().ok();
-            let mon = get_window_active_monitor(main_win);
-            let monitor_name = mon.as_ref().and_then(|m| m.name().cloned());
-
-            *SAVED_MAIN_WINDOW_STATE.lock().unwrap() = Some(MainWindowState {
-                is_maximized,
-                is_fullscreen,
-                position,
-                size,
-                monitor_name,
-            });
-
-            let storage = app.state::<StorageManager>();
-            let _ = storage.set_is_maximized(is_maximized);
-            mon
-        } else {
-            None
-        }
-    } else {
-        None
-    };
-
-    let (tray, created) = ensure_tray(app)?;
-
-    let target_mon = active_monitor
-        .or_else(|| get_window_active_monitor(&tray))
-        .or_else(|| app.primary_monitor().ok().flatten());
-
-    // Entering desk tray mode from the canvas always begins at the bottom right corner
-    {
-        let mut mem = TRAY_POSITION_STATE.lock().unwrap();
-        mem.pill_offset = None;
-        mem.expanded_offset = None;
-        let mut buf = PRE_STATE_BUFFER.lock().unwrap();
-        buf.pill_physical_pos = None;
-        buf.expanded_physical_pos = None;
-    }
-
-    if let Some(ref mon) = target_mon {
-        *TARGET_TRAY_MONITOR_NAME.lock().unwrap() = mon.name().cloned();
-        lock_window_transition(350);
-        position_tray_on_monitor(&tray, mon, should_expand);
-        if let Ok(pos) = tray.outer_position() {
-            if should_expand {
-                PRE_STATE_BUFFER.lock().unwrap().expanded_physical_pos = Some(pos);
-            } else {
-                PRE_STATE_BUFFER.lock().unwrap().pill_physical_pos = Some(pos);
+fn settle(app: &AppHandle, window: &Window) {
+    if !engine().moves_held() {
+        if let (Some(rect), Some(screen)) = (rect_of(window), screen_or_primary(app, Some(window))) {
+            let settled = clamp_into(rect, screen.work);
+            if settled != rect {
+                place(window, settled);
             }
         }
     }
-
-    if created {
-        // the page calls `tray_ready` once mounted, which shows the window (no blank flash)
-    } else {
-        let _ = tray.show();
-        platform::ensure_always_on_top(&tray);
-        platform::focus_window(&tray);
-        let _ = tray.emit("set-expanded", should_expand);
-        if should_expand {
-            if let Some(id) = note_id {
-                let _ = tray.emit("open-note", id);
-            }
-        }
-    }
-
-    suspend_main(app);
-    Ok(())
+    platform::ensure_always_on_top(window);
 }
 
-pub fn open_canvas_mode_inner(app: &AppHandle) {
-    let (main_win, recreated) = match app.get_webview_window("main") {
-        Some(w) => (w, false),
-        None => match recreate_main(app) {
-            Some(w) => (w, true),
+/// After the OS moved the panel, pulls it back wholly onto the usable screen.
+pub fn settle_dock(app: &AppHandle) {
+    if let Some(dock) = app.get_webview_window(DOCK) {
+        settle(app, &plain(&dock));
+    }
+}
+
+fn settle_pill(app: &AppHandle) {
+    if let Some(window) = pill::window(app) {
+        settle(app, &window);
+    }
+}
+
+fn open_pill_menu(app: &AppHandle, window: &Window) {
+    let (handle, window) = (app.clone(), window.clone());
+    let _ = app.run_on_main_thread(move || {
+        if let Ok(menu) = super::dock_menu(&handle) {
+            let _ = window.popup_menu(&menu);
+        }
+    });
+}
+
+pub fn enter_canvas(app: &AppHandle) {
+    if let (Mode::Canvas, Some(canvas)) = (engine().mode, app.get_webview_window(CANVAS)) {
+        focus(&plain(&canvas));
+        return;
+    }
+    let (canvas, rebuilt) = match app.get_webview_window(CANVAS) {
+        Some(window) => (window, false),
+        None => match rebuild_canvas(app) {
+            Some(window) => (window, true),
             None => return,
         },
     };
-    let tray_opt = app.get_webview_window("tray");
-
-    // Pre-State Lock: capture the tray position before it is destroyed
-    if let Some(ref tray_win) = tray_opt {
-        if let Ok(tray_pos) = tray_win.outer_position() {
-            let win_size = tray_win.outer_size().unwrap_or(tauri::PhysicalSize::new(180, 44));
-            let scale = get_window_active_monitor(tray_win).map(|m| m.scale_factor()).unwrap_or(1.0);
-            let small_w = (160.0 * scale).round() as i32;
-            let mut buf = PRE_STATE_BUFFER.lock().unwrap();
-            if (win_size.width as i32) <= small_w + 40 {
-                buf.pill_physical_pos = Some(tray_pos);
-            } else {
-                buf.expanded_physical_pos = Some(tray_pos);
+    let canvas_window = plain(&canvas);
+    let dock_window = match engine().mode {
+        Mode::Dock(DockShape::Pill) => pill::window(app),
+        _ => app.get_webview_window(DOCK).map(|w| plain(&w)),
+    };
+    let screen = dock_window.as_ref().and_then(screen_of).or_else(|| screen_or_primary(app, Some(&canvas_window)));
+    let saved = {
+        let mut state = engine();
+        state.mode = Mode::Canvas;
+        state.dock_generation += 1;
+        state.canvas.clone()
+    };
+    match canvas_placement(saved.as_ref(), screen.as_ref()) {
+        CanvasPlacement::Fullscreen { at } => {
+            if let Some((x, y)) = at {
+                let _ = canvas.set_position(tauri::PhysicalPosition::new(x, y));
+            }
+            let _ = canvas.set_fullscreen(true);
+        }
+        CanvasPlacement::Maximized { at } => {
+            if let Some((x, y)) = at {
+                let _ = canvas.set_position(tauri::PhysicalPosition::new(x, y));
+            }
+            let _ = canvas.maximize();
+        }
+        CanvasPlacement::Restore(rect) => set_rect(&canvas, rect),
+        CanvasPlacement::Centered(rect) => {
+            if !canvas.is_maximized().unwrap_or(false) && !canvas.is_fullscreen().unwrap_or(false) {
+                set_rect(&canvas, rect);
             }
         }
+        CanvasPlacement::Keep => {}
     }
 
-    let target_mon = tray_opt
-        .as_ref()
-        .and_then(get_window_active_monitor)
-        .or_else(|| get_window_active_monitor(&main_win))
-        .or_else(|| app.primary_monitor().ok().flatten());
-
-    let saved = SAVED_MAIN_WINDOW_STATE.lock().unwrap().clone();
-
-    if let Some(state) = saved {
-        if state.is_fullscreen {
-            if let Some(ref mon) = target_mon {
-                let m_pos = mon.position();
-                let _ = main_win.set_position(tauri::PhysicalPosition::new(m_pos.x, m_pos.y));
-            }
-            let _ = main_win.set_fullscreen(true);
-        } else if state.is_maximized {
-            if let Some(ref mon) = target_mon {
-                let m_pos = mon.position();
-                let _ = main_win.set_position(tauri::PhysicalPosition::new(m_pos.x, m_pos.y));
-            }
-            let _ = main_win.maximize();
-        } else if let (Some(pos), Some(sz)) = (state.position, state.size) {
-            let tray_mon_name = target_mon.as_ref().and_then(|m| m.name().cloned());
-            if tray_mon_name != state.monitor_name && target_mon.is_some() {
-                let mon = target_mon.as_ref().unwrap();
-                let m_pos = mon.position();
-                let m_size = mon.size();
-                let w = sz.width.min(m_size.width);
-                let h = sz.height.min(m_size.height);
-                let x = m_pos.x + (m_size.width as i32 - w as i32) / 2;
-                let y = m_pos.y + (m_size.height as i32 - h as i32) / 2;
-                let _ = main_win.set_size(tauri::PhysicalSize::new(w, h));
-                let _ = main_win.set_position(tauri::PhysicalPosition::new(x, y));
-            } else {
-                let _ = main_win.set_size(sz);
-                let _ = main_win.set_position(pos);
-            }
-        }
-    } else if let Some(mon) = target_mon {
-        if !main_win.is_maximized().unwrap_or(false) && !main_win.is_fullscreen().unwrap_or(false) {
-            let m_pos = mon.position();
-            let m_size = mon.size();
-            let scale = mon.scale_factor();
-            let main_w = (1440.0 * scale).min(m_size.width as f64 * 0.92) as u32;
-            let main_h = (900.0 * scale).min(m_size.height as f64 * 0.90) as u32;
-            let center_x = m_pos.x + (m_size.width as i32 - main_w as i32) / 2;
-            let center_y = m_pos.y + (m_size.height as i32 - main_h as i32) / 2;
-            let _ = main_win.set_size(tauri::PhysicalSize::new(main_w, main_h));
-            let _ = main_win.set_position(tauri::PhysicalPosition::new(center_x, center_y));
-        }
-    }
-
-    if recreated {
-        // the canvas page is loading in a fresh webview: reveal it when it reports ready (or after a safety timeout)
-        MAIN_SHOW_PENDING.store(true, Ordering::SeqCst);
-        let app2 = app.clone();
-        std::thread::spawn(move || {
-            std::thread::sleep(std::time::Duration::from_millis(3000));
-            if MAIN_SHOW_PENDING.swap(false, Ordering::SeqCst) {
-                reveal_canvas(&app2);
-            }
-        });
+    if rebuilt {
+        // The page is loading in a fresh webview: reveal it when it reports ready, or after a timeout.
+        engine().canvas_reveal_pending = true;
+        std::thread::sleep(Duration::from_millis(3000));
+        canvas_ready(app);
     } else {
+        reveal_canvas(app);
+    }
+}
+
+fn set_rect(window: &WebviewWindow, rect: Rect) {
+    let _ = window.set_size(tauri::PhysicalSize::new(rect.w as u32, rect.h as u32));
+    let _ = window.set_position(tauri::PhysicalPosition::new(rect.x, rect.y));
+}
+
+/// The canvas page mounted (or the reveal timeout passed): show it if a rebuilt canvas is waiting.
+pub fn canvas_ready(app: &AppHandle) {
+    let pending = std::mem::take(&mut engine().canvas_reveal_pending);
+    if pending {
         reveal_canvas(app);
     }
 }

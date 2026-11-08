@@ -4,16 +4,31 @@ use tauri::{AppHandle, Emitter, State};
 use crate::models::{FolderImport, NoteItem, ScanSummary};
 use crate::storage::StorageManager;
 
+/// Runs a native picker off the async workers (it blocks until the user answers). `None` means the
+/// user cancelled.
+async fn pick(dialog: impl FnOnce(rfd::FileDialog) -> Option<std::path::PathBuf> + Send + 'static) -> Result<Option<String>, String> {
+    tauri::async_runtime::spawn_blocking(move || dialog(rfd::FileDialog::new()).map(|p| p.to_string_lossy().to_string()))
+        .await
+        .map_err(|e| e.to_string())
+}
+
+fn cancelled(what: &str) -> String {
+    format!("User cancelled {what} selection")
+}
+
 #[tauri::command]
 pub async fn select_storage_directory() -> Result<Option<String>, String> {
-    let (tx, rx) = std::sync::mpsc::channel();
-    std::thread::spawn(move || {
-        let res = rfd::FileDialog::new()
-            .set_title("Select DoIT Notes Markdown Directory")
-            .pick_folder();
-        let _ = tx.send(res.map(|p| p.to_string_lossy().to_string()));
-    });
-    rx.recv().map_err(|e| e.to_string())
+    pick(|d| d.set_title("Select DoIT Notes Markdown Directory").pick_folder()).await
+}
+
+/// Stores a pasted image (raw bytes, MIME type in the `x-mime` header) next to the notes.
+#[tauri::command]
+pub async fn save_attachment(request: tauri::ipc::Request<'_>, storage: State<'_, StorageManager>) -> Result<String, String> {
+    let tauri::ipc::InvokeBody::Raw(bytes) = request.body() else {
+        return Err("Expected image bytes".to_string());
+    };
+    let mime = request.headers().get("x-mime").and_then(|v| v.to_str().ok()).unwrap_or_default();
+    storage.save_attachment(bytes, mime)
 }
 
 #[tauri::command]
@@ -34,21 +49,9 @@ pub async fn import_single_markdown_file(
 ) -> Result<NoteItem, String> {
     let target_path = match file_path {
         Some(p) if !p.trim().is_empty() => p,
-        _ => {
-            let (tx, rx) = std::sync::mpsc::channel();
-            std::thread::spawn(move || {
-                let picked = rfd::FileDialog::new()
-                    .add_filter("Markdown (*.md)", &["md"])
-                    .set_title("Open DoIT Note")
-                    .pick_file();
-                let _ = tx.send(picked.map(|p| p.to_string_lossy().to_string()));
-            });
-            match rx.recv() {
-                Ok(Some(path)) => path,
-                Ok(None) => return Err("User cancelled file selection".to_string()),
-                Err(e) => return Err(e.to_string()),
-            }
-        }
+        _ => pick(|d| d.add_filter("Markdown (*.md)", &["md"]).set_title("Open DoIT Note").pick_file())
+            .await?
+            .ok_or_else(|| cancelled("file"))?,
     };
 
     let note = storage.import_single_file(&target_path)?;
@@ -68,18 +71,9 @@ pub fn scan_markdown_folder(
 pub async fn pick_and_scan_folder(
     storage: State<'_, StorageManager>,
 ) -> Result<ScanSummary, String> {
-    let (tx, rx) = std::sync::mpsc::channel();
-    std::thread::spawn(move || {
-        let picked = rfd::FileDialog::new()
-            .set_title("Select Folder to Scan DoIT Notes")
-            .pick_folder();
-        let _ = tx.send(picked.map(|p| p.to_string_lossy().to_string()));
-    });
-    let folder_path = match rx.recv() {
-        Ok(Some(path)) => path,
-        Ok(None) => return Err("User cancelled folder selection".to_string()),
-        Err(e) => return Err(e.to_string()),
-    };
+    let folder_path = pick(|d| d.set_title("Select Folder to Scan DoIT Notes").pick_folder())
+        .await?
+        .ok_or_else(|| cancelled("folder"))?;
 
     storage.scan_folder(Some(&folder_path))
 }
@@ -91,16 +85,9 @@ pub async fn import_folder_as_shelf(
     shelf: Option<String>,
     storage: State<'_, StorageManager>,
 ) -> Result<FolderImport, String> {
-    let (tx, rx) = std::sync::mpsc::channel();
-    std::thread::spawn(move || {
-        let picked = rfd::FileDialog::new().set_title("Choose a folder to import as a shelf").pick_folder();
-        let _ = tx.send(picked.map(|p| p.to_string_lossy().to_string()));
-    });
-    let folder = match rx.recv() {
-        Ok(Some(path)) => path,
-        Ok(None) => return Err("User cancelled folder selection".to_string()),
-        Err(e) => return Err(e.to_string()),
-    };
+    let folder = pick(|d| d.set_title("Choose a folder to import as a shelf").pick_folder())
+        .await?
+        .ok_or_else(|| cancelled("folder"))?;
     storage.import_folder_as_shelf(&folder, shelf.as_deref())
 }
 
