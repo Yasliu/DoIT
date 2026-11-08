@@ -162,7 +162,7 @@ pub const DOCK_WINDOW_RESIZABLE: bool = cfg!(target_os = "linux");
 /// Pins min = max size hints to the target, so the window manager keeps the frame at exactly this
 /// size and the edges cannot be dragged. Tao would queue the move and the resize separately (the
 /// window manager could then see the move at the old size and push the window back on screen), so
-/// both happen in one main-thread pass. A mapped window also gets them through GDK directly, because
+/// both happen in one main-thread pass. A realized window also gets them through GDK directly, because
 /// GTK sends hints only in a later idle pass and skips a move to the position it last requested.
 pub fn set_window_bounds(window: &tauri::Window, x: i32, y: i32, w: u32, h: u32) {
     #[cfg(target_os = "linux")]
@@ -179,13 +179,12 @@ pub fn set_window_bounds(window: &tauri::Window, x: i32, y: i32, w: u32, h: u32)
             gtk_window.set_geometry_hints(None::<&gtk::Widget>, Some(&fixed), WindowHints::MIN_SIZE | WindowHints::MAX_SIZE);
             gtk_window.resize(w, h);
             gtk_window.move_(x, y);
-            // GTK flushes its hints in a later idle pass; on a mapped window send them first, then
-            // the move and size as one request.
-            if gtk_window.is_visible() {
-                if let Some(gdk_window) = gtk_window.window() {
-                    gdk_window.set_geometry_hints(&fixed, WindowHints::MIN_SIZE | WindowHints::MAX_SIZE);
-                    gdk_window.move_resize(x, y, w, h);
-                }
+            // GTK flushes its hints in a later idle pass, so send them first, then the move and size
+            // as one request. This also covers a hidden window that was shown before: GTK keeps its
+            // old position for the next show and drops the move above.
+            if let Some(gdk_window) = gtk_window.window() {
+                gdk_window.set_geometry_hints(&fixed, WindowHints::MIN_SIZE | WindowHints::MAX_SIZE);
+                gdk_window.move_resize(x, y, w, h);
             }
         });
     }
