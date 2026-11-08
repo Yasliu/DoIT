@@ -20,6 +20,9 @@
 - **Table Deletion Engine (`format.tsx`, `TableMenu.tsx`)**:
   - Added explicit "Delete Table" action in the cell right-click context menu with rose destructive styling.
   - Added smart Backspace key handling inside table cells: pressing Backspace on an empty table or in an empty first cell collapses the container back to a standard blank line.
+- **Centered Delete Confirmation & Auto-Close on Delete (`ModernConfirm.tsx`, `App.tsx`, `NoteSheet.tsx`)**:
+  - Centered the destructive delete confirmation dialog directly in the viewport instead of anchoring off the top search bar.
+  - Automatically closes the note preview drawer whenever an open note is deleted from either the note sheet or the canvas context menu.
 
 ## [2026-11-06] - Version 1.1.9: Comprehensive Markdown Engine Expansion, Persistent Uncategorized Anchor, & Extended Insert Menu
 

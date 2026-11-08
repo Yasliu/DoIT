@@ -440,6 +440,7 @@ export default function App() {
   const deleteNote = useCallback(
     (note: NoteItem) => {
       remove(note.id);
+      setIsNoteMaximized(false);
       setSheetClosing(false);
       setOpenNote(null);
       deletedRef.current = [...deletedRef.current, note];
@@ -801,9 +802,7 @@ export default function App() {
           onCopy={() => setShelfAction({ kind: "copy", note: contextMenu.note })}
           onDelete={() => {
             const note = contextMenu.note;
-            remove(note.id);
-            deletedRef.current = [...deletedRef.current, note];
-            notify("Note deleted.", note);
+            deleteNote(note);
           }}
         />
       )}
@@ -842,12 +841,8 @@ export default function App() {
           onClose={() => setContextMenu(null)}
           onDelete={(id) => {
             setContextMenu(null);
-            remove(id);
-            setToast({
-              id: Date.now(),
-              message: "Note deleted.",
-              undo: contextMenu.note,
-            });
+            const note = notes.find((n) => n.id === id) || contextMenu.note;
+            deleteNote(note);
           }}
           onMoveCategory={(id, shelf) => {
             setContextMenu(null);
