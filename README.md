@@ -1,8 +1,6 @@
 <div align="center">
 
-<img src="logo.svg" width="90" alt="DoIT logo">
-
-# DoIT
+<img src="docs/banner.jpg" width="800" alt="DoIT banner: Markdown Notes. Simple, Clean, Nothing Extra">
 
 **Local-first notes and tasks, arranged as an organic bento grid.**
 
