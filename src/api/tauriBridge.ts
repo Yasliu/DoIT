@@ -441,6 +441,15 @@ export const tauriApi = {
     }
   },
 
+  async isMsStorePackage(): Promise<boolean> {
+    if (!isTauri()) return false;
+    try {
+      return await invoke<boolean>("is_ms_store_package");
+    } catch {
+      return false;
+    }
+  },
+
   async setPillLook(look: PillLook): Promise<void> {
     if (!isTauri()) return;
     try {

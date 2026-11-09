@@ -151,11 +151,13 @@ function BugReportSection() {
 
 function AppUpdatesSection() {
   const [version, setVersion] = useState("");
+  const [isStore, setIsStore] = useState(false);
   useEffect(() => {
     void import("@tauri-apps/api/app")
       .then((m) => m.getVersion())
       .then(setVersion)
       .catch(() => undefined);
+    void tauriApi.isMsStorePackage().then(setIsStore);
   }, []);
   return (
     <section className="glass rounded-[20px] border border-white/10 p-5 shadow-[0_20px_50px_-20px_rgba(0,0,0,0.8)]">
@@ -163,7 +165,9 @@ function AppUpdatesSection() {
         <div>
           <h2 className="text-[14px] font-semibold text-ink-1">App updates</h2>
           <p className="text-[11.5px] text-ink-4">
-            DoIT {version ? `v${version}` : ""} - updates download in the background and are signature-verified.
+            {isStore
+              ? `DoIT ${version ? `v${version}` : ""} - updates are managed automatically by the Microsoft Store.`
+              : `DoIT ${version ? `v${version}` : ""} - updates download in the background and are signature-verified.`}
           </p>
         </div>
         <button

@@ -324,9 +324,21 @@ mod pill {
         fn DefSubclassProc(hwnd: Hwnd, msg: u32, wparam: usize, lparam: isize) -> isize;
     }
 
+    const GWL_STYLE: i32 = -16;
     const GWL_EXSTYLE: i32 = -20;
+    const WS_POPUP: isize = 0x8000_0000;
+    const WS_CAPTION: isize = 0x00C0_0000;
+    const WS_SYSMENU: isize = 0x0008_0000;
+    const WS_THICKFRAME: isize = 0x0004_0000;
+    const WS_MINIMIZEBOX: isize = 0x0002_0000;
+    const WS_MAXIMIZEBOX: isize = 0x0001_0000;
     const WS_EX_LAYERED: isize = 0x0008_0000;
+
+    const WM_ERASEBKGND: u32 = 0x0014;
     const WM_NCDESTROY: u32 = 0x0082;
+    const WM_NCCALCSIZE: u32 = 0x0083;
+    const WM_NCPAINT: u32 = 0x0085;
+    const WM_NCACTIVATE: u32 = 0x0086;
     const WM_MOUSEMOVE: u32 = 0x0200;
     const WM_LBUTTONDOWN: u32 = 0x0201;
     const WM_LBUTTONUP: u32 = 0x0202;
@@ -403,6 +415,10 @@ mod pill {
                 input(PillInput::Release(at.x as f64 / s, at.y as f64 / s));
             }
             WM_RBUTTONUP => input(PillInput::Menu),
+            WM_ERASEBKGND => return 1,
+            WM_NCCALCSIZE => return 0,
+            WM_NCPAINT => return 0,
+            WM_NCACTIVATE => return 1,
             WM_NCDESTROY => {
                 unsafe { RemoveWindowSubclass(hwnd, proc, id) };
                 let result = unsafe { DefSubclassProc(hwnd, msg, wparam, lparam) };
@@ -414,19 +430,25 @@ mod pill {
         unsafe { DefSubclassProc(hwnd, msg, wparam, lparam) }
     }
 
-    /// Makes the window layered. The windowing library rewrites a window's extended styles when its
-    /// state changes, which can drop this flag again, so every frame re-asserts it.
+    /// Sanitizes window styles and asserts layered composition. Strips any caption/system menu
+    /// flags so Windows DWM never renders native titlebar close buttons on the pill.
     unsafe fn keep_layered(hwnd: Hwnd) {
         unsafe {
-            let style = GetWindowLongPtrW(hwnd, GWL_EXSTYLE);
-            if style & WS_EX_LAYERED == 0 {
-                SetWindowLongPtrW(hwnd, GWL_EXSTYLE, style | WS_EX_LAYERED);
+            let style = GetWindowLongPtrW(hwnd, GWL_STYLE);
+            let unwanted = WS_CAPTION | WS_SYSMENU | WS_THICKFRAME | WS_MINIMIZEBOX | WS_MAXIMIZEBOX;
+            if (style & unwanted) != 0 || (style & WS_POPUP) == 0 {
+                SetWindowLongPtrW(hwnd, GWL_STYLE, (style & !unwanted) | WS_POPUP);
+            }
+            let ex_style = GetWindowLongPtrW(hwnd, GWL_EXSTYLE);
+            if ex_style & WS_EX_LAYERED == 0 {
+                SetWindowLongPtrW(hwnd, GWL_EXSTYLE, ex_style | WS_EX_LAYERED);
             }
         }
     }
 
     pub fn attach(window: &tauri::Window, on_input: PillInputHandler) {
         let Ok(hwnd) = window.hwnd() else { return };
+        unsafe { keep_layered(hwnd.0 as Hwnd) };
         let hwnd = hwnd.0 as isize;
         let _ = window.run_on_main_thread(move || {
             let hwnd = hwnd as Hwnd;

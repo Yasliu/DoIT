@@ -36,7 +36,7 @@ jobs:
         with:
           tagName: ${{ github.ref_name }}
           releaseName: 'DoIT Desktop Core ${{ github.ref_name }}'
-          releaseBody: 'DoIT v1.2.0 - Official Linux support (Fedora .rpm with in-app updates and universal Linux .AppImage), modern UI redesign with 7 themes, Glass and Boxy styling modes, Spotlight-style quick search (Ctrl+K), persistent dock always-on-top architecture across drags and desktop focus, and toolbar outside-click mutual dismissal.'
+          releaseBody: 'DoIT ${{ github.ref_name }} — Architectural deepening with native Win32 dock pill, settled notes archiving, multi-monitor display scaling, typing speed optimizations with incremental parsing, themed boot screen, and Windows Store package auto-detection.'
           releaseDraft: false
           prerelease: false
           includeUpdaterJson: true

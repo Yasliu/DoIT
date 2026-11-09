@@ -38,34 +38,34 @@ export function ReleaseLogModal({ onClose }: ReleaseLogModalProps) {
             <Sparkles size={14} />
           </div>
           <span className="font-mono text-[10px] uppercase tracking-[0.14em] text-ink-4">
-            Version 1.2.0 Update
+            Version 1.2.1 Update
           </span>
         </div>
 
         <h2 className="text-[17px] font-semibold text-white tracking-tight mb-3">
-          What&apos;s New in v1.2.0
+          What&apos;s New in v1.2.1
         </h2>
 
         <ul className="space-y-2 mb-5 text-[12px] text-ink-2 leading-relaxed">
           <li className="flex items-start gap-2">
             <span className="size-1.5 rounded-full bg-white/60 mt-2 shrink-0" />
-            <span>Official Linux Support: Native packages for Fedora (.rpm with in-app updater) and universal Linux (.AppImage) with desktop &amp; dock integration.</span>
+            <span>Native Dock Pill: Lightweight Win32 native dock pill with zero webview overhead while docked, and instant 0ms dock-to-canvas switching.</span>
           </li>
           <li className="flex items-start gap-2">
             <span className="size-1.5 rounded-full bg-white/60 mt-2 shrink-0" />
-            <span>Modern Redesign Option: Modern bento UI with 7 customizable color themes, Glass &amp; Boxy styling modes, and Ctrl+K Spotlight search.</span>
+            <span>Settled Notes (Archiving): Mark notes as settled to keep your shelves clean while preserving searchable access in the Settled tab.</span>
           </li>
           <li className="flex items-start gap-2">
             <span className="size-1.5 rounded-full bg-white/60 mt-2 shrink-0" />
-            <span>Dock Topmost Persistence: Docking pill reliably retains its always-on-top level across drags, monitor changes, and window focus shifts.</span>
+            <span>Performance &amp; Launch Speed: Incremental block parser for smooth typing in large notes, off-screen shelf virtualization, and a themed splash screen.</span>
           </li>
           <li className="flex items-start gap-2">
             <span className="size-1.5 rounded-full bg-white/60 mt-2 shrink-0" />
-            <span>Toolbar &amp; Outside-Click Improvements: Smooth mutual dismissal between the emoji picker and formatting menu when clicking outside.</span>
+            <span>Multi-Monitor Dock Support: Seamless positioning, monitor tracking, and DPI scaling across multi-display setups.</span>
           </li>
           <li className="flex items-start gap-2">
             <span className="size-1.5 rounded-full bg-white/60 mt-2 shrink-0" />
-            <span>Markdown Engine &amp; List Refinements: Numbered list auto-incrementing and comprehensive inline formatting tools.</span>
+            <span>Windows &amp; Store Polish: Fixed pill caption button glitch, centered shelf action icons, and automated Microsoft Store package update detection.</span>
           </li>
         </ul>
 

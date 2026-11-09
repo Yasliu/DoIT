@@ -69,6 +69,7 @@ pub fn show(app: &AppHandle, rect: Rect, actions: Actions) -> Result<(), String>
     };
     platform::set_window_bounds(&window, rect.x, rect.y, rect.w as u32, rect.h as u32);
     send(Msg::Size(rect.w as u32, rect.h as u32));
+    send(Msg::Redraw);
     let _ = window.show();
     platform::ensure_always_on_top(&window);
     platform::keep_wm_from_moving(&window);

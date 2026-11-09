@@ -144,6 +144,7 @@ pub fn run() {
             commands::settings::get_default_storage_path,
             commands::settings::update_settings,
             commands::settings::get_system_fonts,
+            commands::settings::is_ms_store_package,
             commands::window::toggle_window_minimize,
             commands::window::open_tray_mode,
             commands::window::open_canvas_mode,
