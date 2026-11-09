@@ -14,8 +14,8 @@ use tauri::{AppHandle, Emitter, Manager, WebviewWindow, Window};
 use super::flush;
 use super::geometry::{primary_screen, rect_of, screen_named, screen_of};
 use super::placement::{
-    canvas_placement, clamp_into, dock_home, dock_size, panel_opening, reshape, CanvasGeometry, CanvasPlacement, DockShape, Growth,
-    PillAnchor, Rect, Screen,
+    canvas_placement, clamp_into, dock_home, dock_size, panel_opening, reshape, undo_rescale, CanvasGeometry, CanvasPlacement,
+    DockShape, Growth, PillAnchor, Rect, Screen,
 };
 use super::pill;
 use super::state::{engine, Mode};
@@ -33,7 +33,12 @@ fn plain(window: &WebviewWindow) -> Window {
     window.as_ref().window()
 }
 
+fn shape_of(dock_window: &Window) -> DockShape {
+    if dock_window.label() == DOCK { DockShape::Panel } else { DockShape::Pill }
+}
+
 fn place(window: &Window, rect: Rect) {
+    engine().dock_placed = Some((shape_of(window), rect));
     platform::set_window_bounds(window, rect.x, rect.y, rect.w as u32, rect.h as u32);
 }
 
@@ -134,7 +139,23 @@ fn pill_actions() -> pill::Actions {
 }
 
 fn show_pill(app: &AppHandle, rect: Rect) {
+    engine().dock_placed = Some((DockShape::Pill, rect));
     let _ = pill::show(app, rect, pill_actions());
+}
+
+/// A dock window's monitor scale changed. Call off the main thread: the windowing library resizes
+/// the window right after reporting the change, and calls from another thread wait behind that.
+pub fn dock_rescaled(window: &Window) {
+    let Some(screen) = screen_of(window) else { return };
+    let shape = shape_of(window);
+    let placed = engine().dock_placed.take_if(|(placed_shape, _)| *placed_shape == shape).map(|(_, rect)| rect);
+    if let Some(rect) = undo_rescale(placed, shape, &screen) {
+        place(window, rect);
+    }
+    if shape == DockShape::Pill {
+        let (w, h) = dock_size(shape, &screen);
+        pill::resized(w as u32, h as u32);
+    }
 }
 
 pub fn enter_dock(app: &AppHandle, open: DockOpen) -> Result<(), String> {

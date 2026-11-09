@@ -176,6 +176,10 @@ fn remember_maximized(app: &AppHandle) {
 pub fn on_window_event(window: &Window, event: &WindowEvent) {
     match event {
         WindowEvent::Focused(true) if window.label() != CANVAS => platform::ensure_always_on_top(window),
+        WindowEvent::ScaleFactorChanged { .. } if window.label() != CANVAS => {
+            let window = window.clone();
+            std::thread::spawn(move || lifecycle::dock_rescaled(&window));
+        }
         WindowEvent::Resized(_) if window.label() == CANVAS => {
             // A canvas still waiting to be shown is on its way to its size; it says nothing yet.
             if !engine().canvas_reveal_pending && !window.is_minimized().unwrap_or(true) {

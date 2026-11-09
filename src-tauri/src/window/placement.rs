@@ -165,6 +165,14 @@ pub fn panel_opening(anchor: Option<&PillAnchor>, home: Option<&Screen>) -> Opti
     }
 }
 
+/// A dock window's monitor scale just changed, and the windowing library resized the window to keep
+/// its logical size. That is right for a window the user dragged across. A window the app had just
+/// put at `placed` was already sized for `screen`, so it got scaled twice and belongs back there.
+/// `None` means the library's size stands.
+pub fn undo_rescale(placed: Option<Rect>, shape: DockShape, screen: &Screen) -> Option<Rect> {
+    placed.filter(|rect| (rect.w, rect.h) == dock_size(shape, screen))
+}
+
 /// Where the dock window may go while it is dragged: wholly inside the usable area (`screens`, one
 /// per monitor) of the monitor under `pointer`, or the monitor nearest to it when the pointer is off
 /// every screen. Dragging therefore carries the window onto another monitor, but never past the
@@ -259,6 +267,16 @@ mod tests {
         let panel = panel_opening(Some(&pill), Some(&laptop)).expect("somewhere to open");
         assert_eq!((panel.w, panel.h), (440, 620));
         assert_eq!((panel.right(), panel.bottom()), (pill.rect.right(), pill.rect.bottom()));
+    }
+
+    #[test]
+    fn only_a_window_placed_for_this_monitor_undoes_a_rescale() {
+        let (external, laptop) = stacked();
+        let placed = dock_home(DockShape::Panel, &external);
+        assert_eq!(undo_rescale(Some(placed), DockShape::Panel, &external), Some(placed));
+        // Placed on the laptop, then dragged up to the external monitor: the library's size stands.
+        let dragged = dock_home(DockShape::Panel, &laptop);
+        assert_eq!(undo_rescale(Some(dragged), DockShape::Panel, &external), None);
     }
 
     #[test]

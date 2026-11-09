@@ -3,7 +3,7 @@
 use std::sync::{Mutex, MutexGuard};
 use std::time::{Duration, Instant};
 
-use super::placement::{CanvasGeometry, DockShape, PillAnchor};
+use super::placement::{CanvasGeometry, DockShape, PillAnchor, Rect};
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub enum Mode {
@@ -32,6 +32,8 @@ pub struct Engine {
     pub dock_page_ready: bool,
     /// Bumped by every dock change; a delayed job runs only if nothing changed since it was queued.
     pub dock_generation: u64,
+    /// The last place the app itself put a dock window, until a scale change consumes it.
+    pub dock_placed: Option<(DockShape, Rect)>,
     /// Until then the app itself is moving the dock, so moves are not the user's.
     hold_until: Option<Instant>,
 }
@@ -48,6 +50,7 @@ static ENGINE: Mutex<Engine> = Mutex::new(Engine {
     dock_note: None,
     dock_page_ready: false,
     dock_generation: 0,
+    dock_placed: None,
     hold_until: None,
 });
 
