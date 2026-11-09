@@ -70,7 +70,7 @@ pub fn config_dir() -> Option<PathBuf> {
         .map(PathBuf::from)
         .filter(|p| p.is_absolute())
         .or_else(|| std::env::var_os("HOME").map(|home| PathBuf::from(home).join(".config")))?;
-    Some(base.join("DoIT"))
+    Some(base.join(super::DATA_FOLDER))
 }
 
 pub fn monitor_of_window(_window: &tauri::Window) -> Option<tauri::Monitor> {

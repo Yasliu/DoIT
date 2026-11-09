@@ -2,10 +2,13 @@ name: Production Release Build
 on:
   push:
     tags:
-      - 'v*'
+      # Plain versions only. This job signs for the updater, so a beta tag must never start it;
+      # betas go through checks.yml.
+      - 'v[0-9]+.[0-9]+.[0-9]+'
 
 jobs:
   release:
+    if: ${{ !contains(github.ref_name, '-') }}
     permissions:
       contents: write
     runs-on: windows-latest

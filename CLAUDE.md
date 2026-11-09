@@ -44,6 +44,9 @@ React + TypeScript frontend, Rust backend. Shipped for Windows; a Linux port is 
 - Preview another OS's UI in dev: `localStorage["doit.dev-platform"] = "windows"`, then reload.
 - New IPC command: add it to the matching `commands/` file, register it in `lib.rs`, and wrap it
   in `src/api/tauriBridge.ts`.
+- Preview builds (`src-tauri/tauri.preview.conf.json` plus `DOIT_PREVIEW=1`) must never reach the
+  updater or the Microsoft Store: no signing key, no updater files, no MSI. They are a separate app
+  with their own data.
 
 ## Run, check, build
 
@@ -51,7 +54,9 @@ React + TypeScript frontend, Rust backend. Shipped for Windows; a Linux port is 
 - Frontend typecheck and build: `npm run build`.
 - Frontend tests: `npm test`.
 - Rust: `cd src-tauri && cargo check` / `cargo test` (Linux needs the WebKitGTK dev packages, see README).
-- Release: a `v*` tag runs `.github/workflows/release.yml` (Windows), then `release-linux.yml` adds
+- PRs and `v1.2.3-beta.1` tags run `.github/workflows/checks.yml`: tests on Windows and Linux, and a
+  Windows preview installer as a workflow artifact (beta tags also publish it as a prerelease).
+- Release: a `v1.2.3` tag runs `.github/workflows/release.yml` (Windows), then `release-linux.yml` adds
   the Fedora rpm (self-updating) and an experimental AppImage to the same release and `latest.json`.
   Local Linux build: `npx tauri build`; Linux-only config `src-tauri/tauri.linux.conf.json`, desktop
   entry `src-tauri/linux/doit.desktop`.

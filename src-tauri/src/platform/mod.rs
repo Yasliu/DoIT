@@ -48,6 +48,13 @@ mod unix;
 #[cfg(not(windows))]
 use unix as os;
 
+/// The folder that holds DoIT's settings and default notes. Preview builds (`DOIT_PREVIEW`, set
+/// only by CI) get their own, so unmerged code never touches a real install's data.
+pub const DATA_FOLDER: &str = match option_env!("DOIT_PREVIEW") {
+    Some(_) => "DoIT Preview",
+    None => "DoIT",
+};
+
 /// Pointer input on the native pill, in logical px from the window's top-left.
 #[derive(Clone, Copy, Debug, PartialEq)]
 pub enum PillInput {

@@ -1,0 +1,16 @@
+{
+  "$schema": "https://schema.tauri.app/config/2",
+  "productName": "DoIT Preview",
+  "mainBinaryName": "doit-preview",
+  "identifier": "com.doit.desktop.preview",
+  "plugins": {
+    "updater": {
+      "endpoints": []
+    }
+  },
+  "bundle": {
+    "targets": ["nsis"],
+    "createUpdaterArtifacts": false,
+    "fileAssociations": null
+  }
+}
