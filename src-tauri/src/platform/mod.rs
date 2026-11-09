@@ -24,6 +24,8 @@
 //!   (clamped to the screens every step, see `window::drag`) instead of the OS move loop.
 //! - `keep_wm_from_moving(window)`: stop the window manager's own move gestures on the dock
 //!   window, which could carry it off-screen. Call once it is shown.
+//! - `map_invisibly(window)`: map a window that must not be seen yet, so its page can paint (a
+//!   window mapped visibly before its first paint shows black). `make_visible(window)` ends that.
 //! - `BROWSER_ARGS`: engine arguments every webview is built with (only WebView2 takes any).
 //! - `set_webview_memory_level(window, low)`: hint the webview to trim memory while idle.
 //! - `prepare_webview(window)`: one-off engine tuning for each newly built webview window.
@@ -72,7 +74,7 @@ pub type PillInputHandler = Box<dyn Fn(PillInput) + Send + Sync>;
 pub use os::{
     attach_pill, present_pill, ensure_always_on_top,
     config_dir, dock_drag_by_app, documents_dir, focus_window, has_tray, init, keep_wm_from_moving, monitor_of_window, prepare_webview, release_webview,
-    set_webview_memory_level, set_window_bounds,
+    make_visible, map_invisibly, set_webview_memory_level, set_window_bounds,
     system_fonts, trim_memory, work_area,
     BROWSER_ARGS, DOCK_WINDOW_RESIZABLE, TRAY_SKIPS_TASKBAR,
 };

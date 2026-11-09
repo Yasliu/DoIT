@@ -3,7 +3,6 @@ import { tauriApi, type ContentItem, type NoteItem } from "../api/tauriBridge";
 import { useUndoStack } from "../hooks/useUndoStack";
 import {
   contentToMarkdown,
-  htmlToMarkdown,
   insertEmojiAtCaret,
   insertInlineImageAtCaret,
   insertInlineImageInMarkdown,
@@ -13,8 +12,8 @@ import {
   isRichItalicActive,
   markdownToContent,
   markdownToHtml,
-  normalizeEditor,
 } from "../lib/format";
+import { createBodyReader, type BodyReader } from "./bodyReader";
 import { uid } from "../lib/text";
 
 const NO_CONTENT: ContentItem[] = [];
@@ -49,6 +48,7 @@ export interface NoteEditorOptions {
  */
 export function useNoteEditor({ note, edit, titleRef, onSave }: NoteEditorOptions) {
   const bodyRef = useRef<HTMLDivElement | null>(null);
+  const bodyReader = useRef<BodyReader | null>(null);
   const rawRef = useRef<HTMLTextAreaElement | null>(null);
   // The latest note, including edits made since the last render (async image reads need it).
   const noteRef = useRef(note);
@@ -89,8 +89,8 @@ export function useNoteEditor({ note, edit, titleRef, onSave }: NoteEditorOption
       const body = bodyRef.current;
       const current = noteRef.current;
       if (!body || !current) return;
-      normalizeEditor(body);
-      change({ content: markdownToContent(htmlToMarkdown(body), current.content, () => uid("line")) }, immediate);
+      const markdown = bodyReader.current?.read() ?? "";
+      change({ content: markdownToContent(markdown, current.content, () => uid("line")) }, immediate);
       refreshFormatting();
     },
     [change, refreshFormatting],
@@ -100,6 +100,8 @@ export function useNoteEditor({ note, edit, titleRef, onSave }: NoteEditorOption
   const attachBody = useCallback(
     (node: HTMLDivElement | null) => {
       bodyRef.current = node;
+      bodyReader.current?.disconnect();
+      bodyReader.current = node ? createBodyReader(node) : null;
       const current = noteRef.current;
       if (node && current && (renderedId.current !== current.id || !node.innerHTML || node.innerHTML === "<div><br></div>")) {
         renderedId.current = current.id;

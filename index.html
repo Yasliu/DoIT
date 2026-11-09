@@ -26,6 +26,22 @@
       body, html {
         overflow: hidden !important;
       }
+      #boot {
+        position: fixed;
+        inset: 0;
+        z-index: 2147483647;
+        display: grid;
+        place-items: center;
+        pointer-events: none;
+        transition: opacity 140ms ease-out;
+      }
+      #boot[hidden] {
+        display: none;
+      }
+      #boot img {
+        width: 72px;
+        height: 72px;
+      }
       *, *::before, *::after {
         -webkit-tap-highlight-color: transparent !important;
         outline: none !important;
@@ -43,6 +59,45 @@
 
   <body style="margin: 0; padding: 0; background: transparent !important; background-color: transparent !important; overflow: hidden; width: 100%; height: 100%; user-select: none; scrollbar-width: none;">
     <div id="root" style="width: 100%; height: 100%; overflow: hidden; background: transparent !important; background-color: transparent !important;"></div>
+    <div id="boot" hidden><img src="/logo.png" alt="" /></div>
+    <script>
+      // The canvas's launch screen, painted before any bundle loads, in the last theme's colour.
+      (function () {
+        if (location.search.indexOf("window=tray") >= 0) return;
+        var boot = document.getElementById("boot");
+        var dark = matchMedia("(prefers-color-scheme: dark)").matches;
+        try {
+          boot.style.background = localStorage.getItem("doit.boot-canvas") || (dark ? "#0b0c0f" : "#fafafa");
+        } catch (e) {
+          boot.style.background = dark ? "#0b0c0f" : "#fafafa";
+        }
+        boot.hidden = false;
+        var ipc = window.__TAURI_INTERNALS__;
+        if (!ipc) return;
+        // Not through tauriBridge: this runs before the bundle exists.
+        var painted = false;
+        var maximized = null;
+        // A maximized window grows after it maps, and its first frame is the small size. It waits
+        // for the app to mount (App reveals it) instead of showing that.
+        var reveal = function () {
+          if (!painted || maximized !== false) return;
+          reveal = function () {};
+          ipc.invoke("canvas_ready");
+        };
+        ipc.invoke("canvas_loading").then(function (willMaximize) {
+          maximized = willMaximize;
+          reveal();
+        });
+        try {
+          new PerformanceObserver(function () {
+            painted = true;
+            reveal();
+          }).observe({ type: "paint", buffered: true });
+        } catch (e) {
+          /* App reveals the window when it mounts */
+        }
+      })();
+    </script>
     <script type="module" src="/src/main.tsx"></script>
   </body>
 </html>

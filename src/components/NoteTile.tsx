@@ -5,7 +5,7 @@ import { Check, CircleCheck, Maximize2, Undo2 } from "lucide-react";
 import type { NoteItem } from "../api/tauriBridge";
 import { fontStack } from "../api/tauriBridge";
 import { accentFor, cleanText, cx, densityOf, edgeOpacity, relativeShort, stripDate } from "../lib/text";
-import { contentToMarkdown, previewMarkup, openExternalUrl, copyImageToClipboard } from "../lib/format";
+import { previewMarkup, previewText, openExternalUrl, copyImageToClipboard } from "../lib/format";
 import { pick, text } from "../platform";
 
 interface NoteTileProps {
@@ -261,7 +261,7 @@ function NoteTileComponent({
             className="md-preview-raw mt-2.5 overflow-hidden"
             style={{ maxHeight: previewMax }}
           >
-            {contentToMarkdown(note.content)}
+            {previewText(note.content)}
           </pre>
         ) : (
           /* MD Mode note: the rendered document (headings, tables, tasks, images) */

@@ -24,8 +24,9 @@ React + TypeScript frontend, Rust backend. Shipped for Windows; a Linux port is 
     Keep them thin and delegate.
   - `window/`: owns the mode (canvas, dock pill, dock panel). Callers name the mode they want;
     `placement` is the pure, tested maths, `webview` builds and retires webviews, `lifecycle` runs
-    the transitions, `pill/` draws the pill natively (no webview runs while it is the only thing
-    showing), `drag` keeps a dragged dock window on screen.
+    the transitions, `pill/` draws the pill natively (no webview runs once it has been alone for
+    20 s), `drag` keeps a dragged dock window on screen, `flush` waits for pages to save before one
+    is retired or the app quits.
   - `actions/`: mode switches from outside the UI: tray click, or a second launch with
     `--canvas`, `--dock`, `--toggle` or `--quit`.
   - `platform/`: the only place OS-specific code lives. `mod.rs` documents the interface;

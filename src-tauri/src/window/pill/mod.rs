@@ -28,6 +28,8 @@ const PRESS_ZOOM: f32 = 0.96;
 /// What the pill asks of the rest of the window engine.
 pub struct Actions {
     pub open_panel: fn(&AppHandle),
+    /// The pointer came over the pill: a click may follow.
+    pub hovered: fn(&AppHandle),
     pub begin_drag: fn(&Window, (f64, f64)) -> bool,
     pub end_drag: fn(&AppHandle),
     pub open_menu: fn(&AppHandle, &Window),
@@ -191,6 +193,9 @@ impl Pill {
             PillInput::Enter => {
                 self.hovered = true;
                 platform::ensure_always_on_top(&self.window);
+                let hovered = self.actions.hovered;
+                let app = self.app.clone();
+                std::thread::spawn(move || hovered(&app));
             }
             PillInput::Leave => {
                 if self.dragging.is_none() {

@@ -4,7 +4,8 @@
 //! Which surface is live in each mode:
 //! - Canvas: the canvas webview. The pill window and the dock webview do not exist.
 //! - Dock(Pill): the native pill only. The dock webview stays hidden for `PANEL_KEEPALIVE` after the
-//!   panel closes (so reopening is instant), then is retired.
+//!   panel closes (so reopening is instant), then is retired. Hovering the pill builds it hidden
+//!   the same way, so the click that follows finds it ready.
 //! - Dock(Panel): the dock webview. The pill window is hidden.
 
 use std::time::Duration;
@@ -24,6 +25,8 @@ use crate::storage::StorageManager;
 
 /// How long a closed panel's webview is kept (hidden) before it is retired.
 const PANEL_KEEPALIVE: Duration = Duration::from_secs(20);
+/// How long the canvas stays alive (hidden) behind the pill, so a quick trip back is instant.
+const CANVAS_KEEPALIVE: Duration = Duration::from_secs(20);
 
 fn plain(window: &WebviewWindow) -> Window {
     window.as_ref().window()
@@ -63,18 +66,32 @@ pub fn remember_canvas(app: &AppHandle) {
 }
 
 /// Dock mode: the canvas webview is DESTROYED (after the page flushed pending saves), so the engine
-/// reclaims its renderer and whole layout tree. It is rebuilt on the way back.
-fn suspend_canvas(app: &AppHandle) {
+/// reclaims its renderer and whole layout tree. It is rebuilt on the way back. Behind the pill it
+/// lives for `CANVAS_KEEPALIVE` first; the panel retires it at once, to keep to one page.
+fn suspend_canvas(app: &AppHandle, keep_alive: bool) {
     let Some(canvas) = app.get_webview_window(CANVAS) else { return };
     let _ = canvas.hide();
-    {
-        let state = engine();
+    let departure = {
+        let mut state = engine();
         if state.canvas_suspended || state.external_dirty {
             return;
         }
-    }
+        state.canvas_departure += 1;
+        state.canvas_departure
+    };
     flush::pages(app, &[CANVAS]);
-    // The canvas came back in the meantime, or an external file has unsaved edits: leave it alone.
+    if keep_alive {
+        std::thread::sleep(CANVAS_KEEPALIVE);
+        if engine().canvas_departure != departure {
+            return;
+        }
+    }
+    retire_canvas(app);
+}
+
+/// Destroys the hidden canvas, unless it came back or an external file has unsaved edits.
+fn retire_canvas(app: &AppHandle) {
+    let Some(canvas) = app.get_webview_window(CANVAS) else { return };
     if engine().mode == Mode::Canvas || engine().external_dirty {
         return;
     }
@@ -94,6 +111,7 @@ fn rebuild_canvas(app: &AppHandle) -> Option<WebviewWindow> {
 fn reveal_canvas(app: &AppHandle) {
     if let Some(canvas) = app.get_webview_window(CANVAS) {
         focus(&plain(&canvas));
+        platform::make_visible(&plain(&canvas));
     }
     if let Some(dock) = app.get_webview_window(DOCK) {
         webview::retire(&dock);
@@ -104,6 +122,7 @@ fn reveal_canvas(app: &AppHandle) {
 fn pill_actions() -> pill::Actions {
     pill::Actions {
         open_panel: open_panel_from_pill,
+        hovered: prepare_panel,
         begin_drag: super::drag::begin,
         end_drag: |app| {
             super::drag::end();
@@ -153,9 +172,7 @@ pub fn enter_dock(app: &AppHandle, open: DockOpen) -> Result<(), String> {
         }
         DockShape::Panel => match app.get_webview_window(DOCK) {
             // The page calls `dock_ready` once it has loaded, which places and shows the window.
-            None => {
-                webview::open(app, Surface::Dock, false)?;
-            }
+            None => open_dock_page(app)?,
             Some(dock) => {
                 if let Some(home) = home {
                     place(&plain(&dock), home);
@@ -170,7 +187,7 @@ pub fn enter_dock(app: &AppHandle, open: DockOpen) -> Result<(), String> {
             }
         },
     }
-    suspend_canvas(app);
+    suspend_canvas(app, shape == DockShape::Pill);
     Ok(())
 }
 
@@ -180,6 +197,7 @@ pub fn dock_ready(window: &WebviewWindow) -> (DockShape, Option<String>) {
     let app = window.app_handle();
     let (mode, screen_name, anchor, note) = {
         let mut state = engine();
+        state.dock_page_ready = true;
         (state.mode, state.dock_screen.take(), state.dock_anchor.take(), state.dock_note.take())
     };
     if mode != Mode::Dock(DockShape::Panel) {
@@ -203,25 +221,55 @@ pub fn dock_ready(window: &WebviewWindow) -> (DockShape, Option<String>) {
     (DockShape::Panel, note)
 }
 
+/// Builds the dock's webview, hidden; its page reports in through `dock_ready`.
+fn open_dock_page(app: &AppHandle) -> Result<(), String> {
+    engine().dock_page_ready = false;
+    webview::open(app, Surface::Dock, false).map(|_| ())
+}
+
+/// The pointer is on the pill, so a click is likely: start the panel's page now, hidden, and retire
+/// it again like any kept panel if no click comes. Not while the canvas is alive: at most one page.
+fn prepare_panel(app: &AppHandle) {
+    let generation = {
+        let state = engine();
+        if state.mode != Mode::Dock(DockShape::Pill) {
+            return;
+        }
+        state.dock_generation
+    };
+    if app.get_webview_window(DOCK).is_some() || app.get_webview_window(CANVAS).is_some() {
+        return;
+    }
+    if open_dock_page(app).is_ok() {
+        retire_panel_later(app, generation);
+    }
+}
+
+/// Makes the panel the dock's shape, growing out of the pill, once its page shows it.
+fn expect_panel_from_pill(app: &AppHandle) {
+    let mut state = engine();
+    state.mode = Mode::Dock(DockShape::Panel);
+    state.dock_anchor = pill::window(app).and_then(|w| rect_of(&w));
+    state.dock_screen = None;
+    state.dock_generation += 1;
+}
+
 /// The pill was clicked: open the panel, reusing a kept webview or building one.
 fn open_panel_from_pill(app: &AppHandle) {
     if engine().mode != Mode::Dock(DockShape::Pill) {
         return;
     }
+    retire_canvas(app);
     match app.get_webview_window(DOCK) {
         // The kept page expands itself and calls `reshape_dock(Panel)`.
-        Some(dock) => {
+        Some(dock) if engine().dock_page_ready => {
             let _ = dock.emit("set-expanded", true);
         }
+        // The hover's page is still loading: `dock_ready` shows it as the panel.
+        Some(_) => expect_panel_from_pill(app),
         None => {
-            {
-                let mut state = engine();
-                state.mode = Mode::Dock(DockShape::Panel);
-                state.dock_anchor = pill::window(app).and_then(|w| rect_of(&w));
-                state.dock_screen = None;
-                state.dock_generation += 1;
-            }
-            if webview::open(app, Surface::Dock, false).is_err() {
+            expect_panel_from_pill(app);
+            if open_dock_page(app).is_err() {
                 engine().mode = Mode::Dock(DockShape::Pill);
             }
         }
@@ -369,10 +417,7 @@ pub fn enter_canvas(app: &AppHandle) {
     }
 
     if rebuilt {
-        // The page is loading in a fresh webview: reveal it when it reports ready, or after a timeout.
-        engine().canvas_reveal_pending = true;
-        std::thread::sleep(Duration::from_millis(3000));
-        canvas_ready(app);
+        reveal_canvas_when_ready(app);
     } else {
         reveal_canvas(app);
     }
@@ -383,7 +428,27 @@ fn set_rect(window: &WebviewWindow, rect: Rect) {
     let _ = window.set_position(tauri::PhysicalPosition::new(rect.x, rect.y));
 }
 
-/// The canvas page mounted (or the reveal timeout passed): show it if a rebuilt canvas is waiting.
+/// The page is loading in a fresh webview: reveal it when it reports ready, or after a timeout.
+pub fn reveal_canvas_when_ready(app: &AppHandle) {
+    engine().canvas_reveal_pending = true;
+    let app = app.clone();
+    std::thread::spawn(move || {
+        std::thread::sleep(Duration::from_millis(3000));
+        canvas_ready(&app);
+    });
+}
+
+/// The canvas's page has begun loading: map its window, still invisible, so the page can paint.
+pub fn canvas_loading(app: &AppHandle) {
+    if !engine().canvas_reveal_pending {
+        return;
+    }
+    if let Some(canvas) = app.get_webview_window(CANVAS) {
+        platform::map_invisibly(&plain(&canvas));
+    }
+}
+
+/// The canvas page has painted or mounted (or the reveal timeout passed): show it if it is waiting.
 pub fn canvas_ready(app: &AppHandle) {
     let pending = std::mem::take(&mut engine().canvas_reveal_pending);
     if pending {

@@ -17,6 +17,8 @@ pub struct Engine {
     pub canvas: Option<CanvasGeometry>,
     /// The canvas webview was destroyed for the dock and has to be rebuilt.
     pub canvas_suspended: bool,
+    /// Identifies the latest trip from the canvas to the dock; a delayed retire checks it is still current.
+    pub canvas_departure: u64,
     /// A rebuilt canvas is waiting for its page to report ready before it is shown.
     pub canvas_reveal_pending: bool,
     /// An externally opened file has unsaved edits: never destroy the canvas then.
@@ -26,6 +28,8 @@ pub struct Engine {
     pub dock_screen: Option<String>,
     pub dock_anchor: Option<Rect>,
     pub dock_note: Option<String>,
+    /// The dock webview's page has mounted and listens for `set-expanded`.
+    pub dock_page_ready: bool,
     /// Bumped by every dock change; a delayed job runs only if nothing changed since it was queued.
     pub dock_generation: u64,
     /// Until then the app itself is moving the dock, so moves are not the user's.
@@ -36,11 +40,13 @@ static ENGINE: Mutex<Engine> = Mutex::new(Engine {
     mode: Mode::Canvas,
     canvas: None,
     canvas_suspended: false,
+    canvas_departure: 0,
     canvas_reveal_pending: false,
     external_dirty: false,
     dock_screen: None,
     dock_anchor: None,
     dock_note: None,
+    dock_page_ready: false,
     dock_generation: 0,
     hold_until: None,
 });

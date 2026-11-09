@@ -1,13 +1,21 @@
 //! Window and mode commands. Each one only translates the page's request for `window`.
 
-use tauri::{AppHandle, WebviewWindow, Window};
+use tauri::{AppHandle, State, WebviewWindow, Window};
 
 use crate::models::QuadrantInfo;
+use crate::storage::StorageManager;
 use crate::window::{self, DockOpen, DockShape};
 
 #[tauri::command]
 pub fn toggle_window_minimize(window: Window) -> Result<(), String> {
     window::minimize(&window)
+}
+
+/// Maps the canvas unseen. Returns whether it will be maximized, which resizes it once it is mapped.
+#[tauri::command]
+pub fn canvas_loading(app: AppHandle, storage: State<'_, StorageManager>) -> bool {
+    window::canvas_loading(&app);
+    storage.get_is_maximized()
 }
 
 #[tauri::command]

@@ -82,10 +82,7 @@ pub fn run() {
                 return Ok(());
             }
             commands::settings::allow_note_images(app.handle(), &app.state::<StorageManager>());
-            let canvas = window::open_canvas(app.handle())?;
-            if app.state::<StorageManager>().get_is_maximized() {
-                let _ = canvas.maximize();
-            }
+            window::launch_canvas(app.handle(), app.state::<StorageManager>().get_is_maximized())?;
             // Native Windows taskbar notification tray icon
             let show_item = MenuItem::with_id(app, "show", "Open Canvas", true, None::<&str>)?;
             let tray_item = MenuItem::with_id(app, "tray", "Switch to Docking Mode", true, None::<&str>)?;
@@ -153,6 +150,7 @@ pub fn run() {
             commands::window::tray_ready,
             commands::window::set_pill_look,
             commands::window::set_tray_mode,
+            commands::window::canvas_loading,
             commands::window::canvas_ready,
             commands::window::set_external_dirty,
             commands::window::begin_dock_drag,
