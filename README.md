@@ -82,17 +82,31 @@ Drop any `.md` or `.txt` files into your note repository folder, hit **Sync Repo
   <img src="docs/shot-save.jpg" width="700" alt="The Save button for externally opened files">
 </p>
 
-## What's new in v1.2.0
+## What's new in v1.2.1
 
-- Official Linux release: native `.rpm` for Fedora with in-app updater, and universal `.AppImage` for other distributions
-- Modern UI redesign: 7 customizable themes, Glass transparency mode, Boxy squared geometry, and Spotlight-style search (`Ctrl+K`)
-- Dock mode always-on-top retention fix: docking pill reliably stays above other windows across drags, monitor changes, and focus shifts
-- Outside-click mutual dismissal between toolbar popups (emoji picker vs. formatting menu)
-- Ordered list sequential numbering continuity fix
+- Native dock pill: the floating dock renders through a dedicated graphics engine instead of a browser webview, with near-zero background memory and CPU
+- Instant dock-to-canvas switching: the canvas stays warm in memory for 20 seconds instead of reloading, and hovering the dock pre-warms its panel
+- Settled notes: archive completed notes off your shelves without deleting; they stay searchable in Ctrl+K and restore in one click
+- Clean image attachments: pasted images save as files in an `assets/` folder beside your notes instead of base64 text
+- Speed work: themed startup splash, incremental parsing for zero-lag typing in long notes, and virtualized rendering for fluid scrolling in large workspaces
+- Multi-monitor fix: accurate dock scaling across monitors with different Windows scaling factors, and the dock opens on the monitor it sits on
 The full history lives in the release log below.
 
 <details>
 <summary><strong>Release log</strong> (click to expand)</summary>
+
+<details>
+<summary><strong>v1.2.1</strong> — November 9, 2026</summary>
+
+- Native dock pill rendered with a dedicated graphics engine (tiny-skia) instead of a browser webview: near-zero background memory and CPU
+- Instant dock-to-canvas switching: the canvas stays warm in memory for 20 seconds instead of reloading; hovering the dock pre-warms its panel
+- Settled notes archiving: settle completed notes off your shelves without deleting, with a dedicated Settled sidebar section, full Ctrl+K searchability, one-click settle/restore and expanded right-click menus
+- Clean image attachments: pasted images are saved as image files in an assets/ folder beside your markdown notes instead of base64 text
+- Themed startup splash screen; incremental block parsing for zero-lag typing in long notes; canvas virtualization for fluid scrolling in large workspaces
+- Accurate multi-DPI dock scaling across monitors with different Windows scaling factors, and monitor-aware dock expansion
+- UI polish: suppressed the Windows caption-button glitch on the dock pill, centered shelf header buttons, and Microsoft Store (MSIX) builds now suppress the GitHub update prompt
+
+</details>
 
 <details>
 <summary><strong>v1.2.0</strong> — November 8, 2026</summary>
