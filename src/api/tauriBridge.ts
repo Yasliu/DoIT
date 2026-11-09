@@ -31,6 +31,8 @@ export interface NoteItem {
   media_urls?: string[];
   is_collapsed?: boolean;
   is_pinned?: boolean;
+  /** Put away: hidden from the canvas and the shelves, still found by search. */
+  is_settled?: boolean;
   /** source file format; "txt" notes show a Convert to Markdown action */
   format?: "md" | "txt" | string;
   /** absolute path of an external file opened in place (edited only via the Save button) */

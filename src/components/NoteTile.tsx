@@ -1,7 +1,7 @@
 import type { PointerEvent as ReactPointerEvent } from "react";
 import React, { useMemo, useRef, useState } from "react";
 import { motion } from "motion/react";
-import { Check, Maximize2 } from "lucide-react";
+import { Check, CircleCheck, Maximize2, Undo2 } from "lucide-react";
 import type { NoteItem } from "../api/tauriBridge";
 import { fontStack } from "../api/tauriBridge";
 import { accentFor, cleanText, cx, densityOf, edgeOpacity, relativeShort, stripDate } from "../lib/text";
@@ -19,6 +19,8 @@ interface NoteTileProps {
   onArm: (event: ReactPointerEvent, note: NoteItem) => void;
   onToggleItem: (note: NoteItem, itemId: string) => void;
   onContextMenu?: (event: React.MouseEvent, note: NoteItem) => void;
+  /** Settles the note, or brings a settled one back. */
+  onToggleSettled?: (note: NoteItem) => void;
 }
 
 function NoteTileComponent({
@@ -32,6 +34,7 @@ function NoteTileComponent({
   onArm,
   onToggleItem,
   onContextMenu,
+  onToggleSettled,
 }: NoteTileProps) {
   const [hovered, setHovered] = useState(false);
   const [copiedImg, setCopiedImg] = useState(false);
@@ -218,6 +221,22 @@ function NoteTileComponent({
             {cleanText(note.title) || "Untitled"}
           </h3>
         </div>
+        {onToggleSettled && !note.source_path && (
+          <button
+            type="button"
+            onPointerDown={(e) => e.stopPropagation()}
+            onClick={(e) => {
+              e.stopPropagation();
+              onToggleSettled(note);
+            }}
+            data-slot="settle-tick"
+            className="opacity-0 group-hover:opacity-100 focus-visible:opacity-100 transition-opacity p-1 rounded-md text-ink-4 hover:text-white hover:bg-white/10 shrink-0 cursor-pointer"
+            title={note.is_settled ? "Bring back to its shelf" : "Settle: put away, search still finds it"}
+            aria-label={note.is_settled ? "Bring note back" : "Settle note"}
+          >
+            {note.is_settled ? <Undo2 size={13} strokeWidth={1.8} /> : <CircleCheck size={13} strokeWidth={1.8} />}
+          </button>
+        )}
         <button
           type="button"
           onClick={(e) => {

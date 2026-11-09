@@ -17,6 +17,10 @@ _Avoid_: Category, folder
 **Uncategorized**:
 The shelf that always exists, always comes last, and receives the notes of a deleted shelf.
 
+**Settled**:
+A note the user has put away: done with or not needed for a while, but kept. It leaves the canvas and its shelf, waits in the Settled view, and search still finds it. It keeps its shelf, so bringing it back returns it there.
+_Avoid_: Archived, done, hidden
+
 **Attachment**:
 An image saved beside the notes and linked from a note, rather than stored inside its text.
 _Avoid_: Embedded image, media

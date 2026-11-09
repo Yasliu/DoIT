@@ -1,6 +1,6 @@
 import { useEffect, useRef, useState } from "react";
 import { motion, Reorder } from "motion/react";
-import { FolderPlus, MoreHorizontal, Settings, SquarePen } from "lucide-react";
+import { CircleCheck, FolderPlus, MoreHorizontal, Settings, SquarePen } from "lucide-react";
 import { Mark } from "../../components/Mark";
 import { cleanText, cx } from "../../lib/text";
 import { shelfIcon } from "./ModernSpotlight";
@@ -13,6 +13,10 @@ interface ModernSidebarProps {
   isSettings: boolean;
   /** Collapsed, it is an icon rail; the toggle lives in the title bar. */
   open: boolean;
+  settledCount: number;
+  /** The Settled view is showing instead of a shelf. */
+  settledOpen: boolean;
+  onOpenSettled: () => void;
   onSelect: (shelf: string | null) => void;
   onNewNote: () => void;
   onNewShelf: () => void;
@@ -26,7 +30,7 @@ const isUncategorized = (shelf: string) => shelf.toLowerCase() === "uncategorize
 
 /** The modern sidebar, laid out like T3 Code's: create on top, the shelves, then Settings. */
 export function ModernSidebar(props: ModernSidebarProps) {
-  const { shelves, counts, total, active, isSettings, open } = props;
+  const { shelves, counts, total, active, isSettings, open, settledCount, settledOpen } = props;
   const [, setIconsVersion] = useState(0);
 
   useEffect(() => {
@@ -60,7 +64,7 @@ export function ModernSidebar(props: ModernSidebarProps) {
   };
 
   const row = (key: string | null, label: string, count: number, sortable: boolean) => {
-    const selected = !isSettings && active === key;
+    const selected = !isSettings && !settledOpen && active === key;
     const editable = key !== null && !isUncategorized(key);
     return (
       <>
@@ -168,6 +172,20 @@ export function ModernSidebar(props: ModernSidebarProps) {
             {row(shelf, cleanText(shelf), counts[shelf] ?? 0, false)}
           </div>
         ))}
+        <button
+          type="button"
+          className="ui-row"
+          data-active={(settledOpen && !isSettings) || undefined}
+          onClick={props.onOpenSettled}
+          title={open ? undefined : "Settled"}
+          aria-label={`Settled, ${settledCount} note${settledCount === 1 ? "" : "s"}`}
+        >
+          <span className="ui-row-icon">
+            <CircleCheck size={16} />
+          </span>
+          {open && <span className="ui-row-label">Settled</span>}
+          {open && <span className="ui-row-count">{settledCount}</span>}
+        </button>
         <button
           type="button"
           className={cx("ui-row")}

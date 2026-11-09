@@ -12,6 +12,7 @@ interface ModernDockHomeProps {
   shelvesOpen: boolean;
   onToggleShelves: () => void;
   onOpen: (id: string) => void;
+  onNoteMenu: (event: React.MouseEvent, note: NoteItem) => void;
 }
 
 /** The dock panel's note list in the modern design: search, an optional shelf filter, and the notes. */
@@ -75,10 +76,13 @@ export function ModernDockHome(props: ModernDockHomeProps) {
           <p className="px-2 py-8 text-center text-[13px] text-ink-3">{filter ? "No matches" : "No notes yet"}</p>
         ) : (
           notes.map((note) => (
-            <button key={note.id} type="button" onClick={() => props.onOpen(note.id)} className="ui-dock-row">
+            <button key={note.id} type="button" onClick={() => props.onOpen(note.id)} onContextMenu={(e) => props.onNoteMenu(e, note)} className="ui-dock-row">
               <span className="min-w-0 flex-1">
                 <span className="block truncate text-[13.5px] font-medium text-ink-1">{cleanText(note.title) || "Untitled"}</span>
-                <span className="block truncate text-[12px] text-ink-3">{cleanText(note.category)}</span>
+                <span className="block truncate text-[12px] text-ink-3">
+                  {cleanText(note.category)}
+                  {note.is_settled ? " · Settled" : ""}
+                </span>
               </span>
               <span className="shrink-0 self-start pt-0.5 text-[12px] tabular-nums text-ink-3">{relativeShort(note.last_edited)}</span>
             </button>
