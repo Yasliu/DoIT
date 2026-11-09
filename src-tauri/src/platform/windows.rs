@@ -25,7 +25,7 @@ pub fn focus_window(window: &tauri::Window) {
 }
 
 pub fn config_dir() -> Option<PathBuf> {
-    std::env::var_os("APPDATA").map(|app_data| PathBuf::from(app_data).join("DoIT"))
+    std::env::var_os("APPDATA").map(|app_data| PathBuf::from(app_data).join(super::DATA_FOLDER))
 }
 
 pub fn monitor_of_window(window: &tauri::Window) -> Option<tauri::Monitor> {

@@ -1,0 +1,114 @@
+name: Checks and Previews
+
+# Every PR is tested on Windows and Linux and gets a Windows preview installer to try. A beta tag
+# (v1.2.3-beta.1) does the same and publishes that installer as a GitHub prerelease.
+#
+# Nothing here can reach the updater or the Microsoft Store. These jobs never see the signing key
+# and build no updater files or MSI, and the preview (tauri.preview.conf.json, DOIT_PREVIEW) is a
+# separate app with its own data and no update feed, so it installs beside DoIT, not over it.
+on:
+  pull_request:
+    branches: [main]
+  push:
+    tags:
+      - 'v[0-9]+.[0-9]+.[0-9]+-*'
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: checks-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  test:
+    name: Test (${{ matrix.os }})
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [windows-latest, ubuntu-22.04]
+    runs-on: ${{ matrix.os }}
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: lts/*
+          cache: npm
+
+      - uses: dtolnay/rust-toolchain@stable
+
+      - uses: Swatinem/rust-cache@v2
+        with:
+          workspaces: src-tauri
+
+      - name: Install WebKitGTK
+        if: runner.os == 'Linux'
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y libwebkit2gtk-4.1-dev libappindicator3-dev librsvg2-dev patchelf
+
+      - run: npm ci
+      - run: npm test
+      - run: npm run build
+
+      # Windows only compiles the tests: a Tauri test binary has no app manifest there, so it
+      # can't load the Common Controls version Tauri links against.
+      - name: Rust tests
+        working-directory: src-tauri
+        run: cargo test ${{ runner.os == 'Windows' && '--no-run' || '' }}
+
+  windows-preview:
+    name: Windows preview installer
+    needs: test
+    runs-on: windows-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: lts/*
+          cache: npm
+
+      - uses: dtolnay/rust-toolchain@stable
+
+      - uses: Swatinem/rust-cache@v2
+        with:
+          workspaces: src-tauri
+
+      - run: npm ci
+
+      - name: Build the preview installer
+        env:
+          DOIT_PREVIEW: '1'
+        run: npx tauri build --config src-tauri/tauri.preview.conf.json
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: DoIT-Preview-windows-installer
+          path: src-tauri/target/release/bundle/nsis/*-setup.exe
+          if-no-files-found: error
+          retention-days: 14
+
+  publish-beta:
+    name: Publish beta prerelease
+    if: startsWith(github.ref, 'refs/tags/')
+    needs: windows-preview
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+    steps:
+      - uses: actions/download-artifact@v4
+        with:
+          name: DoIT-Preview-windows-installer
+
+      - name: Publish as a prerelease
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          gh release create "$GITHUB_REF_NAME" ./*-setup.exe \
+            --repo "$GITHUB_REPOSITORY" \
+            --prerelease --latest=false \
+            --title "DoIT Preview $GITHUB_REF_NAME" \
+            --notes "A test build. It installs beside DoIT with its own notes and settings, and never updates itself or DoIT."

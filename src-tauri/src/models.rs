@@ -195,15 +195,16 @@ fn default_theme_mode() -> String {
 }
 
 pub fn default_note_storage_path() -> String {
+    use crate::platform::DATA_FOLDER;
     if let Some(docs) = crate::platform::documents_dir() {
-        docs.join("DoIT").join("Notes").to_string_lossy().to_string()
+        docs.join(DATA_FOLDER).join("Notes").to_string_lossy().to_string()
     } else if let Some(app_data) = std::env::var_os("APPDATA") {
         let mut p = std::path::PathBuf::from(app_data);
-        p.push("DoIT");
+        p.push(DATA_FOLDER);
         p.push("Notes");
         p.to_string_lossy().to_string()
     } else {
-        "./DoIT/Notes".to_string()
+        format!("./{DATA_FOLDER}/Notes")
     }
 }
 
