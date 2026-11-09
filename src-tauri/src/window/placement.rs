@@ -148,6 +148,31 @@ pub fn reshape(current: Rect, size: (i32, i32), screen: &Screen) -> (Rect, Growt
     (clamp_into(Rect { x, y, w, h }, screen.work), Growth { grow_x, grow_y })
 }
 
+/// The pill a panel is growing out of, and the monitor it is on (the panel's own window, still
+/// hidden, may be on another one).
+#[derive(Clone, Debug, PartialEq)]
+pub struct PillAnchor {
+    pub rect: Rect,
+    pub screen: Screen,
+}
+
+/// Where a freshly built panel opens: grown out of the pill on the pill's monitor, or else at the
+/// home spot of `home`.
+pub fn panel_opening(anchor: Option<&PillAnchor>, home: Option<&Screen>) -> Option<Rect> {
+    match anchor {
+        Some(pill) => Some(reshape(pill.rect, dock_size(DockShape::Panel, &pill.screen), &pill.screen).0),
+        None => home.map(|screen| dock_home(DockShape::Panel, screen)),
+    }
+}
+
+/// A dock window's monitor scale just changed, and the windowing library resized the window to keep
+/// its logical size. That is right for a window the user dragged across. A window the app had just
+/// put at `placed` was already sized for `screen`, so it got scaled twice and belongs back there.
+/// `None` means the library's size stands.
+pub fn undo_rescale(placed: Option<Rect>, shape: DockShape, screen: &Screen) -> Option<Rect> {
+    placed.filter(|rect| (rect.w, rect.h) == dock_size(shape, screen))
+}
+
 /// Where the dock window may go while it is dragged: wholly inside the usable area (`screens`, one
 /// per monitor) of the monitor under `pointer`, or the monitor nearest to it when the pointer is off
 /// every screen. Dragging therefore carries the window onto another monitor, but never past the
@@ -223,6 +248,35 @@ mod tests {
     fn hidpi() -> Screen {
         let area = Rect { x: 0, y: 0, w: 2880, h: 1800 };
         Screen { name: Some("eDP-1".into()), area, work: Rect { h: 1704, ..area }, scale: 2.0 }
+    }
+
+    /// A 100% external monitor directly above a 125% laptop.
+    fn stacked() -> (Screen, Screen) {
+        let above = Rect { x: 0, y: -1080, w: 1920, h: 1080 };
+        let below = Rect { x: 0, y: 0, w: 1920, h: 1080 };
+        (
+            Screen { name: Some("external".into()), area: above, work: Rect { h: 1032, ..above }, scale: 1.0 },
+            Screen { name: Some("laptop".into()), area: below, work: Rect { h: 1032, ..below }, scale: 1.25 },
+        )
+    }
+
+    #[test]
+    fn a_panel_built_on_another_monitor_still_grows_out_of_the_pill() {
+        let (external, laptop) = stacked();
+        let pill = PillAnchor { rect: dock_home(DockShape::Pill, &external), screen: external };
+        let panel = panel_opening(Some(&pill), Some(&laptop)).expect("somewhere to open");
+        assert_eq!((panel.w, panel.h), (440, 620));
+        assert_eq!((panel.right(), panel.bottom()), (pill.rect.right(), pill.rect.bottom()));
+    }
+
+    #[test]
+    fn only_a_window_placed_for_this_monitor_undoes_a_rescale() {
+        let (external, laptop) = stacked();
+        let placed = dock_home(DockShape::Panel, &external);
+        assert_eq!(undo_rescale(Some(placed), DockShape::Panel, &external), Some(placed));
+        // Placed on the laptop, then dragged up to the external monitor: the library's size stands.
+        let dragged = dock_home(DockShape::Panel, &laptop);
+        assert_eq!(undo_rescale(Some(dragged), DockShape::Panel, &external), None);
     }
 
     #[test]

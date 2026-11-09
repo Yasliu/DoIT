@@ -14,7 +14,8 @@ use tauri::{AppHandle, Emitter, Manager, WebviewWindow, Window};
 use super::flush;
 use super::geometry::{primary_screen, rect_of, screen_named, screen_of};
 use super::placement::{
-    canvas_placement, clamp_into, dock_home, dock_size, reshape, CanvasGeometry, CanvasPlacement, DockShape, Growth, Rect, Screen,
+    canvas_placement, clamp_into, dock_home, dock_size, panel_opening, reshape, undo_rescale, CanvasGeometry, CanvasPlacement,
+    DockShape, Growth, PillAnchor, Rect, Screen,
 };
 use super::pill;
 use super::state::{engine, Mode};
@@ -32,7 +33,12 @@ fn plain(window: &WebviewWindow) -> Window {
     window.as_ref().window()
 }
 
+fn shape_of(dock_window: &Window) -> DockShape {
+    if dock_window.label() == DOCK { DockShape::Panel } else { DockShape::Pill }
+}
+
 fn place(window: &Window, rect: Rect) {
+    engine().dock_placed = Some((shape_of(window), rect));
     platform::set_window_bounds(window, rect.x, rect.y, rect.w as u32, rect.h as u32);
 }
 
@@ -133,7 +139,23 @@ fn pill_actions() -> pill::Actions {
 }
 
 fn show_pill(app: &AppHandle, rect: Rect) {
+    engine().dock_placed = Some((DockShape::Pill, rect));
     let _ = pill::show(app, rect, pill_actions());
+}
+
+/// A dock window's monitor scale changed. Call off the main thread: the windowing library resizes
+/// the window right after reporting the change, and calls from another thread wait behind that.
+pub fn dock_rescaled(window: &Window) {
+    let Some(screen) = screen_of(window) else { return };
+    let shape = shape_of(window);
+    let placed = engine().dock_placed.take_if(|(placed_shape, _)| *placed_shape == shape).map(|(_, rect)| rect);
+    if let Some(rect) = undo_rescale(placed, shape, &screen) {
+        place(window, rect);
+    }
+    if shape == DockShape::Pill {
+        let (w, h) = dock_size(shape, &screen);
+        pill::resized(w as u32, h as u32);
+    }
 }
 
 pub fn enter_dock(app: &AppHandle, open: DockOpen) -> Result<(), String> {
@@ -204,13 +226,8 @@ pub fn dock_ready(window: &WebviewWindow) -> (DockShape, Option<String>) {
         return (DockShape::Pill, None);
     }
     let dock = plain(window);
-    let screen = screen_name.and_then(|name| screen_named(&dock, &name)).or_else(|| screen_or_primary(app, Some(&dock)));
-    if let Some(screen) = &screen {
-        let rect = match anchor {
-            // Opened from the pill: grow out of it.
-            Some(pill) => reshape(pill, dock_size(DockShape::Panel, screen), screen).0,
-            None => dock_home(DockShape::Panel, screen),
-        };
+    let home = screen_name.and_then(|name| screen_named(&dock, &name)).or_else(|| screen_or_primary(app, Some(&dock)));
+    if let Some(rect) = panel_opening(anchor.as_ref(), home.as_ref()) {
         place(&dock, rect);
     }
     let _ = dock.show();
@@ -247,9 +264,10 @@ fn prepare_panel(app: &AppHandle) {
 
 /// Makes the panel the dock's shape, growing out of the pill, once its page shows it.
 fn expect_panel_from_pill(app: &AppHandle) {
+    let anchor = pill::window(app).and_then(|w| Some(PillAnchor { rect: rect_of(&w)?, screen: screen_of(&w)? }));
     let mut state = engine();
     state.mode = Mode::Dock(DockShape::Panel);
-    state.dock_anchor = pill::window(app).and_then(|w| rect_of(&w));
+    state.dock_anchor = anchor;
     state.dock_screen = None;
     state.dock_generation += 1;
 }

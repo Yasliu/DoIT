@@ -77,6 +77,11 @@ pub fn show(app: &AppHandle, rect: Rect, actions: Actions) -> Result<(), String>
     Ok(())
 }
 
+/// The pill's monitor scale changed: draw frames for its new size (physical px).
+pub fn resized(w: u32, h: u32) {
+    send(Msg::Size(w, h));
+}
+
 pub fn hide(app: &AppHandle) {
     if let Some(window) = window(app) {
         let _ = window.hide();
