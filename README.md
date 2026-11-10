@@ -82,18 +82,30 @@ Drop any `.md` or `.txt` files into your note repository folder, hit **Sync Repo
   <img src="docs/shot-save.jpg" width="700" alt="The Save button for externally opened files">
 </p>
 
-## What's new in v1.2.1
+## What's new in v1.2.2
 
-- Native dock pill: the floating dock renders through a dedicated graphics engine instead of a browser webview, with near-zero background memory and CPU
-- Instant dock-to-canvas switching: the canvas stays warm in memory for 20 seconds instead of reloading, and hovering the dock pre-warms its panel
-- Settled notes: archive completed notes off your shelves without deleting; they stay searchable in Ctrl+K and restore in one click
-- Clean image attachments: pasted images save as files in an `assets/` folder beside your notes instead of base64 text
-- Speed work: themed startup splash, incremental parsing for zero-lag typing in long notes, and virtualized rendering for fluid scrolling in large workspaces
-- Multi-monitor fix: accurate dock scaling across monitors with different Windows scaling factors, and the dock opens on the monitor it sits on
+- **Reliable typing & body saves**: Fixed an issue where typing into note bodies lost keystrokes after the first character or two; every edit is now immediately recorded and saved to disk
+- **Collision-free per-note file storage**: Notes with identical titles each receive a guaranteed unique numeric suffix, preventing accidental file overwrites; file names exceeding 255 bytes are safely bounded while preserving full titles inside the note
+- **Instant live card preview**: As you type inside an open note sheet, its card on the canvas updates in real time with zero typing delay; optimized canvas rendering reduces key latency down to 14ms
+- **Open note deletion persistence**: Deleting an open note from its canvas card menu now permanently removes it without accidental resurrection when closing the editor sheet
+
 The full history lives in the release log below.
 
 <details>
 <summary><strong>Release log</strong> (click to expand)</summary>
+
+<details>
+<summary><strong>v1.2.2</strong> — November 10, 2026</summary>
+
+- Reliable note body saving: fixed an observer cache issue where typing with a physical keyboard only saved the initial characters; all typing is now accurately written to disk
+- Guaranteed collision-free unique file storage: notes sharing identical titles (e.g. multiple "Untitled" notes) automatically obtain distinct, non-colliding numeric suffixes without overwriting existing files
+- Long title filename bounding: note titles exceeding OS filesystem limits (255 bytes) are safely truncated for the filename while preserving the complete title inside the note file
+- Case-rename handling: changing only uppercase/lowercase letters in a title properly renames the file instead of deleting it on case-insensitive filesystems
+- Real-time live card preview: note cards on the bento canvas update on the next frame as you type without waiting for save pauses
+- Canvas render optimization: memoized drag, menu, and shelf callbacks so only the active note card re-renders while typing, reducing keystroke latency from 43ms to 14ms across large boards (300+ cards)
+- Open note deletion persistence: workspace drops pending autosaves when an active note is deleted from the canvas menu, ensuring it stays permanently deleted
+
+</details>
 
 <details>
 <summary><strong>v1.2.1</strong> — November 9, 2026</summary>

@@ -43,7 +43,7 @@ interface Toast {
 /** The Settled view shows every note whatever the shelves' collapsed state. */
 const NOTHING_COLLAPSED: Record<string, boolean> = {};
 
-const CURRENT_VERSION = "1.2.1";
+const CURRENT_VERSION = "1.2.2";
 const VERSION_TRACKER_KEY = "doit.release_notes_version";
 
 function isVersionLower(current: string | null, target: string): boolean {

@@ -36,7 +36,7 @@ jobs:
         with:
           tagName: ${{ github.ref_name }}
           releaseName: 'DoIT Desktop Core ${{ github.ref_name }}'
-          releaseBody: 'DoIT ${{ github.ref_name }} — Architectural deepening with native Win32 dock pill, settled notes archiving, multi-monitor display scaling, typing speed optimizations with incremental parsing, themed boot screen, and Windows Store package auto-detection.'
+          releaseBody: 'DoIT ${{ github.ref_name }} — Real-time live card preview while typing, reliable keystroke saving in note bodies, guaranteed collision-free per-note file storage, and persistent deletion for open notes.'
           releaseDraft: false
           prerelease: false
           includeUpdaterJson: true
