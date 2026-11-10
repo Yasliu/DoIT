@@ -103,7 +103,16 @@ impl Shared {
     }
 }
 
-fn apply(job: Job) {
+fn apply(mut job: Job) {
+    // A change of capitals only ("plan" to "Plan"): where the file system ignores case both names
+    // are one file, and removing the old name afterwards would remove the note. Rename it instead.
+    if let (Some(old), Some((new, _))) = (&job.on_disk, &job.target) {
+        let lower = |path: &Path| path.to_string_lossy().to_lowercase();
+        if old != new && lower(old) == lower(new) {
+            let _ = fs::rename(old, new);
+            job.on_disk = None;
+        }
+    }
     let written = match &job.target {
         Some((path, content)) => write_atomically(path, content).then_some(path.as_path()),
         None => None,
