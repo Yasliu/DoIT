@@ -12,8 +12,9 @@ export interface BodyReader {
  */
 export function createBodyReader(body: HTMLElement): BodyReader {
   const pieces = new WeakMap<Node, MarkdownPiece>();
-  const observer = new MutationObserver(() => undefined);
-  observer.observe(body, { subtree: true, childList: true, characterData: true, attributes: true });
+  /** Blocks edited since the last read, unless blocks were added to or removed from the body. */
+  const changed = new Set<Node>();
+  let reshaped = false;
 
   const blockOf = (node: Node | null): Node | null => {
     let current = node;
@@ -21,22 +22,25 @@ export function createBodyReader(body: HTMLElement): BodyReader {
     return current;
   };
 
-  /** Forgets what changed; true when blocks were added to or removed from the body itself. */
-  const invalidate = (records: MutationRecord[], changed: Set<Node>): boolean => {
-    let reshaped = false;
+  const forget = (records: MutationRecord[]) => {
     for (const record of records) {
       if (record.target === body) {
         reshaped = true;
+        changed.clear();
         continue;
       }
       const block = blockOf(record.target);
-      if (block) {
-        pieces.delete(block);
-        changed.add(block);
-      }
+      if (!block) continue;
+      pieces.delete(block);
+      if (!reshaped) changed.add(block);
     }
-    return reshaped;
   };
+
+  // The browser hands records to this callback as soon as no script is running, which for a real
+  // keystroke is before the input handler calls `read`. They must count here: `takeRecords` only
+  // returns the ones not handed over yet, and a read that misses an edit answers from the cache.
+  const observer = new MutationObserver(forget);
+  observer.observe(body, { subtree: true, childList: true, characterData: true, attributes: true });
 
   const pieceOf = (block: Node): MarkdownPiece => {
     let piece = pieces.get(block);
@@ -49,12 +53,13 @@ export function createBodyReader(body: HTMLElement): BodyReader {
 
   return {
     read() {
-      const changed = new Set<Node>();
-      const reshaped = invalidate(observer.takeRecords(), changed);
+      forget(observer.takeRecords());
       const [only] = changed;
       if (!reshaped && changed.size === 1 && only instanceof HTMLElement && editStaysInBlock(only)) normalizeEditor(body, only);
       else normalizeEditor(body);
-      invalidate(observer.takeRecords(), changed);
+      forget(observer.takeRecords());
+      changed.clear();
+      reshaped = false;
 
       const blocks = Array.from(body.childNodes);
       if (blocks.every(readsAsOwnLines)) return joinMarkdown(blocks.map(pieceOf));
