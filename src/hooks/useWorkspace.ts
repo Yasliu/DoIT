@@ -2,7 +2,6 @@ import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { getCurrentWindow } from "@tauri-apps/api/window";
 import { NoteItem, ScanSummary, Shelf, tauriApi } from "../api/tauriBridge";
 import { initCategoryIcons } from "../lib/categoryIcons";
-import { drainHeldEdits } from "../lib/heldEdits";
 import { uid } from "../lib/text";
 
 export type LoadState = "loading" | "ready" | "error";
@@ -338,7 +337,7 @@ export function useWorkspace() {
   );
 
   /** Shelf names in display order, plus any a note is on that the backend has not reported yet. */
-  const shelves = useMemo(() => {
+  const shelfNames = useMemo(() => {
     const names = shelfList.map((s) => s.name);
     const known = new Set(names.map((n) => n.toLowerCase()));
     const extra = notes
@@ -348,10 +347,16 @@ export function useWorkspace() {
     if (at < 0) return [...names, ...extra, "Uncategorized"];
     return [...names.slice(0, at), ...extra, ...names.slice(at)];
   }, [shelfList, notes]);
+  // Typing in a note changes `notes` on every key; the same names must stay the same array, or
+  // every card (they all take it) would render again with each one.
+  const lastShelves = useRef(shelfNames);
+  if (lastShelves.current.length !== shelfNames.length || lastShelves.current.some((name, i) => name !== shelfNames[i])) {
+    lastShelves.current = shelfNames;
+  }
+  const shelves = lastShelves.current;
 
   useEffect(() => {
     const flush = () => {
-      drainHeldEdits();
       saveTimers.current.forEach((timer) => window.clearTimeout(timer));
       saveTimers.current.clear();
       const saves = [...pending.current.values()].map((note) => tauriApi.saveNote(note));
