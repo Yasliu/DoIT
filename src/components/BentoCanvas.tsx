@@ -125,6 +125,12 @@ export function BentoCanvas({
     landTimer.current = window.setTimeout(() => setLanded(null), 700);
   }, []);
 
+  // Cards skip rendering while their props stay the same, and typing in an open note renders this
+  // canvas on every key: hand them functions that never change but still run the latest ones.
+  const latest = useRef({ arm: (_event: ReactPointerEvent, _note: NoteItem) => {}, onContextMenu });
+  const stableArm = useCallback((event: ReactPointerEvent, note: NoteItem) => latest.current.arm(event, note), []);
+  const stableContextMenu = useCallback((event: React.MouseEvent, note: NoteItem) => latest.current.onContextMenu?.(event, note), []);
+
   const arm = (event: ReactPointerEvent, note: NoteItem) => {
     if (event.button !== 0) return;
     const root = event.currentTarget as HTMLElement;
@@ -287,6 +293,7 @@ export function BentoCanvas({
     window.addEventListener("pointerup", onUp);
     window.addEventListener("pointercancel", onCancel);
   };
+  latest.current = { arm, onContextMenu };
 
   const title = settledView ? "Settled" : (active ?? "All notes");
   const today = longDate(Date.now());
@@ -462,9 +469,9 @@ export function BentoCanvas({
                 onCategoryContextMenu={onCategoryContextMenu}
                 onOpenIconPicker={onOpenIconPicker}
                 onOpen={onOpen}
-                onArm={arm}
+                onArm={stableArm}
                 onToggleItem={onToggleItem}
-                onContextMenu={onContextMenu}
+                onContextMenu={onContextMenu && stableContextMenu}
                 onToggleSettled={onToggleSettled}
               />
             ))

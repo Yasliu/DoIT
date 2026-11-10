@@ -30,8 +30,8 @@ function readDataUrl(file: File): Promise<string> {
 export interface NoteEditorOptions {
   /** The note being edited; `null` while none is open. */
   note: NoteItem | null;
-  /** Applies a change to the note. `immediate` asks to save without the usual typing debounce. */
-  edit: (patch: Partial<NoteItem>, immediate?: boolean) => void;
+  /** Applies a change to the note. */
+  edit: (patch: Partial<NoteItem>) => void;
   /** The note's title field: ArrowUp at the very start of the body moves the caret there. */
   titleRef: React.RefObject<HTMLInputElement | null>;
   /** Ctrl+S inside the note (saving an externally opened file). */
@@ -67,9 +67,9 @@ export function useNoteEditor({ note, edit, titleRef, onSave }: NoteEditorOption
   const [tableMenu, setTableMenu] = useState<{ x: number; y: number; cell: HTMLElement } | null>(null);
 
   const change = useCallback(
-    (patch: Partial<NoteItem>, immediate = false) => {
+    (patch: Partial<NoteItem>) => {
       if (noteRef.current) noteRef.current = { ...noteRef.current, ...patch };
-      edit(patch, immediate);
+      edit(patch);
     },
     [edit],
   );
@@ -85,12 +85,12 @@ export function useNoteEditor({ note, edit, titleRef, onSave }: NoteEditorOption
 
   /** Reads the rich body back into the note after any change to its DOM. */
   const input = useCallback(
-    (immediate = false) => {
+    () => {
       const body = bodyRef.current;
       const current = noteRef.current;
       if (!body || !current) return;
       const markdown = bodyReader.current?.read() ?? "";
-      change({ content: markdownToContent(markdown, current.content, () => uid("line")) }, immediate);
+      change({ content: markdownToContent(markdown, current.content, () => uid("line")) });
       refreshFormatting();
     },
     [change, refreshFormatting],
@@ -127,12 +127,12 @@ export function useNoteEditor({ note, edit, titleRef, onSave }: NoteEditorOption
     render(content);
   });
 
-  /** Runs a formatting command on the rich body and saves the result right away. */
+  /** Runs a formatting command on the rich body and reads the result back into the note. */
   const run = useCallback(
     (command: (body: HTMLElement) => void) => {
       if (!bodyRef.current) return;
       command(bodyRef.current);
-      input(true);
+      input();
     },
     [input],
   );

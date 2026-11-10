@@ -43,7 +43,6 @@ import {
 } from "../lib/format";
 import { isModern } from "../platform";
 import { ModernConfirm } from "../platform/modern/ModernConfirm";
-import { holdEdits } from "../lib/heldEdits";
 import { accentFor, cleanText, cx, fullStamp, uid } from "../lib/text";
 
 interface NoteSheetProps {
@@ -103,7 +102,6 @@ export function NoteSheet({
 
   const [draft, setDraft] = useState<NoteItem>(note);
   const draftRef = useRef(draft);
-  const saveTimer = useRef(0);
   const [fontOpen, setFontOpen] = useState(false);
   const [systemFonts, setSystemFonts] = useState<string[]>([]);
   const [fontSearch, setFontSearch] = useState("");
@@ -287,10 +285,11 @@ export function NoteSheet({
 
   const accent = accentFor(draft.category, shelves);
 
-  const commit = (next: NoteItem, immediate = false) => {
+  /** Every edit goes to the workspace at once, so the note's card follows the typing; the
+   *  workspace is what waits for a pause before writing the file. */
+  const commit = (next: NoteItem) => {
     draftRef.current = next;
     setDraft(next);
-    window.clearTimeout(saveTimer.current);
     if (next.source_path) {
       // External file opened in place: autosave is OFF, only the Save button writes to disk
       dirtyRef.current = true;
@@ -299,15 +298,11 @@ export function NoteSheet({
       setSavedFlash(false);
       return;
     }
-    if (immediate) {
-      commitRef.current(next);
-      return;
-    }
-    saveTimer.current = window.setTimeout(() => commitRef.current(draftRef.current), 240);
+    commitRef.current(next);
   };
 
-  const edit = (patch: Partial<NoteItem>, immediate = false) => {
-    commit({ ...draftRef.current, ...patch, last_edited: Date.now() }, immediate);
+  const edit = (patch: Partial<NoteItem>) => {
+    commit({ ...draftRef.current, ...patch, last_edited: Date.now() });
   };
 
   // The card's menu can settle or move this note while it is open; this sheet's next save must
@@ -347,7 +342,7 @@ export function NoteSheet({
   // MD Mode <-> Text Mode also flips the file extension (.md <-> .txt) on the next write
   const setMode = (raw: boolean) => {
     if (raw === (draftRef.current.format === "txt")) return;
-    commit({ ...draftRef.current, format: raw ? "txt" : "md", last_edited: Date.now() }, true);
+    commit({ ...draftRef.current, format: raw ? "txt" : "md", last_edited: Date.now() });
   };
 
   const editor = useNoteEditor({
@@ -427,21 +422,9 @@ export function NoteSheet({
     return () => document.removeEventListener("keydown", onKey);
   }, [fontOpen, shelfOpen, adjustZoom, resetZoom]);
 
-  // Typing waits in this sheet's debounce; hand it over whenever the workspace is asked to flush.
-  useEffect(
-    () =>
-      holdEdits(() => {
-        if (draftRef.current.source_path) return;
-        window.clearTimeout(saveTimer.current);
-        commitRef.current(draftRef.current);
-      }),
-    [],
-  );
-
   useEffect(() => {
     return () => {
       if (draftRef.current.source_path) void tauriApi.setExternalDirty(false);
-      window.clearTimeout(saveTimer.current);
       window.clearTimeout(phaseTimer.current);
       closeCancel.current();
       if (!deleted.current && !draftRef.current.source_path) {
@@ -454,7 +437,6 @@ export function NoteSheet({
     if (closing.current) return;
     if (draftRef.current.source_path && dirtyRef.current && !window.confirm("Discard unsaved changes to this file?")) return;
     closing.current = true;
-    window.clearTimeout(saveTimer.current);
 
     // Drop trailing empty lines only; blank lines between paragraphs are real content
     const cur = draftRef.current;
@@ -483,7 +465,6 @@ export function NoteSheet({
     const next = { ...draftRef.current, is_settled: !draftRef.current.is_settled };
     draftRef.current = next;
     setDraft(next);
-    window.clearTimeout(saveTimer.current);
     onSettledChange?.(next);
     if (next.is_settled) close();
   };
@@ -809,7 +790,7 @@ export function NoteSheet({
                           }}
                           onClick={(e) => {
                             e.stopPropagation();
-                            edit({ font_family: font.name }, true);
+                            edit({ font_family: font.name });
                             if (editor.bodyRef.current) {
                               editor.bodyRef.current.style.fontFamily = font.stack;
                               editor.bodyRef.current.focus();
@@ -869,7 +850,7 @@ export function NoteSheet({
                                 }}
                                 onClick={(e) => {
                                   e.stopPropagation();
-                                  edit({ font_family: fontName }, true);
+                                  edit({ font_family: fontName });
                                   if (editor.bodyRef.current) {
                                     editor.bodyRef.current.style.fontFamily = fontStack(fontName);
                                     editor.bodyRef.current.focus();
