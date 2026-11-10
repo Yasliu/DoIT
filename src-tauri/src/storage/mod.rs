@@ -2,7 +2,7 @@ mod attachments;
 pub mod shelves;
 mod writer;
 
-use std::collections::HashMap;
+use std::collections::{HashMap, HashSet};
 use std::fs::{self, File};
 use std::io::{Read, Write};
 use std::path::{Path, PathBuf};
@@ -454,41 +454,36 @@ impl StorageManager {
             lock.insert(0, note.clone());
         }
 
-        // Calculate repeated title number
-        let repeated_num = lock
-            .iter()
-            .filter(|n| {
-                n.id != note.id
-                    && n.category.eq_ignore_ascii_case(&note.category)
-                    && n.title.eq_ignore_ascii_case(&note.title)
-            })
-            .count();
-
         drop(lock);
-
-        // Compute markdown content and target filename
-        let ext = note.file_extension();
-        let md_content = if ext == "txt" { note.to_plain_text() } else { note.to_markdown(repeated_num) };
-        let target_filename = compute_note_filename(
-            &note.category,
-            &note.title,
-            note.last_edited,
-            repeated_num,
-            note.file_name_extension(),
-        );
 
         let storage_dir = {
             let settings = self.settings.read().map_err(|e| e.to_string())?;
             PathBuf::from(&settings.storage_path)
         };
-        let target_path = storage_dir.join(&target_filename);
 
-        // Track and clean up previous file if renamed
-        let previous_path = {
+        // The number that ends the name tells apart notes that would otherwise share a file (same
+        // shelf, title and day): the first one no other note and no other file is using. Counting
+        // the notes with that title gave two of them the same number, and one overwrote the other.
+        let (repeated_num, target_path, previous_path) = {
             let mut map = self.file_map.write().map_err(|e| e.to_string())?;
-            let old = map.insert(note.id.clone(), target_path.clone());
-            old
+            let own = map.get(&note.id).cloned();
+            let used_by_others: HashSet<String> =
+                map.iter().filter(|(id, _)| **id != note.id).map(|(_, path)| name_key(path)).collect();
+            let is_own = |path: &Path| own.as_deref().is_some_and(|own| same_file(own, path));
+            let name = |number: usize, ext: &str| storage_dir.join(compute_note_filename(&note.category, &note.title, note.last_edited, number, ext));
+            // A .txt note is known by its name without the settled mark, so both spellings count.
+            let spellings: &[&str] = if note.file_extension() == "txt" { &["txt", "settled.txt"] } else { &["md"] };
+            let (number, path) = (0..)
+                .map(|number| (number, name(number, note.file_name_extension())))
+                .find(|(number, path)| {
+                    !used_by_others.contains(&name_key(path))
+                        && spellings.iter().map(|ext| name(*number, ext)).all(|path| is_own(&path) || !path.exists())
+                })
+                .expect("some number is free");
+            map.insert(note.id.clone(), path.clone());
+            (number, path, own)
         };
+        let md_content = if note.file_extension() == "txt" { note.to_plain_text() } else { note.to_markdown(repeated_num) };
 
         self.writer.write(&note.id, target_path, md_content, previous_path);
 
@@ -705,6 +700,21 @@ impl StorageManager {
 }
 
 /// `current` with every field named in `patch` replaced; `null` clears an optional field.
+/// What a note file's name comes to on any file system: letter case and the settled mark aside.
+fn name_key(path: &Path) -> String {
+    let name = path.file_name().map(|name| name.to_string_lossy().to_lowercase()).unwrap_or_default();
+    match name.strip_suffix(".settled.txt") {
+        Some(stem) => format!("{stem}.txt"),
+        None => name,
+    }
+}
+
+/// True when both paths name one file. A file system that ignores case finds a note's own file
+/// under a title whose capitals changed, and that must not read as somebody else's file.
+fn same_file(a: &Path, b: &Path) -> bool {
+    a == b || (name_key(a) == name_key(b) && fs::canonicalize(a).ok().zip(fs::canonicalize(b).ok()).is_some_and(|(a, b)| a == b))
+}
+
 fn merge_settings(current: &AppSettings, patch: serde_json::Map<String, serde_json::Value>) -> Result<AppSettings, String> {
     let mut fields = match serde_json::to_value(current).map_err(|e| e.to_string())? {
         serde_json::Value::Object(map) => map,
@@ -716,8 +726,12 @@ fn merge_settings(current: &AppSettings, patch: serde_json::Map<String, serde_js
 
 #[cfg(test)]
 mod tests {
-    use super::{merge_settings, StorageManager};
-    use crate::models::AppSettings;
+    use std::collections::HashMap;
+    use std::path::{Path, PathBuf};
+    use std::sync::{Arc, RwLock};
+
+    use super::{merge_settings, shelves, writer, StorageManager};
+    use crate::models::{AppSettings, NoteItem};
 
     #[test]
     fn a_settings_patch_changes_only_the_fields_it_names() {
@@ -735,6 +749,98 @@ mod tests {
         assert!(twice.is_maximized);
 
         assert!(merge_settings(&current, patch(r#"{"is_maximized":"yes"}"#)).is_err());
+    }
+
+    /// A manager that keeps its notes and settings in a fresh folder, and that folder.
+    fn manager_in_temp_dir(name: &str) -> (StorageManager, PathBuf) {
+        let dir = std::env::temp_dir().join(format!("doit-{name}-{}", std::process::id()));
+        let _ = std::fs::remove_dir_all(&dir);
+        std::fs::create_dir_all(dir.join("notes")).unwrap();
+        let settings = AppSettings { storage_path: dir.join("notes").to_string_lossy().into_owned(), ..AppSettings::default() };
+        let manager = StorageManager {
+            settings_path: dir.join("settings.json"),
+            settings: Arc::new(RwLock::new(settings)),
+            notes: Arc::default(),
+            shelves: RwLock::new(shelves::Shelves::load(None, &[], &HashMap::new(), std::iter::empty())),
+            file_map: Arc::default(),
+            writer: writer::NoteWriter::new(),
+        };
+        (manager, dir)
+    }
+
+    fn note(id: &str, title: &str, body: &str) -> NoteItem {
+        let mut note = NoteItem::from_file(body, "Work - x - 2026-11-10 - 0", "md", 1_762_732_800_000);
+        note.id = id.to_string();
+        note.title = title.to_string();
+        note
+    }
+
+    /// The text of every note file in the manager's folder, sorted.
+    fn saved_bodies(manager: &StorageManager, dir: &Path) -> Vec<String> {
+        manager.flush_writes();
+        let mut bodies: Vec<String> = std::fs::read_dir(dir.join("notes"))
+            .unwrap()
+            .flatten()
+            .filter_map(|entry| StorageManager::read_note_file(&entry.path()))
+            .map(|note| note.content.iter().map(|line| line.text.as_str()).collect::<Vec<_>>().join("\n"))
+            .collect();
+        bodies.sort();
+        std::fs::remove_dir_all(dir).unwrap();
+        bodies
+    }
+
+    #[test]
+    fn notes_with_the_same_title_keep_a_file_each() {
+        let (manager, dir) = manager_in_temp_dir("same-title");
+        manager.upsert_note(note("a", "", "first")).unwrap();
+        manager.upsert_note(note("b", "", "second")).unwrap();
+        // Saving the older note again used to give it the newer note's file name.
+        manager.upsert_note(note("a", "", "first, edited")).unwrap();
+        manager.upsert_note(note("b", "", "second, edited")).unwrap();
+
+        assert_eq!(saved_bodies(&manager, &dir), ["first, edited", "second, edited"]);
+    }
+
+    #[test]
+    fn a_settled_text_note_and_a_plain_one_do_not_share_a_number() {
+        let (manager, dir) = manager_in_temp_dir("settled-txt");
+        let text = |id: &str, settled: bool| {
+            let mut note = note(id, "Todo", id);
+            note.format = Some("txt".to_string());
+            note.is_settled = Some(settled);
+            note
+        };
+        manager.upsert_note(text("a", true)).unwrap();
+        manager.upsert_note(text("b", false)).unwrap();
+        manager.flush_writes();
+
+        // A .txt note is told apart by its name without the settled mark.
+        let mut names: Vec<String> =
+            std::fs::read_dir(dir.join("notes")).unwrap().flatten().map(|entry| entry.file_name().to_string_lossy().replace(".settled", "")).collect();
+        names.sort();
+        std::fs::remove_dir_all(&dir).unwrap();
+        assert_eq!(names.len(), 2);
+        assert_ne!(names[0], names[1]);
+    }
+
+    #[test]
+    fn changing_only_a_titles_capitals_keeps_the_note() {
+        let (manager, dir) = manager_in_temp_dir("capitals");
+        manager.upsert_note(note("a", "plan", "ship it")).unwrap();
+        manager.flush_writes();
+        manager.upsert_note(note("a", "Plan", "ship it today")).unwrap();
+
+        assert_eq!(saved_bodies(&manager, &dir), ["ship it today"]);
+    }
+
+    #[test]
+    fn a_note_with_a_very_long_title_is_saved() {
+        let (manager, dir) = manager_in_temp_dir("long-title");
+        let title = "long ".repeat(60);
+        let saved = manager.upsert_note(note("a", &title, "the body")).unwrap();
+        assert_eq!(saved.title, title.trim());
+
+        assert_eq!(saved_bodies(&manager, &dir), ["the body"]);
     }
 
     #[test]

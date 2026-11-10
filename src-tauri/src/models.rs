@@ -343,7 +343,26 @@ pub fn compute_markdown_filename(
     let cat_clean = sanitize_filename(if category.trim().is_empty() { "Uncategorized" } else { category.trim() });
     let title_clean = sanitize_filename(if title.trim().is_empty() { "Untitled" } else { title.trim() });
     let date_str = format_date(timestamp);
-    format!("{cat_clean} - {title_clean} - {date_str} - {repeated_num}.md")
+    // A long title only shortens the name: a Markdown note keeps the whole title inside the file.
+    // (A .txt note has nowhere else to keep it, so it comes back with the shortened one.)
+    let cat_clean = clip(&cat_clean, MAX_SHELF_BYTES_IN_FILE_NAME);
+    let rest = format!(" - {date_str} - {repeated_num}.md");
+    let title_clean = clip(&title_clean, MAX_FILE_NAME_BYTES - cat_clean.len() - " - ".len() - rest.len());
+    format!("{cat_clean} - {title_clean}{rest}")
+}
+
+/// File systems refuse a name over 255 bytes (Linux) or 255 UTF-16 units (Windows), and a note
+/// whose file cannot be made is never saved. This leaves room for a longer extension than `.md`.
+const MAX_FILE_NAME_BYTES: usize = 240;
+const MAX_SHELF_BYTES_IN_FILE_NAME: usize = 96;
+
+/// The start of `text` that fits in `max_bytes`, cut between characters.
+fn clip(text: &str, max_bytes: usize) -> &str {
+    let mut end = text.len().min(max_bytes);
+    while !text.is_char_boundary(end) {
+        end -= 1;
+    }
+    text[..end].trim_end()
 }
 
 /// Ends the stem of a settled .txt note's file name (see `NoteItem::file_name_extension`).
