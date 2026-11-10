@@ -53,12 +53,23 @@ export function useWorkspace() {
 
   const saveTimers = useRef(new Map<string, number>());
   const pending = useRef(new Map<string, NoteItem>());
+  /**
+   * Notes deleted here or in the other window. An editor that still has one open saves its draft
+   * as it closes, and that save must not bring the note back. A note the backend hands over again
+   * (undo, an import, a reload) is no longer deleted.
+   */
+  const removed = useRef(new Set<string>());
+  /** Replaces the view with the backend's notes. */
+  const showAll = useCallback((all: NoteItem[]) => {
+    removed.current.clear();
+    setNotes(all);
+  }, []);
 
   const load = useCallback(async () => {
     setState("loading");
     try {
       const [loadedNotes, loadedShelves] = await Promise.all([tauriApi.getNotes(), tauriApi.getShelves()]);
-      setNotes(loadedNotes);
+      showAll(loadedNotes);
       setShelfList(loadedShelves);
       migrateCollapsedShelves(loadedShelves);
       setState("ready");
@@ -72,6 +83,15 @@ export function useWorkspace() {
     void load();
   }, [load]);
 
+  /** Drops a deleted note from the view, along with any save of it still waiting. */
+  const forget = useCallback((id: string) => {
+    removed.current.add(id);
+    window.clearTimeout(saveTimers.current.get(id));
+    saveTimers.current.delete(id);
+    pending.current.delete(id);
+    setNotes((prev) => prev.filter((note) => note.id !== id));
+  }, []);
+
   // Real-time synchronization across main window and desk tray window
   useEffect(() => {
     let unlistenSaved: (() => void) | null = null;
@@ -81,6 +101,8 @@ export function useWorkspace() {
     getCurrentWindow()
       .listen<NoteItem>("note-saved", (event) => {
         const incoming = event.payload;
+        // Saved again somewhere (an undone delete, perhaps in the other window): it is back.
+        removed.current.delete(incoming.id);
         if (pending.current.has(incoming.id)) return;
         setNotes((prev) => {
           const idx = prev.findIndex((n) => n.id === incoming.id);
@@ -109,8 +131,7 @@ export function useWorkspace() {
 
     getCurrentWindow()
       .listen<string>("note-deleted", (event) => {
-        const deletedId = event.payload;
-        setNotes((prev) => prev.filter((n) => n.id !== deletedId));
+        forget(event.payload);
       })
       .then((unlisten) => {
         unlistenDeleted = unlisten;
@@ -131,6 +152,7 @@ export function useWorkspace() {
   }, []);
 
   const persist = useCallback((note: NoteItem, immediate = false) => {
+    if (removed.current.has(note.id)) return;
     const timers = saveTimers.current;
     const existing = timers.get(note.id);
     if (existing) window.clearTimeout(existing);
@@ -183,19 +205,13 @@ export function useWorkspace() {
   );
 
   const remove = useCallback((id: string) => {
-    const timer = saveTimers.current.get(id);
-    if (timer) {
-      window.clearTimeout(timer);
-      saveTimers.current.delete(id);
-    }
-    pending.current.delete(id);
-
-    setNotes((prev) => prev.filter((note) => note.id !== id));
+    forget(id);
     void tauriApi.deleteNote(id);
-  }, []);
+  }, [forget]);
 
   const restore = useCallback(
     (note: NoteItem) => {
+      removed.current.delete(note.id);
       setNotes((prev) => (prev.some((n) => n.id === note.id) ? prev : [note, ...prev]));
       persist(note, true);
     },
@@ -382,6 +398,7 @@ export function useWorkspace() {
 
   const importNoteFile = useCallback(async (filePath?: string): Promise<NoteItem> => {
     const imported = await tauriApi.importSingleMarkdownFile(filePath);
+    removed.current.delete(imported.id);
     setNotes((prev) => {
       const idx = prev.findIndex((n) => n.id === imported.id);
       if (idx >= 0) {
@@ -398,7 +415,7 @@ export function useWorkspace() {
   const scanFolder = useCallback(async (folderPath?: string): Promise<ScanSummary> => {
     const summary = await tauriApi.scanMarkdownFolder(folderPath);
     if (summary.imported_notes.length > 0) {
-      setNotes(summary.imported_notes);
+      showAll(summary.imported_notes);
       reloadShelves();
     }
     return summary;
@@ -407,7 +424,7 @@ export function useWorkspace() {
   const pickAndScan = useCallback(async (): Promise<ScanSummary> => {
     const summary = await tauriApi.pickAndScanFolder();
     if (summary.imported_notes.length > 0) {
-      setNotes(summary.imported_notes);
+      showAll(summary.imported_notes);
       reloadShelves();
     }
     return summary;
@@ -415,7 +432,7 @@ export function useWorkspace() {
 
   const importFolderAsShelf = useCallback(async (shelf?: string) => {
     const result = await tauriApi.importFolderAsShelf(shelf);
-    setNotes(result.notes);
+    showAll(result.notes);
     reloadShelves();
     return result;
   }, []);
