@@ -137,20 +137,11 @@ export default function App() {
           currentVersion: update.currentVersion,
           notes: update.body,
           date: update.date,
+          // Installed by the backend, which can install an rpm the way Fedora's RPM accepts it.
           onInstall: async (onProgress) => {
-            let total = 0;
-            let done = 0;
-            await update.downloadAndInstall((event) => {
-              if (event.event === "Started") {
-                total = event.data.contentLength ?? 0;
-                onProgress(total ? 0 : null);
-              } else if (event.event === "Progress") {
-                done += event.data.chunkLength;
-                onProgress(total ? Math.min(100, Math.round((done / total) * 100)) : null);
-              } else if (event.event === "Finished") {
-                onProgress(100);
-              }
-            });
+            onProgress(0);
+            await tauriApi.installUpdate(onProgress);
+            onProgress(100);
             await tauriApi.restartApp();
           },
           onDismiss: () => setAvailableUpdate(null),

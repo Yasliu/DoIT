@@ -89,6 +89,22 @@ pub fn restart_app(app: AppHandle) {
     window::restart(&app);
 }
 
+#[derive(Clone, serde::Serialize)]
+pub struct UpdateProgress {
+    received: u64,
+    total: Option<u64>,
+}
+
+/// Downloads, verifies and installs the newest release; `false` if there is nothing newer. The
+/// error is a sentence for the update dialog.
+#[tauri::command]
+pub async fn install_update(app: AppHandle, on_progress: tauri::ipc::Channel<UpdateProgress>) -> Result<bool, String> {
+    crate::updates::install_latest(&app, |received, total| {
+        let _ = on_progress.send(UpdateProgress { received, total });
+    })
+    .await
+}
+
 /// The page saved everything it held after a `flush-pending` request.
 #[tauri::command]
 pub fn flush_done(window: WebviewWindow) {

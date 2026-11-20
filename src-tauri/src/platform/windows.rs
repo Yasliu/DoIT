@@ -539,6 +539,11 @@ pub fn global_shortcuts_work() -> bool {
     true
 }
 
+/// rpm packages exist only on Linux.
+pub fn install_rpm(_bytes: &[u8]) -> Result<(), String> {
+    Err("rpm updates exist only on Linux.".to_string())
+}
+
 pub fn documents_dir() -> Option<PathBuf> {
     std::env::var_os("USERPROFILE")
         .or_else(|| std::env::var_os("HOME"))

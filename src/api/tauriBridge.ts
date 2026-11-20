@@ -1,4 +1,4 @@
-import { invoke } from "@tauri-apps/api/core";
+import { Channel, invoke } from "@tauri-apps/api/core";
 import { getCurrentWindow } from "@tauri-apps/api/window";
 import { pick } from "../platform";
 
@@ -607,6 +607,17 @@ export const tauriApi = {
   /** Picks a folder and imports its notes as one shelf, named `shelf` or after the folder. */
   async importFolderAsShelf(shelf?: string): Promise<FolderImport> {
     return await invoke<FolderImport>("import_folder_as_shelf", { shelf: shelf ?? null });
+  },
+
+  /**
+   * Downloads, verifies and installs the newest release, reporting percent done (null while the size
+   * is unknown). Rejects with a sentence to show. Restart afterwards; on Windows the installer does.
+   */
+  async installUpdate(onProgress: (percent: number | null) => void): Promise<void> {
+    const channel = new Channel<{ received: number; total: number | null }>();
+    channel.onmessage = ({ received, total }) => onProgress(total ? Math.min(100, Math.round((received / total) * 100)) : null);
+    const installed = await invoke<boolean>("install_update", { onProgress: channel });
+    if (!installed) throw "This update is no longer available. You may already have the newest version.";
   },
 
   async restartApp(): Promise<void> {

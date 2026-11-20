@@ -474,6 +474,24 @@ pub fn global_shortcuts_work() -> bool {
     std::env::var_os("WAYLAND_DISPLAY").is_none()
 }
 
+/// Installs an rpm update the updater has already verified, after one password prompt. RPM 6
+/// (Fedora 43 and later) refuses packages without a GPG signature, which ours lack, so that check
+/// is skipped: the updater's own signature check is what proves the package genuine. The package
+/// sits in a folder only this user can open, so it cannot be swapped between check and install.
+pub fn install_rpm(bytes: &[u8]) -> Result<(), String> {
+    let dir = tempfile::Builder::new().prefix("doit-update").tempdir().map_err(|e| format!("Cannot store the update: {e}"))?;
+    let package = dir.path().join("update.rpm");
+    std::fs::write(&package, bytes).map_err(|e| format!("Cannot store the update: {e}"))?;
+    let status = std::process::Command::new("pkexec").args(["rpm", "-U", "--nosignature"]).arg(&package).status();
+    match status {
+        Ok(status) if status.success() => Ok(()),
+        // pkexec: 126 = the password prompt was dismissed, 127 = not authorised.
+        Ok(status) if matches!(status.code(), Some(126 | 127)) => Err("The update needs your password to install. Try again when you're ready.".to_string()),
+        Ok(_) => Err("The update could not be installed. Try again later, or install the rpm from the release page.".to_string()),
+        Err(_) => Err("Installing needs pkexec (polkit), which isn't available here. Install the rpm from the release page.".to_string()),
+    }
+}
+
 /// Font families from fontconfig, the same source WebKitGTK resolves CSS font names against.
 pub fn system_fonts() -> Vec<String> {
     let Ok(output) = std::process::Command::new("fc-list").args(["--format", "%{family[0]}\\n", ":"]).output() else {
