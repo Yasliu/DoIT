@@ -83,17 +83,31 @@ Drop any `.md` or `.txt` files into your note repository folder, hit **Sync Repo
   <img src="docs/shot-save.jpg" width="700" alt="The Save button for externally opened files">
 </p>
 
-## What's new in v1.2.2
+## What's new in v1.2.3
 
-- **Reliable typing & body saves**: Fixed an issue where typing into note bodies lost keystrokes after the first character or two; every edit is now immediately recorded and saved to disk
-- **Collision-free per-note file storage**: Notes with identical titles each receive a guaranteed unique numeric suffix, preventing accidental file overwrites; file names exceeding 255 bytes are safely bounded while preserving full titles inside the note
-- **Instant live card preview**: As you type inside an open note sheet, its card on the canvas updates in real time with zero typing delay; optimized canvas rendering reduces key latency down to 14ms
-- **Open note deletion persistence**: Deleting an open note from its canvas card menu now permanently removes it without accidental resurrection when closing the editor sheet
+- **Global quick-note shortcut & reliable dock pill**: Configure a system-wide shortcut in Settings (or bind `doit --quick-note` on Wayland) to pull up the dock panel on your latest note from any app, and clicking the dock pill now expands consistently even while the panel is mounting
+- **Outliner lists, line moving & link paste**: Nest and unnest bullets, numbered lists (numbered per level), and checklists with `Tab` / `Shift+Tab`, reorder lines together with their nested items using `Alt+↑` / `Alt+↓`, and paste URLs onto selected text to turn it into a link
+- **Edge-resizable portable tables & seamless navigation**: Hover and drag table column or row borders to resize freely, with sizes stored portably inside `.md` files and scaled nicely inside bento card previews, plus smooth arrow navigation in and out of cells
+- **Touchpad two-finger pinch zoom & vertical auto-scroll**: Two-finger touchpad pinch zooms only the note editor instead of the whole Linux app window, and typing or navigating near the bottom automatically scrolls notes smoothly in both Markdown and Text modes
+- **Debian/Ubuntu `.deb` package & notes-folder safeguards**: Official self-updating `.deb` releases join `.rpm`, `.AppImage`, and Windows builds, backed by strict file-only note deletion guards across all OSes so DoIT never attempts to delete your notes folder
 
 The full history lives in the release log below.
 
 <details>
 <summary><strong>Release log</strong> (click to expand)</summary>
+
+<details>
+<summary><strong>v1.2.3</strong> — November 20, 2026</summary>
+
+- Global quick-note shortcut: configurable in Settings (requiring at least two modifiers, or via `doit --quick-note` on Wayland) to open or dismiss the dock panel on the most recently edited note from any app
+- Reliable dock pill expansion: unified pill click handling and page mount state under a single lock so clicks during panel mounting are never dropped
+- Outliner list editing & link paste: `Tab`/`Shift+Tab` multi-level nesting with per-level numbering and saved task indentation, `Alt+↑`/`Alt+↓` subtree moving, and pasting URLs over selected text to create Markdown links
+- Resizable portable tables & navigation: mouse hover/drag edge resizing saved inside `.md` files (`<!-- doit-table: ... -->`), scaled bento card previews, and seamless arrow navigation into, across, and out of tables
+- Touchpad two-finger pinch zoom: native GTK pinch interception on Linux so zooming scales note content cleanly rather than the entire window
+- Automatic vertical editor scrolling: caret-following auto-scroll in both Rich Markdown and Plain Text modes without height-reset scroll jumps
+- Debian/Ubuntu `.deb` packaging & notes-folder protection: official self-updating `.deb` target in Linux releases plus `remove_note_file_safely` ensuring DoIT never deletes folders or non-note files on any OS
+
+</details>
 
 <details>
 <summary><strong>v1.2.2</strong> — November 10, 2026</summary>

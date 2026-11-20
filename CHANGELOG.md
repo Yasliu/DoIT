@@ -1,5 +1,26 @@
 # DoIT Developer Architecture & Engineering Changelog
 
+## [2026-11-20] - Version 1.2.3: Global Quick-Note Shortcut, Outliner Lists, Resizable Portable Tables, Touchpad Pinch Zoom, Debian `.deb` Packaging & Storage Safeguards
+
+### 23. Quick-Note Global Shortcut, Dock Pill Reliability, Outliner Editing, Table Resizing, Touchpad Zoom, Auto-Scroll, `.deb` Packaging & Folder Protection (`src-tauri/src/actions/`, `src-tauri/src/window/`, `src-tauri/src/storage/`, `src-tauri/src/platform/`, `src/lib/format.tsx`, `src/lib/listLayout.ts`, `src/editor/`, `src/components/RawEditor.tsx`, `src/platform/modern/ModernSettings.tsx`)
+- **Global Quick-Note Shortcut & `--quick-note` (`actions/shortcut.rs`, `actions/mod.rs`, `ModernSettings.tsx`)**:
+  - Added a configurable global shortcut in Settings (off by default; requires at least two modifiers and lazy-loads `tauri-plugin-global-shortcut` only when enabled) to open the dock panel on the most recently edited note from any app and put it away when pressed again.
+  - Added Wayland-aware guidance to bind `doit --quick-note` in desktop keyboard settings and startup-conflict reporting in Settings.
+- **Dock Pill Click Reliability (`window/state.rs`, `window/lifecycle.rs`, `TrayCompanion.tsx`)**:
+  - Unified pill click handling and page mount reporting under a single `Engine` lock, cleared readiness only on page retirement, and attached the `set-expanded` listener before signaling readiness so clicks during panel startup are never dropped.
+- **Outliner List Nesting, Line Reordering & URL Link Paste (`listLayout.ts`, `format.tsx`, `models.rs`, `NoteBody.tsx`)**:
+  - Added `Tab`/`Shift+Tab` nesting and unnesting for bullets, numbered lists (numbered per level), and checklists with persisted `indent` metadata, plus `Enter`/`Backspace` outdenting.
+  - Added `Alt+↑`/`Alt+↓` to move selected lines together with nested children, and URL paste over selected text to create Markdown links.
+- **Free Edge-Resizable Portable Tables & Seamless Navigation (`format.tsx`, `NoteBody.tsx`, `globals.css`, `text.ts`)**:
+  - Added hover edge detection and zoom-aware drag resizing for table columns and rows, persisted portably inside `.md` files via `<!-- doit-table: cols=... rows=... -->` comments and proportionally scaled in bento card previews.
+  - Improved arrow-key cell navigation, multi-line cell entry/exit, and dimension sync across row/column edits.
+- **Touchpad Two-Finger Pinch Zoom & Vertical Auto-Scroll (`platform/unix.rs`, `main.tsx`, `useNoteEditor.ts`, `NoteBody.tsx`, `RawEditor.tsx`)**:
+  - Intercepted Linux WebKitGTK's internal zoom gesture so two-finger pinch zooms note content rather than the entire window.
+  - Added caret-following vertical auto-scroll in both Rich Markdown and Plain Text modes, preserving textarea scroll position during auto-height updates.
+- **Debian/Ubuntu `.deb` Packaging & Notes-Folder Deletion Protection (`tauri.linux.conf.json`, `release-linux.yml`, `storage/mod.rs`, `storage/writer.rs`, `hooks.nsh`, `platform/`)**:
+  - Added self-updating `.deb` packaging alongside `.rpm`, `.AppImage`, and Windows installers.
+  - Hardened file removal behind `remove_note_file_safely` (allowing `.md`, `.markdown`, `.txt` regular files and note symlinks while refusing directories and directory symlinks) and moved `is_store_package` into the platform layer.
+
 ## [2026-11-10] - Version 1.2.2: Note Body Keystroke Persistence, Collision-Free Unique Storage, Real-Time Live Card Preview & Deletion State Fix
 
 ### 22. Editor Typing Persistence, File Storage Collisions, Live Card Canvas Optimization, & Open Note Deletion (`src/editor/bodyReader.ts`, `src-tauri/src/storage/`, `src/components/BentoCanvas.tsx`, `src/components/NoteSheet.tsx`, `src/hooks/useWorkspace.ts`)

@@ -38,30 +38,30 @@ export function ReleaseLogModal({ onClose }: ReleaseLogModalProps) {
             <Sparkles size={14} />
           </div>
           <span className="font-mono text-[10px] uppercase tracking-[0.14em] text-ink-4">
-            Version 1.2.2 Update
+            Version 1.2.3 Update
           </span>
         </div>
 
         <h2 className="text-[17px] font-semibold text-white tracking-tight mb-3">
-          What&apos;s New in v1.2.2
+          What&apos;s New in v1.2.3
         </h2>
 
         <ul className="space-y-2 mb-5 text-[12px] text-ink-2 leading-relaxed">
           <li className="flex items-start gap-2">
             <span className="size-1.5 rounded-full bg-white/60 mt-2 shrink-0" />
-            <span>Reliable Note Body Saving: Fixed an issue where typing into note bodies lost keystrokes after the first character; every keystroke now saves immediately to disk.</span>
+            <span>Global Quick-Note Shortcut &amp; Reliable Dock Pill: Set a system-wide shortcut in Settings (or <code>doit --quick-note</code> on Wayland) to open or dismiss the dock panel on your latest note from any app, plus a fix so clicking the dock pill reliably expands every time.</span>
           </li>
           <li className="flex items-start gap-2">
             <span className="size-1.5 rounded-full bg-white/60 mt-2 shrink-0" />
-            <span>Collision-Free Unique File Storage: Notes with identical titles now each receive guaranteed distinct filenames, preventing accidental note overwrites and safely bounding long titles.</span>
+            <span>Outliner List Nesting, Line Moving &amp; Link Paste: Nest and unnest lists with Tab / Shift+Tab (with per-level numbering and saved task indentation), reorder lines and their nested children with Alt+&uarr; / Alt+&darr;, and paste URLs onto selected text to turn it into a link.</span>
           </li>
           <li className="flex items-start gap-2">
             <span className="size-1.5 rounded-full bg-white/60 mt-2 shrink-0" />
-            <span>Instant Live Card Preview: Note cards on the canvas update in real time as you type with zero lag, with optimized rendering keeping latency at 14ms across large workspaces.</span>
+            <span>Resizable Portable Tables, Pinch Zoom &amp; Auto-Scroll: Drag table column and row edges to resize freely with dimensions saved inside <code>.md</code> files and scaled in card previews, use two-finger touchpad pinch zoom inside notes without zooming the whole app, and scroll automatically while typing near the bottom.</span>
           </li>
           <li className="flex items-start gap-2">
             <span className="size-1.5 rounded-full bg-white/60 mt-2 shrink-0" />
-            <span>Open Note Deletion Persistence: Deleting an active note from the canvas card menu now permanently removes it without accidental resurrection on editor sheet closure.</span>
+            <span>Debian/Ubuntu <code>.deb</code> Packaging &amp; Notes-Folder Protection: Official self-updating <code>.deb</code> packages join <code>.rpm</code>, <code>.AppImage</code>, and Windows installers, backed by strict file-only note removal safeguards so DoIT never attempts to delete your notes folder.</span>
           </li>
         </ul>
 
