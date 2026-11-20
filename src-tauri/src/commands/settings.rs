@@ -29,17 +29,27 @@ pub fn update_settings(
 /// it. The error is a sentence for the Settings screen.
 #[tauri::command]
 pub fn set_quick_note_shortcut(keys: String, storage: State<'_, StorageManager>, app: AppHandle) -> Result<AppSettings, String> {
+    if !crate::platform::global_shortcuts_work() {
+        return Err("This desktop doesn't let apps set shortcuts that work from other apps.".to_string());
+    }
     crate::actions::set_quick_note_shortcut(&app, &keys)?;
     let mut patch = serde_json::Map::new();
     patch.insert("quick_note_shortcut".into(), serde_json::Value::String(keys));
     storage.update_settings(patch)
 }
 
-/// Whether a shortcut DoIT registers works from other apps. Where it does not (Wayland), Settings
-/// explains how to bind `--quick-note` in the desktop's own settings instead.
+#[derive(serde::Serialize)]
+pub struct QuickNoteShortcutStatus {
+    /// Whether a shortcut DoIT registers works from other apps. Where it does not (Wayland),
+    /// Settings explains how to bind `--quick-note` in the desktop's own settings instead.
+    supported: bool,
+    /// Why the saved shortcut is not working, if DoIT could not take it back when it started.
+    error: Option<String>,
+}
+
 #[tauri::command]
-pub fn quick_note_shortcut_supported() -> bool {
-    crate::platform::global_shortcuts_work()
+pub fn quick_note_shortcut_status() -> QuickNoteShortcutStatus {
+    QuickNoteShortcutStatus { supported: crate::platform::global_shortcuts_work(), error: crate::actions::quick_note_shortcut_error() }
 }
 
 /// Lets the webview load the images next to the notes, wherever the notes folder is.

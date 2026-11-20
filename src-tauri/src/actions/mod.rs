@@ -7,7 +7,7 @@ mod shortcut;
 
 use tauri::{AppHandle, Manager};
 
-pub use shortcut::set_quick_note_shortcut;
+pub use shortcut::{restore_quick_note_shortcut, set_quick_note_shortcut, startup_error as quick_note_shortcut_error};
 
 use crate::storage::StorageManager;
 use crate::window::{self, DockOpen};

@@ -454,13 +454,14 @@ export const tauriApi = {
     }
   },
 
-  /** Whether a shortcut DoIT sets works from other apps (not under Wayland). */
-  async quickNoteShortcutSupported(): Promise<boolean> {
-    if (!isTauri()) return false;
+  /** Whether a shortcut DoIT sets works from other apps (not under Wayland), and why the saved one
+   * isn't working if DoIT could not take it back when it started. */
+  async quickNoteShortcutStatus(): Promise<{ supported: boolean; error: string | null }> {
+    if (!isTauri()) return { supported: false, error: null };
     try {
-      return await invoke<boolean>("quick_note_shortcut_supported");
+      return await invoke<{ supported: boolean; error: string | null }>("quick_note_shortcut_status");
     } catch {
-      return false;
+      return { supported: false, error: null };
     }
   },
 

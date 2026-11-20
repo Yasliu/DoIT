@@ -69,7 +69,6 @@ pub fn run() {
         .manage(LaunchFile(std::sync::Mutex::new(launch_file)))
         .plugin(tauri_plugin_opener::init())
         .plugin(tauri_plugin_updater::Builder::new().build())
-        .plugin(tauri_plugin_global_shortcut::Builder::new().build())
         .on_window_event(window::on_window_event)
         .on_menu_event(|app, event| match event.id.as_ref() {
             "maximize" | "show" => window::show_canvas(app),
@@ -85,8 +84,8 @@ pub fn run() {
             commands::settings::allow_note_images(app.handle(), &app.state::<StorageManager>());
             if platform::global_shortcuts_work() {
                 if let Ok(settings) = app.state::<StorageManager>().get_settings() {
-                    // A shortcut another app took since it was set just stays off; Settings shows why.
-                    let _ = actions::set_quick_note_shortcut(app.handle(), &settings.quick_note_shortcut);
+                    // A shortcut another app took since it was set stays off; Settings shows why.
+                    actions::restore_quick_note_shortcut(app.handle(), &settings.quick_note_shortcut);
                 }
             }
             window::launch_canvas(app.handle(), app.state::<StorageManager>().get_is_maximized())?;
@@ -153,7 +152,7 @@ pub fn run() {
             commands::settings::get_system_fonts,
             commands::settings::is_ms_store_package,
             commands::settings::set_quick_note_shortcut,
-            commands::settings::quick_note_shortcut_supported,
+            commands::settings::quick_note_shortcut_status,
             commands::window::toggle_window_minimize,
             commands::window::open_tray_mode,
             commands::window::open_canvas_mode,

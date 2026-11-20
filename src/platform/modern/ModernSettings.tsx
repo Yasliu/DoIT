@@ -150,7 +150,7 @@ export function ModernSettings({ onBack, onStoragePathChanged }: ModernSettingsP
       setSettings(res);
       setPathInput(res.storage_path);
     });
-    void tauriApi.quickNoteShortcutSupported().then((supported) => setQuickNote({ supported }));
+    void tauriApi.quickNoteShortcutStatus().then(({ supported, error }) => setQuickNote({ supported, error: error ?? undefined }));
     void import("@tauri-apps/api/app")
       .then((m) => m.getVersion())
       .then(setVersion)
