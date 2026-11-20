@@ -2,6 +2,7 @@ import { useDeferredValue, useMemo, useState, type ReactNode } from "react";
 import { FileText, FolderPlus, LayoutGrid, PanelBottomOpen, Settings, SquarePen } from "lucide-react";
 import type { NoteItem } from "../../api/tauriBridge";
 import { CATEGORY_ICONS, getCategoryIconName } from "../../lib/categoryIcons";
+import { TABLE_META_RE } from "../../lib/format";
 import { cleanText, relativeShort } from "../../lib/text";
 import { ModernPalette, type PaletteItem } from "./ModernPalette";
 
@@ -34,7 +35,10 @@ function highlight(text: string, q: string): ReactNode {
 
 /** A snippet centred on the first body line that contains `q`. */
 function snippet(note: NoteItem, q: string): ReactNode {
-  const line = note.content.map((item) => plain(item.text)).find((text) => text.toLowerCase().includes(q));
+  const line = note.content
+    .filter((item) => !TABLE_META_RE.test(item.text))
+    .map((item) => plain(item.text))
+    .find((text) => text.toLowerCase().includes(q));
   if (!line) return null;
   const at = line.toLowerCase().indexOf(q);
   const start = Math.max(0, at - 24);

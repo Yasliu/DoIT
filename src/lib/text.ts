@@ -1,5 +1,6 @@
 import type { NoteItem } from "../api/tauriBridge";
 import { pick } from "../platform";
+import { TABLE_META_RE } from "./format";
 
 export const cx = (...parts: Array<string | false | null | undefined>) =>
   parts.filter(Boolean).join(" ");
@@ -146,8 +147,14 @@ export function densityOf(note: NoteItem): Density {
   if (note.is_pinned) {
     return { weight: "feature", span: SPANS.feature, minHeight: 270, lines: 5 };
   }
-  // Dense checklists expand into larger structural panels spanning 2 rows
-  if (todoCount >= 3 || totalItems >= 4 || chars >= 190) {
+  const hasTable = note.content.some(
+    (item, idx) =>
+      idx + 1 < note.content.length &&
+      /^\s*\|.*\|\s*$/.test(item.text) &&
+      /^\s*\|(?:\s*:?-+:?\s*\|)+\s*$/.test(note.content[idx + 1].text),
+  );
+  // Dense checklists and tables expand into larger structural panels spanning 2 rows
+  if (hasTable || todoCount >= 3 || totalItems >= 4 || chars >= 190) {
     return { weight: "denseChecklist", span: SPANS.denseChecklist, minHeight: 270, lines: 6 };
   }
   // Single-line text notes scale tightly into tiny square blocks
@@ -172,7 +179,7 @@ export function noteMatches(note: NoteItem, query: string): boolean {
 
 export function plainPreview(note: NoteItem, count: number): string[] {
   return note.content
-    .filter((item) => item.text.trim().length > 0)
+    .filter((item) => item.text.trim().length > 0 && !TABLE_META_RE.test(item.text))
     .slice(0, count)
     .map((item) => item.text.trim());
 }
@@ -190,6 +197,7 @@ export function previewLine(raw: string): PreviewLine {
   const skip: PreviewLine = { kind: "skip", text: "" };
   let t = raw.trim();
   if (!t) return skip;
+  if (TABLE_META_RE.test(t)) return skip;
   if (/^(```|~~~)/.test(t)) return skip;
   if (/^\s{0,3}([-*_])(?:\s*\1){2,}\s*$/.test(raw)) return skip;
   if (/^\|?\s*:?-+:?\s*(\|\s*:?-+:?\s*)+\|?$/.test(t)) return skip;

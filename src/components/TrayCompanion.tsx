@@ -33,6 +33,7 @@ import {
 } from "../api/tauriBridge";
 import { useWorkspace } from "../hooks/useWorkspace";
 import { EditorOverlays, NoteBody, NoteGallery, hasGallery, useNoteEditor } from "../editor";
+import { useNoteZoomListeners } from "../editor/useNoteEditor";
 import { applyShortcutSettings } from "../lib/shortcuts";
 import {
   applyTask,
@@ -191,6 +192,8 @@ export function TrayCompanion() {
       localStorage.setItem("doit:dock-zoom", "100");
     } catch {}
   }, []);
+
+  useNoteZoomListeners(Boolean(activeNoteId) && !editor.previewImage, adjustDockZoom);
 
   // ONE tray frame for both shapes. Fade the panel out, resize the native frame while nothing is drawn
   // (blank transparent content), then fade the floating bar in - and the reverse on expand.
@@ -915,12 +918,6 @@ export function TrayCompanion() {
 
           {/* Scrollable Note Document: ModeToggle, Title, Images, Body */}
           <div
-            onWheel={(e) => {
-              if (e.ctrlKey || e.metaKey) {
-                e.preventDefault();
-                adjustDockZoom(e.deltaY < 0 ? 10 : -10);
-              }
-            }}
             className="flex-1 min-h-0 overflow-y-auto overflow-x-auto scrollbar-thin scrollbar-thumb-white/10 scrollbar-track-transparent pr-1.5 pt-2 pb-6 space-y-2 select-text"
           >
             <div

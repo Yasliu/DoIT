@@ -1,10 +1,29 @@
 # Install DoIT on Linux
 
-DoIT for Linux is built and tested on **Fedora with GNOME**. Fedora gets an `.rpm` that updates itself; every other distribution gets an `.AppImage`, which is experimental for now.
+DoIT for Linux is built and tested on **Fedora with GNOME**, and ships native packages for **Debian/Ubuntu** (`.deb`) and **Fedora** (`.rpm`) that update themselves, plus an `.AppImage` for other distributions (experimental for now).
 
-Both are on the [latest release page](https://github.com/Yasliu/DoIT/releases/latest). They need a 64-bit (x86_64) PC.
+All packages are on the [latest release page](https://github.com/Yasliu/DoIT/releases/latest). They need a 64-bit (x86_64) PC.
 
-## Fedora (recommended)
+## Debian and Ubuntu (`.deb`)
+
+1. Download `DoIT_<version>_amd64.deb` from the release page.
+2. Open a terminal in your Downloads folder and install it:
+
+   ```sh
+   sudo apt install ./DoIT_*_amd64.deb
+   ```
+
+3. Open **DoIT** from the app launcher.
+
+DoIT checks for updates by itself, like on Windows. When one is ready it asks for your password once to install it.
+
+To uninstall:
+
+```sh
+sudo apt remove do-it
+```
+
+## Fedora (`.rpm`)
 
 1. Download `DoIT-<version>-1.x86_64.rpm` from the release page.
 2. Open a terminal in your Downloads folder and install it:
@@ -58,6 +77,6 @@ Uninstalling DoIT leaves both in place.
 Open an issue at [github.com/Yasliu/DoIT/issues](https://github.com/Yasliu/DoIT/issues) and put **Linux** in the title. It helps to include:
 
 - your distribution and version, and your desktop (GNOME, KDE, …);
-- whether you use the `.rpm` or the `.AppImage`, and DoIT's version (Settings → About);
+- whether you use the `.deb`, the `.rpm`, or the `.AppImage`, and DoIT's version (Settings → About);
 - what you did, what you expected, and what happened;
 - any output from starting DoIT in a terminal (`doit`, or the AppImage's path).

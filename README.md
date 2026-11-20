@@ -61,8 +61,9 @@ File handling stays sandboxed: imports are capped at 30 MB and path operations a
 
 ### On Linux
 
-DoIT for Linux is built and tested on **Fedora with GNOME**. Download it from the [latest release](https://github.com/Yasliu/DoIT/releases/latest):
+DoIT for Linux is built and tested on **Fedora with GNOME** and ships native packages for Debian/Ubuntu and Fedora. Download it from the [latest release](https://github.com/Yasliu/DoIT/releases/latest):
 
+- **Debian / Ubuntu:** the `.deb`, installed with `sudo apt install ./DoIT_*_amd64.deb`. It updates itself like on Windows.
 - **Fedora (recommended):** the `.rpm`, installed with `sudo dnf install ./DoIT-*.x86_64.rpm`. It updates itself like on Windows.
 - **Any other distribution (experimental):** the `.AppImage`. Make it executable (`chmod +x DoIT_*.AppImage`) and run it.
 
