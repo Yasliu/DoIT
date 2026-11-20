@@ -52,6 +52,9 @@
     "windows": {
       "nsis": {
         "installerHooks": "hooks.nsh"
+      },
+      "wix": {
+        "version": "1.2.3.1"
       }
     },
     "icon": [

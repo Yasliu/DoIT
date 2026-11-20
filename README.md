@@ -83,18 +83,28 @@ Drop any `.md` or `.txt` files into your note repository folder, hit **Sync Repo
   <img src="docs/shot-save.jpg" width="700" alt="The Save button for externally opened files">
 </p>
 
-## What's new in v1.2.3
+## What's new in v1.2.3.1
 
-- **Global quick-note shortcut & reliable dock pill**: Configure a system-wide shortcut in Settings (or bind `doit --quick-note` on Wayland) to pull up the dock panel on your latest note from any app, and clicking the dock pill now expands consistently even while the panel is mounting
-- **Text indentation, outliner lists, line moving & link paste**: Indent and outdent regular text, code blocks, and Plain Text notes with `Tab` / `Shift+Tab`, nest bullets, numbered lists (numbered per level), and checklists, reorder lines with their nested items using `Alt+↑` / `Alt+↓`, and paste URLs onto selected text to turn it into a link
-- **Edge-resizable portable tables & seamless navigation**: Hover and drag table column or row borders to resize freely, with sizes stored portably inside `.md` files and scaled nicely inside bento card previews, plus smooth arrow navigation in and out of cells
-- **Touchpad two-finger pinch zoom & vertical auto-scroll**: Two-finger touchpad pinch zooms only the note editor instead of the whole Linux app window, and typing or navigating near the bottom automatically scrolls notes smoothly in both Markdown and Text modes
-- **Debian/Ubuntu `.deb` package & notes-folder safeguards**: Official self-updating `.deb` releases join `.rpm`, `.AppImage`, and Windows builds, backed by strict file-only note deletion guards across all OSes so DoIT never attempts to delete your notes folder
+- **Instant dock pill & reliable Windows quick-note shortcut**: Fixed the dock panel flash-collapse race, allowed pre-warming on pill hover while keeping the canvas briefly warm for instant switching, and improved Win32 focus & toggle behavior when pressing the global shortcut a second time
+- **Zero-lag emoji picker**: Pre-warmed the emoji picker portal DOM so opening it is instant instead of re-creating hundreds of buttons every time
+- **Window-centered category & shelf pickers**: Category, shelf, and command pickers stay centered across the window even when the sidebar is open
+- **Theme-aware shortcuts & Settings "What's new" button**: Shortcut boxes follow light, dark, and boxy themes seamlessly, and Settings now includes a **What's new** button in the About section
+- **Fedora `.rpm` self-updater**: Official `.rpm` releases now install in-app updates automatically on Fedora
 
 The full history lives in the release log below.
 
 <details>
 <summary><strong>Release log</strong> (click to expand)</summary>
+
+<details>
+<summary><strong>v1.2.3.1</strong> — November 21, 2026</summary>
+
+- Windows global quick-note toggle & dock pill reliability: removed `TrayCompanion` rAF fade race (`closingRef`), serialized dock webview builds (`dock_page_building`), enabled hover pre-warming during canvas keepalive, deferred synchronous canvas teardown off the pill-click path, toggled `quick_note` reliably on `is_visible()`, and added Win32 `BringWindowToTop` / `SetForegroundWindow` focus calls
+- Instant emoji picker: kept the emoji picker portal warm in the DOM (`display: none` when closed) and removed `backdrop-blur-2xl` stalls
+- Centered category pickers: centered `ModernPalette` / `useDialogPlacement` on the window (`50%`) with resize listeners so the category picker stays centered when the sidebar is open
+- Theme-aware shortcut boxes & Settings release log button: themed `[data-slot="shortcut-field"]`, `[data-slot="release-modal"]`, and `[data-slot="emoji-picker"]` in `modern.css`, added a **What's new** button in Settings, and added Fedora `.rpm` in-app updater support
+
+</details>
 
 <details>
 <summary><strong>v1.2.3</strong> — November 20, 2026</summary>

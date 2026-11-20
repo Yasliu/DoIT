@@ -5,6 +5,7 @@ on:
       # Plain versions only. This job signs for the updater, so a beta tag must never start it;
       # betas go through checks.yml.
       - 'v[0-9]+.[0-9]+.[0-9]+'
+      - 'v[0-9]+.[0-9]+.[0-9]+.[0-9]+'
 
 jobs:
   release:
@@ -36,7 +37,7 @@ jobs:
         with:
           tagName: ${{ github.ref_name }}
           releaseName: 'DoIT Desktop Core ${{ github.ref_name }}'
-          releaseBody: 'DoIT ${{ github.ref_name }} — Global quick-note shortcut, reliable dock pill expansion, Tab/Shift+Tab indentation for text, code blocks, and nested lists, Alt+Up/Down line moving, URL paste linking, free edge-resizable portable tables, Linux touchpad pinch zoom, automatic vertical editor scrolling, Debian/Ubuntu .deb packaging, and notes-folder deletion safeguards.'
+          releaseBody: 'DoIT ${{ github.ref_name }} — Windows dock pill & quick-note shortcut reliability, instant pre-warmed emoji picker, window-centered category & shelf pickers with sidebar open, theme-aware shortcut controls, What''s new button in Settings, and Fedora .rpm self-updater support.'
           releaseDraft: false
           prerelease: false
           includeUpdaterJson: true

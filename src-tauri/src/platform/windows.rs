@@ -21,6 +21,17 @@ pub fn has_tray() -> bool {
 }
 
 pub fn focus_window(window: &tauri::Window) {
+    unsafe extern "system" {
+        fn BringWindowToTop(hwnd: *mut std::ffi::c_void) -> i32;
+        fn SetForegroundWindow(hwnd: *mut std::ffi::c_void) -> i32;
+    }
+
+    if let Ok(hwnd) = window.hwnd() {
+        unsafe {
+            BringWindowToTop(hwnd.0);
+            SetForegroundWindow(hwnd.0);
+        }
+    }
     let _ = window.set_focus();
 }
 

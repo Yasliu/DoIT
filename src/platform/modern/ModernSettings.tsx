@@ -1,6 +1,7 @@
 import { useEffect, useState } from "react";
 import { motion } from "motion/react";
-import { ArrowLeft, Check, ChevronRight, ExternalLink, FolderOpen, Monitor, Moon, RefreshCw, Sun } from "lucide-react";
+import { ArrowLeft, Check, ChevronRight, ExternalLink, FolderOpen, Monitor, Moon, RefreshCw, Sparkles, Sun } from "lucide-react";
+import { CURRENT_VERSION } from "../../App";
 import { AppSettings, DEFAULT_SETTINGS, settingsChanges, tauriApi } from "../../api/tauriBridge";
 import { BLOCKS_STRUCTURE_SHORTCUT_ROWS, TEXT_MARKS_SHORTCUT_ROWS } from "../../lib/shortcuts";
 import { ShortcutField } from "../../components/ShortcutField";
@@ -139,7 +140,7 @@ function ThemeCard({ id, selected, appearance, onSelect }: { id: PaletteId; sele
 export function ModernSettings({ onBack, onStoragePathChanged }: ModernSettingsProps) {
   const [settings, setSettings] = useState<AppSettings>(DEFAULT_SETTINGS);
   const [pathInput, setPathInput] = useState("");
-  const [version, setVersion] = useState("");
+  const [version, setVersion] = useState(CURRENT_VERSION);
   const [scan, setScan] = useState<{ busy: boolean; message?: string; failed?: boolean }>({ busy: false });
   const [typingOpen, setTypingOpen] = useState(false);
   const [resolvedDark, setResolvedDark] = useState(document.documentElement.dataset.appearance === "dark");
@@ -153,7 +154,7 @@ export function ModernSettings({ onBack, onStoragePathChanged }: ModernSettingsP
     void tauriApi.quickNoteShortcutStatus().then(({ supported, error }) => setQuickNote({ supported, error: error ?? undefined }));
     void import("@tauri-apps/api/app")
       .then((m) => m.getVersion())
-      .then(setVersion)
+      .then((v) => setVersion(v === "1.2.3" ? CURRENT_VERSION : v))
       .catch(() => undefined);
     const observer = new MutationObserver(() => setResolvedDark(document.documentElement.dataset.appearance === "dark"));
     observer.observe(document.documentElement, { attributes: true, attributeFilter: ["data-appearance"] });
@@ -434,6 +435,12 @@ export function ModernSettings({ onBack, onStoragePathChanged }: ModernSettingsP
           <Row label={`DoIT ${version}`} hint="Updates are checked in the background.">
             <button type="button" className="btn" onClick={() => window.dispatchEvent(new CustomEvent("doit:check-updates"))}>
               Check for updates
+            </button>
+          </Row>
+          <Row label="What's new" hint="See what was added and fixed in the latest update.">
+            <button type="button" className="btn" onClick={() => window.dispatchEvent(new CustomEvent("doit:show-release-log"))}>
+              <Sparkles size={14} />
+              What&apos;s new
             </button>
           </Row>
           <Row label="Report a problem" hint="Opens the issue tracker on GitHub.">

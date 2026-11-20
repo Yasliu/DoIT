@@ -1618,3 +1618,41 @@ html[data-design="modern"][data-platform="linux"] body {
 html[data-design="modern"][data-platform="linux"] :is(input, textarea, [contenteditable="true"], [contenteditable=""], .md-tablewrap) {
   -webkit-user-select: text;
 }
+
+html[data-design="modern"] [data-slot="shortcut-field"] {
+  border-color: var(--l-border);
+  border-radius: var(--r-md);
+  background-color: var(--l-surface-raised);
+  color: var(--l-text);
+}
+html[data-design="modern"] [data-slot="shortcut-field"]:hover {
+  border-color: var(--line-strong);
+  background-color: var(--hover);
+}
+html[data-design="modern"] [data-slot="shortcut-field"]:focus {
+  border-color: var(--l-focus);
+}
+
+html[data-design="modern"] [data-slot="release-modal"] {
+  border-color: var(--edge-float);
+  border-radius: var(--r-2xl);
+  background-color: var(--l-surface-overlay);
+  color: var(--l-text);
+  box-shadow: var(--shadow-pop);
+}
+html[data-design="modern"] [data-slot="release-modal"] > button:last-of-type {
+  border-radius: var(--r-md);
+  background-color: var(--l-accent);
+  color: var(--l-accent-foreground);
+}
+html[data-design="modern"] [data-slot="release-modal"] > button:last-of-type:hover {
+  opacity: 0.92;
+}
+
+html[data-design="modern"] [data-slot="emoji-picker"] {
+  border-color: var(--edge-float);
+  border-radius: var(--r-xl);
+  background-color: var(--l-surface-overlay);
+  color: var(--l-text);
+  box-shadow: var(--shadow-pop);
+}

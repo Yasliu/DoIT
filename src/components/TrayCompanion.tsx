@@ -68,6 +68,7 @@ export function TrayCompanion() {
   const [deletingNote, setDeletingNote] = useState<NoteItem | null>(null);
   const [shown, setShown] = useState(false);
   const shownRef = useRef(false);
+  const closingRef = useRef(false);
   const hideTimerRef = useRef<number | null>(null);
   const collapsingRef = useRef(false);
   const modeRef = useRef<"switching" | "panel" | "pill">("switching");
@@ -212,18 +213,18 @@ export function TrayCompanion() {
   const hideNow = useCallback(() => {
     if (hideTimerRef.current) window.clearTimeout(hideTimerRef.current);
     hideTimerRef.current = null;
-    if (!shownRef.current) void collapseToPill();
+    if (!shownRef.current && closingRef.current) {
+      closingRef.current = false;
+      void collapseToPill();
+    }
   }, [collapseToPill]);
 
   const openTray = useCallback(() => {
     if (hideTimerRef.current) window.clearTimeout(hideTimerRef.current);
     hideTimerRef.current = null;
-    requestAnimationFrame(() =>
-      requestAnimationFrame(() => {
-        shownRef.current = true;
-        setShown(true);
-      }),
-    );
+    closingRef.current = false;
+    shownRef.current = true;
+    setShown(true);
   }, []);
 
   const [quadrant, setQuadrant] = useState<{ grow_x: "right" | "left" | "center"; grow_y: "down" | "up" }>({
@@ -232,17 +233,19 @@ export function TrayCompanion() {
   });
 
   const expandFromPill = useCallback(async () => {
+    closingRef.current = false;
     shownRef.current = false;
     setShown(false);
     changeMode("switching");
     const q = await tauriApi.setTrayMode("panel");
     if (q) setQuadrant(q);
-    changeMode("panel");
     openTray();
+    changeMode("panel");
   }, [changeMode, openTray]);
 
   const closeTray = useCallback(() => {
-    if (!shownRef.current) return;
+    if (!shownRef.current || closingRef.current) return;
+    closingRef.current = true;
     shownRef.current = false;
     setShown(false);
     // Fallback in case transitionend never fires
@@ -265,8 +268,8 @@ export function TrayCompanion() {
       if (start === "pill") {
         changeMode("pill");
       } else {
-        changeMode("panel");
         openTray();
+        changeMode("panel");
       }
     });
   }, [changeMode, openTray]);
@@ -502,7 +505,7 @@ export function TrayCompanion() {
         }}
         transition={shown ? { type: "spring", stiffness: 420, damping: 32 } : { duration: 0.12, ease: "easeOut" }}
         onAnimationComplete={() => {
-          if (!shown && !shownRef.current) {
+          if (!shown && !shownRef.current && closingRef.current) {
             hideNow();
           }
         }}

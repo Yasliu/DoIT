@@ -15,9 +15,12 @@ export function EmojiPickerModal({ isOpen, onClose, onSelect, anchorRect }: Emoj
   const [search, setSearch] = useState("");
   const [activeCategory, setActiveCategory] = useState<string>("all");
   const modalRef = useRef<HTMLDivElement>(null);
+  const inputRef = useRef<HTMLInputElement>(null);
 
   useEffect(() => {
-    if (!isOpen) {
+    if (isOpen) {
+      requestAnimationFrame(() => inputRef.current?.focus());
+    } else {
       setSearch("");
       setActiveCategory("all");
     }
@@ -64,12 +67,11 @@ export function EmojiPickerModal({ isOpen, onClose, onSelect, anchorRect }: Emoj
     return list;
   }, [search, activeCategory]);
 
-  if (!isOpen) return null;
-
   // Calculate position near the anchor button if available
   let style: React.CSSProperties = {
     position: "fixed",
     zIndex: 99999,
+    display: isOpen ? "flex" : "none",
   };
 
   if (anchorRect) {
@@ -84,8 +86,10 @@ export function EmojiPickerModal({ isOpen, onClose, onSelect, anchorRect }: Emoj
   return createPortal(
     <div
       ref={modalRef}
+      data-slot="emoji-picker"
+      aria-hidden={!isOpen}
       style={style}
-      className="w-[280px] rounded-[18px] border border-white/15 bg-[#121317]/95 p-3 shadow-[0_25px_60px_rgba(0,0,0,0.95)] backdrop-blur-2xl select-none flex flex-col gap-2.5 animate-in fade-in-0 zoom-in-95 duration-150"
+      className="w-[280px] rounded-[18px] border border-white/15 bg-[#121317]/95 p-3 shadow-[0_25px_60px_rgba(0,0,0,0.95)] select-none flex-col gap-2.5 animate-in fade-in-0 zoom-in-95 duration-150"
       onPointerDown={(e) => e.stopPropagation()}
       onClick={(e) => e.stopPropagation()}
     >
@@ -93,8 +97,8 @@ export function EmojiPickerModal({ isOpen, onClose, onSelect, anchorRect }: Emoj
       <div className="relative flex items-center h-8 rounded-xl bg-white/[0.04] px-2.5 border border-white/10 focus-within:border-white/25 transition-all">
         <Search size={13} className="text-white/40 mr-2 shrink-0" />
         <input
+          ref={inputRef}
           type="text"
-          autoFocus
           value={search}
           onChange={(e) => setSearch(e.target.value)}
           placeholder="Search emojis..."

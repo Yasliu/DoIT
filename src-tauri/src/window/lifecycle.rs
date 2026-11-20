@@ -85,14 +85,17 @@ fn suspend_canvas(app: &AppHandle, keep_alive: bool) {
         state.canvas_departure += 1;
         state.canvas_departure
     };
-    flush::pages(app, &[CANVAS]);
-    if keep_alive {
-        std::thread::sleep(CANVAS_KEEPALIVE);
-        if engine().canvas_departure != departure {
-            return;
+    let app = app.clone();
+    std::thread::spawn(move || {
+        flush::pages(&app, &[CANVAS]);
+        if keep_alive {
+            std::thread::sleep(CANVAS_KEEPALIVE);
+            if engine().canvas_departure != departure {
+                return;
+            }
         }
-    }
-    retire_canvas(app);
+        retire_canvas(&app);
+    });
 }
 
 /// Destroys the hidden canvas, unless it came back or an external file has unsaved edits.
@@ -209,7 +212,7 @@ pub fn enter_dock(app: &AppHandle, open: DockOpen) -> Result<(), String> {
             }
         },
     }
-    suspend_canvas(app, shape == DockShape::Pill);
+    suspend_canvas(app, true);
     Ok(())
 }
 
@@ -235,27 +238,38 @@ pub fn dock_ready(window: &WebviewWindow) -> (DockShape, Option<String>) {
 
 /// Builds the dock's webview, hidden; its page reports in through `dock_ready`.
 fn open_dock_page(app: &AppHandle) -> Result<(), String> {
-    webview::open(app, Surface::Dock, false).map(|_| ())
+    if !engine().begin_dock_build() {
+        return Ok(());
+    }
+    if let Err(err) = webview::open(app, Surface::Dock, false) {
+        engine().dock_page_building = false;
+        return Err(err);
+    }
+    Ok(())
 }
 
 /// Destroys the dock's webview. Its readiness is cleared here, not when a page is built: a build that
 /// fails because the hover's page already exists must not wipe that page's readiness.
 fn retire_dock_page(dock: &WebviewWindow) {
-    engine().dock_page_ready = false;
+    {
+        let mut state = engine();
+        state.dock_page_ready = false;
+        state.dock_page_building = false;
+    }
     webview::retire(dock);
 }
 
 /// The pointer is on the pill, so a click is likely: start the panel's page now, hidden, and retire
-/// it again like any kept panel if no click comes. Not while the canvas is alive: at most one page.
+/// it again like any kept panel if no click comes.
 fn prepare_panel(app: &AppHandle) {
     let generation = {
         let state = engine();
-        if state.mode != Mode::Dock(DockShape::Pill) {
+        if state.mode != Mode::Dock(DockShape::Pill) || state.dock_page_building {
             return;
         }
         state.dock_generation
     };
-    if app.get_webview_window(DOCK).is_some() || app.get_webview_window(CANVAS).is_some() {
+    if app.get_webview_window(DOCK).is_some() {
         return;
     }
     if open_dock_page(app).is_ok() {
@@ -276,11 +290,11 @@ fn open_panel_on(app: &AppHandle, note: Option<String>) {
     if click == PillClick::Ignore {
         return;
     }
-    retire_canvas(app);
     match click {
         // The page expands itself and calls `reshape_dock(Panel)`.
         PillClick::Expand => {
             if let Some(dock) = page {
+                webview::idle(&dock, false);
                 let _ = dock.emit("set-expanded", true);
                 if let Some(id) = note {
                     let _ = dock.emit("open-note", id);
@@ -291,7 +305,7 @@ fn open_panel_on(app: &AppHandle, note: Option<String>) {
             if open_dock_page(app).is_err() {
                 engine().mode = Mode::Dock(DockShape::Pill);
                 // The hover may have been building the page at the same moment: hand the click to it.
-                if app.get_webview_window(DOCK).is_some() {
+                if app.get_webview_window(DOCK).is_some() || engine().dock_page_building {
                     open_panel_on(app, note);
                 }
             }
@@ -405,7 +419,10 @@ pub fn quick_note(app: &AppHandle, note: Option<String>) {
         }
         Mode::Dock(DockShape::Pill) => open_panel_on(app, note),
         Mode::Dock(DockShape::Panel) => {
-            let Some(dock) = app.get_webview_window(DOCK) else { return };
+            let Some(dock) = app.get_webview_window(DOCK) else {
+                open_panel_on(app, note);
+                return;
+            };
             {
                 let mut state = engine();
                 if !state.dock_page_ready {
@@ -415,12 +432,18 @@ pub fn quick_note(app: &AppHandle, note: Option<String>) {
                 }
             }
             let panel = plain(&dock);
-            if panel.is_visible().unwrap_or(false) && panel.is_focused().unwrap_or(false) {
+            if panel.is_visible().unwrap_or(false) && note.is_none() {
                 let _ = dock.emit("set-expanded", false);
                 return;
             }
+            let was_hidden = !panel.is_visible().unwrap_or(false);
+            webview::idle(&dock, false);
             focus(&panel);
             platform::ensure_always_on_top(&panel);
+            if was_hidden {
+                pill::hide(app);
+                let _ = dock.emit("set-expanded", true);
+            }
             if let Some(id) = note {
                 let _ = dock.emit("open-note", id);
             }
@@ -449,6 +472,7 @@ pub fn enter_canvas(app: &AppHandle) {
     let saved = {
         let mut state = engine();
         state.mode = Mode::Canvas;
+        state.canvas_departure += 1;
         state.dock_generation += 1;
         state.canvas.clone()
     };

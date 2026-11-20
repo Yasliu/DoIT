@@ -43,14 +43,15 @@ interface Toast {
 /** The Settled view shows every note whatever the shelves' collapsed state. */
 const NOTHING_COLLAPSED: Record<string, boolean> = {};
 
-const CURRENT_VERSION = "1.2.3";
+export const CURRENT_VERSION = "1.2.3.1";
 const VERSION_TRACKER_KEY = "doit.release_notes_version";
 
 function isVersionLower(current: string | null, target: string): boolean {
   if (!current) return true;
   const c = current.replace(/^v/, "").split(".").map(Number);
   const t = target.replace(/^v/, "").split(".").map(Number);
-  for (let i = 0; i < 3; i++) {
+  const len = Math.max(c.length, t.length, 4);
+  for (let i = 0; i < len; i++) {
     const cv = c[i] || 0;
     const tv = t[i] || 0;
     if (cv < tv) return true;
@@ -313,8 +314,13 @@ export default function App() {
       else if (result === "unsupported") notify("A newer DoIT is out, but there is no update package for this system yet.");
       else if (result === "error") notify("Could not reach the update server. Try again in a moment.");
     };
+    const onShowReleaseLog = () => setShowReleaseModal(true);
     window.addEventListener("doit:check-updates", onManualCheck);
-    return () => window.removeEventListener("doit:check-updates", onManualCheck);
+    window.addEventListener("doit:show-release-log", onShowReleaseLog);
+    return () => {
+      window.removeEventListener("doit:check-updates", onManualCheck);
+      window.removeEventListener("doit:show-release-log", onShowReleaseLog);
+    };
   }, [checkForUpdate, notify]);
 
   // ---- External files (double-click in Explorer / "Open with DoIT"): opened in place, never copied ----

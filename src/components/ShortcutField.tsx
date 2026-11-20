@@ -18,6 +18,7 @@ export function ShortcutField({ value, def, onChange }: ShortcutFieldProps) {
   return (
     <button
       type="button"
+      data-slot="shortcut-field"
       onFocus={() => setListening(true)}
       onBlur={() => setListening(false)}
       onKeyDown={(e) => {

@@ -30,6 +30,8 @@ pub struct Engine {
     pub dock_note: Option<String>,
     /// The dock webview's page has mounted and listens for `set-expanded`.
     pub dock_page_ready: bool,
+    /// A dock webview is being constructed and has not finished mounting yet.
+    pub dock_page_building: bool,
     /// Bumped by every dock change; a delayed job runs only if nothing changed since it was queued.
     pub dock_generation: u64,
     /// The last place the app itself put a dock window, until a scale change consumes it.
@@ -78,10 +80,20 @@ impl Engine {
             dock_anchor: None,
             dock_note: None,
             dock_page_ready: false,
+            dock_page_building: false,
             dock_generation: 0,
             dock_placed: None,
             hold_until: None,
         }
+    }
+
+    /// Claims the build slot for the dock webview, returning `false` if a build is already in flight.
+    pub fn begin_dock_build(&mut self) -> bool {
+        if self.dock_page_building {
+            return false;
+        }
+        self.dock_page_building = true;
+        true
     }
 
     /// The pill was clicked (or the quick-note shortcut pressed) while the dock's page `page_exists`.
@@ -103,13 +115,14 @@ impl Engine {
         self.dock_screen = None;
         self.dock_note = note;
         self.dock_generation += 1;
-        if page_exists { PillClick::AwaitPage } else { PillClick::BuildPage }
+        if page_exists || self.dock_page_building { PillClick::AwaitPage } else { PillClick::BuildPage }
     }
 
     /// The dock's page mounted. `Some` when it must show as the panel; `None` keeps it hidden behind
     /// the pill.
     pub fn dock_page_mounted(&mut self) -> Option<PanelOpening> {
         self.dock_page_ready = true;
+        self.dock_page_building = false;
         let opening = PanelOpening { screen: self.dock_screen.take(), anchor: self.dock_anchor.take(), note: self.dock_note.take() };
         (self.mode == Mode::Dock(DockShape::Panel)).then_some(opening)
     }
@@ -148,5 +161,17 @@ mod tests {
         // An earlier click expected the panel, but its page had already mounted behind the pill.
         let mut engine = Engine { mode: Mode::Dock(DockShape::Panel), dock_page_ready: true, ..Engine::new() };
         assert_eq!(engine.click_pill(true, None, None), PillClick::Expand);
+    }
+
+    #[test]
+    fn a_click_while_the_page_is_building_awaits_instead_of_rebuilding() {
+        let mut engine = pill_with_loading_page();
+        assert!(engine.begin_dock_build());
+        assert!(!engine.begin_dock_build(), "second concurrent build is rejected");
+        assert_eq!(engine.click_pill(false, None, Some("quick".into())), PillClick::AwaitPage);
+        let opening = engine.dock_page_mounted().expect("panel opens when the in-flight build finishes");
+        assert_eq!(opening.note.as_deref(), Some("quick"));
+        assert!(!engine.dock_page_building);
+        assert!(engine.dock_page_ready);
     }
 }

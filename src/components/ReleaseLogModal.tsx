@@ -21,6 +21,7 @@ export function ReleaseLogModal({ onClose }: ReleaseLogModalProps) {
       onClick={onClose}
     >
       <div
+        data-slot="release-modal"
         className="relative w-full max-w-[420px] rounded-2xl bg-[#14151a] border border-white/15 p-6 shadow-[0_30px_90px_rgba(0,0,0,0.9)] text-ink-1 animate-in zoom-in-95 duration-200"
         onClick={(e) => e.stopPropagation()}
       >
@@ -38,30 +39,30 @@ export function ReleaseLogModal({ onClose }: ReleaseLogModalProps) {
             <Sparkles size={14} />
           </div>
           <span className="font-mono text-[10px] uppercase tracking-[0.14em] text-ink-4">
-            Version 1.2.3 Update
+            Version 1.2.3.1 Update
           </span>
         </div>
 
         <h2 className="text-[17px] font-semibold text-white tracking-tight mb-3">
-          What&apos;s New in v1.2.3
+          What&apos;s New in v1.2.3.1
         </h2>
 
         <ul className="space-y-2 mb-5 text-[12px] text-ink-2 leading-relaxed">
           <li className="flex items-start gap-2">
             <span className="size-1.5 rounded-full bg-white/60 mt-2 shrink-0" />
-            <span>Global Quick-Note Shortcut &amp; Reliable Dock Pill: Set a system-wide shortcut in Settings (or <code>doit --quick-note</code> on Wayland) to open or dismiss the dock panel on your latest note from any app, plus a fix so clicking the dock pill reliably expands every time.</span>
+            <span>Instant Dock Pill &amp; Windows Quick-Note Reliability: Fixed Windows global shortcut toggling and dock pill flash-collapse races, pre-warmed the dock panel on hover even while the canvas stays cached, and restored crisp Win32 foreground focus.</span>
           </li>
           <li className="flex items-start gap-2">
             <span className="size-1.5 rounded-full bg-white/60 mt-2 shrink-0" />
-            <span>Text Indentation, Outliner Lists &amp; Link Paste: Indent regular text, code blocks, and Plain Text notes or nest lists with Tab / Shift+Tab (with per-level numbering and saved task indentation), reorder lines and nested children with Alt+&uarr; / Alt+&darr;, and paste URLs onto selected text to create links.</span>
+            <span>Instant Emoji Picker &amp; Centered Pickers: Kept the emoji picker warm in the DOM for zero-lag opening and kept category/shelf pickers centered cleanly across the window regardless of sidebar state.</span>
           </li>
           <li className="flex items-start gap-2">
             <span className="size-1.5 rounded-full bg-white/60 mt-2 shrink-0" />
-            <span>Resizable Portable Tables, Pinch Zoom &amp; Auto-Scroll: Drag table column and row edges to resize freely with dimensions saved inside <code>.md</code> files and scaled in card previews, use two-finger touchpad pinch zoom inside notes without zooming the whole app, and scroll automatically while typing near the bottom.</span>
+            <span>Theme-Aware Shortcuts &amp; Settings Release Log: Styled shortcut controls to match light, dark, and boxy themes, and added a What&apos;s new button directly inside Settings.</span>
           </li>
           <li className="flex items-start gap-2">
             <span className="size-1.5 rounded-full bg-white/60 mt-2 shrink-0" />
-            <span>Debian/Ubuntu <code>.deb</code> Packaging &amp; Notes-Folder Protection: Official self-updating <code>.deb</code> packages join <code>.rpm</code>, <code>.AppImage</code>, and Windows installers, backed by strict file-only note removal safeguards so DoIT never attempts to delete your notes folder.</span>
+            <span>Fedora <code>.rpm</code> Self-Updater Support: Enabled in-app update installation for <code>.rpm</code> releases alongside <code>.deb</code>, <code>.AppImage</code>, and Windows installers.</span>
           </li>
         </ul>
 

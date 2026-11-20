@@ -1,5 +1,19 @@
 # DoIT Developer Architecture & Engineering Changelog
 
+## [2026-11-21] - Version 1.2.3.1: Windows Dock & Quick-Note Reliability, Instant Emoji Picker, Centered Category Pickers, Theme-Aware Shortcuts & Settings Release Log
+
+### 24. Windows Dock Panel & Global Shortcut Fixes, Emoji Pre-Warming, Centered Dialogs, Theme Shortcuts, Settings Release Log Button & Fedora RPM Updater (`src-tauri/src/window/`, `src-tauri/src/platform/`, `src-tauri/src/updates.rs`, `src/components/`, `src/platform/modern/`, `src/App.tsx`)
+- **Windows Global Quick-Note Toggle & Instant Dock Pill Expansion (`window/state.rs`, `window/lifecycle.rs`, `platform/windows.rs`, `TrayCompanion.tsx`)**:
+  - Added `closingRef` and removed nested `requestAnimationFrame` delays in `TrayCompanion` so opening or expanding sets `shown = true` synchronously and never immediately collapses back to the pill under `reducedMotion="user"` or hidden WebView2 throttling.
+  - Added `dock_page_building` serialization in `Engine`, enabled hover pre-warming even during `CANVAS_KEEPALIVE`, deferred canvas retirement off the pill-click path (`keep_alive = true` background teardown), fixed `quick_note()` toggling on `is_visible()` with missing-window recovery, and added Win32 `BringWindowToTop` + `SetForegroundWindow` focus enforcement.
+- **Zero-Lag Emoji Picker (`EmojiPickerModal.tsx`, `modern.css`)**:
+  - Kept the emoji picker portal DOM mounted when closed (`display: none` instead of unmounting), moved focus into `requestAnimationFrame`, and removed heavy `backdrop-blur-2xl` compositing stalls.
+- **Window-Centered Category & Shelf Pickers (`ModernPalette.tsx`)**:
+  - Centered `placement()` horizontally (`left: 50%`, `transform: translateX(-50%)`) with live `resize` updates so dialogs stay centered across the window even when the sidebar is open.
+- **Theme-Aware Shortcuts, Settings "What's new" Button & Release Modal (`ShortcutField.tsx`, `ModernSettings.tsx`, `SettingsPanel.tsx`, `ReleaseLogModal.tsx`, `modern.css`, `App.tsx`)**:
+  - Added `data-slot` hooks (`shortcut-field`, `release-modal`, `emoji-picker`) styled via active Modern theme tokens (light, dark, and boxy) and added a `"What's new"` button in Settings opening the release log modal via `doit:show-release-log`.
+  - Updated `CURRENT_VERSION` (`1.2.3.1`), 4-segment `isVersionLower` comparison, WiX 4-digit version metadata, and `.github/workflows/{release,checks}.yml` 4-digit tag matching alongside Fedora `.rpm` in-app updater support (`updates.rs`, `platform/unix.rs`).
+
 ## [2026-11-20] - Version 1.2.3: Global Quick-Note Shortcut, Outliner Lists, Resizable Portable Tables, Touchpad Pinch Zoom, Debian `.deb` Packaging & Storage Safeguards
 
 ### 23. Quick-Note Global Shortcut, Dock Pill Reliability, Outliner Editing, Table Resizing, Touchpad Zoom, Auto-Scroll, `.deb` Packaging & Folder Protection (`src-tauri/src/actions/`, `src-tauri/src/window/`, `src-tauri/src/storage/`, `src-tauri/src/platform/`, `src/lib/format.tsx`, `src/lib/listLayout.ts`, `src/editor/`, `src/components/RawEditor.tsx`, `src/platform/modern/ModernSettings.tsx`)

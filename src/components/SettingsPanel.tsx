@@ -22,6 +22,7 @@ import {
   Type,
 } from "lucide-react";
 import { motion, AnimatePresence } from "motion/react";
+import { CURRENT_VERSION } from "../App";
 import { AppSettings, DEFAULT_SETTINGS, tauriApi } from "../api/tauriBridge";
 import { applyShortcutSettings, BLOCKS_STRUCTURE_SHORTCUT_ROWS, TEXT_MARKS_SHORTCUT_ROWS } from "../lib/shortcuts";
 import { ShortcutField } from "./ShortcutField";
@@ -150,12 +151,12 @@ function BugReportSection() {
 }
 
 function AppUpdatesSection() {
-  const [version, setVersion] = useState("");
+  const [version, setVersion] = useState(CURRENT_VERSION);
   const [isStore, setIsStore] = useState(false);
   useEffect(() => {
     void import("@tauri-apps/api/app")
       .then((m) => m.getVersion())
-      .then(setVersion)
+      .then((v) => setVersion(v === "1.2.3" ? CURRENT_VERSION : v))
       .catch(() => undefined);
     void tauriApi.isMsStorePackage().then(setIsStore);
   }, []);
@@ -170,14 +171,24 @@ function AppUpdatesSection() {
               : `DoIT ${version ? `v${version}` : ""} - updates download in the background and are signature-verified.`}
           </p>
         </div>
-        <button
-          type="button"
-          onClick={() => window.dispatchEvent(new CustomEvent("doit:check-updates"))}
-          className="flex h-9 shrink-0 cursor-pointer items-center gap-2 rounded-xl border border-white/15 bg-white/[0.07] px-3.5 text-[12px] font-medium text-white transition-all hover:bg-white/[0.14]"
-        >
-          <RefreshCw size={13} />
-          Check for updates
-        </button>
+        <div className="flex shrink-0 items-center gap-2">
+          <button
+            type="button"
+            onClick={() => window.dispatchEvent(new CustomEvent("doit:show-release-log"))}
+            className="flex h-9 shrink-0 cursor-pointer items-center gap-2 rounded-xl border border-white/15 bg-white/[0.07] px-3.5 text-[12px] font-medium text-white transition-all hover:bg-white/[0.14]"
+          >
+            <Sparkles size={13} />
+            What&apos;s new
+          </button>
+          <button
+            type="button"
+            onClick={() => window.dispatchEvent(new CustomEvent("doit:check-updates"))}
+            className="flex h-9 shrink-0 cursor-pointer items-center gap-2 rounded-xl border border-white/15 bg-white/[0.07] px-3.5 text-[12px] font-medium text-white transition-all hover:bg-white/[0.14]"
+          >
+            <RefreshCw size={13} />
+            Check for updates
+          </button>
+        </div>
       </div>
     </section>
   );

@@ -48,7 +48,13 @@ const PALETTE_WIDTH = 620;
  * on the window when the field is not on screen.
  */
 export function useDialogPlacement(width: number): { className: string; style?: React.CSSProperties } {
-  const [style] = useState(() => placement(SEARCH_FIELD, FIRST_SHELF_LINE, width));
+  const [style, setStyle] = useState(() => placement(SEARCH_FIELD, FIRST_SHELF_LINE, width));
+  useEffect(() => {
+    const update = () => setStyle(placement(SEARCH_FIELD, FIRST_SHELF_LINE, width));
+    update();
+    window.addEventListener("resize", update);
+    return () => window.removeEventListener("resize", update);
+  }, [width]);
   return style
     ? { className: "pointer-events-none fixed z-[125]", style }
     : { className: "pointer-events-none fixed inset-x-0 top-[16vh] z-[125] flex justify-center px-4" };
@@ -59,18 +65,18 @@ const DEFAULT_DROP = 128;
 
 
 /**
- * Where a dialog `width` wide sits: centred on the anchor (the search field) and opening just above
- * the `below` line. Null when the anchor is not on screen; then the caller centres on the window.
+ * Where a dialog `width` wide sits: centred horizontally on the window and opening just above the
+ * `below` line when present. Null when the anchor is not on screen; then the caller falls back to
+ * window centring as well.
  */
 export function placement(anchor: string | undefined, below: string | undefined, width = PALETTE_WIDTH): React.CSSProperties | null {
   const rect = anchor ? document.querySelector(anchor)?.getBoundingClientRect() : null;
   if (!rect) return null;
-  const half = Math.min(width, window.innerWidth - 32) / 2;
-  const x = Math.min(Math.max(rect.left + rect.width / 2, half + 16), window.innerWidth - half - 16);
+  const dialogWidth = Math.min(width, window.innerWidth - 32);
   const line = below ? document.querySelector(below)?.getBoundingClientRect() : null;
   // Just above the line while it is in view below the field; else the usual drop.
   const top = line && line.top > rect.bottom + 24 ? line.top - 12 : rect.bottom + DEFAULT_DROP;
-  return { left: x, top: Math.min(top, window.innerHeight * 0.3), width: half * 2, transform: "translateX(-50%)" };
+  return { left: "50%", top: Math.min(top, window.innerHeight * 0.3), width: dialogWidth, transform: "translateX(-50%)" };
 }
 
 /**
@@ -81,7 +87,13 @@ export function ModernPalette(props: ModernPaletteProps) {
   const { items, query } = props;
   const [index, setIndex] = useState(0);
   const listRef = useRef<HTMLDivElement | null>(null);
-  const [anchored] = useState(() => placement(props.anchorSelector, props.topSelector));
+  const [anchored, setAnchored] = useState(() => placement(props.anchorSelector, props.topSelector));
+  useEffect(() => {
+    const update = () => setAnchored(placement(props.anchorSelector, props.topSelector));
+    update();
+    window.addEventListener("resize", update);
+    return () => window.removeEventListener("resize", update);
+  }, [props.anchorSelector, props.topSelector]);
 
   // A new list (typing) starts from the preferred item, or the top.
   useLayoutEffect(() => {
