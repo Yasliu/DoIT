@@ -5,6 +5,7 @@ import {
   addTableColumn,
   addTableRow,
   applyTableDimensions,
+  contentToMarkdown,
   deleteTableColumn,
   deleteTableRow,
   handleRichEditorKeyDown,
@@ -219,5 +220,46 @@ describe("scrollCaretIntoView", () => {
     expect(scrollBox.scrollTop).toBe(174);
 
     scrollBox.remove();
+  });
+});
+
+describe("list nesting and moving lines", () => {
+  function editorWith(markdown: string): HTMLElement {
+    const editor = document.createElement("div");
+    editor.contentEditable = "true";
+    editor.innerHTML = markdownToHtml(markdown);
+    document.body.appendChild(editor);
+    return editor;
+  }
+
+  function press(editor: HTMLElement, line: number, key: string, mods: { shiftKey?: boolean; altKey?: boolean } = {}) {
+    const block = editor.children[line];
+    const range = document.createRange();
+    range.selectNodeContents(block);
+    range.collapse(false);
+    window.getSelection()!.removeAllRanges();
+    window.getSelection()!.addRange(range);
+    const event = { key, shiftKey: false, altKey: false, ctrlKey: false, metaKey: false, preventDefault: vi.fn(), ...mods };
+    return handleRichEditorKeyDown(event as unknown as React.KeyboardEvent<HTMLDivElement>, editor, vi.fn());
+  }
+
+  const saved = (editor: HTMLElement) => contentToMarkdown(markdownToContent(htmlToMarkdown(editor), [], () => "id"));
+
+  it("nests list lines with Tab and brings them back with Shift+Tab, as saved to the note", () => {
+    const editor = editorWith("- parent\n- [ ] task\n1. first\n1. second");
+    press(editor, 1, "Tab");
+    press(editor, 3, "Tab");
+    expect(saved(editor)).toBe("- parent\n    - [ ] task\n1. first\n    1. second");
+
+    press(editor, 1, "Tab", { shiftKey: true });
+    expect(saved(editor)).toBe("- parent\n- [ ] task\n1. first\n    1. second");
+    editor.remove();
+  });
+
+  it("moves a line with Alt+Down together with the lines nested under it", () => {
+    const editor = editorWith("- a\n    - a1\n- b");
+    press(editor, 0, "ArrowDown", { altKey: true });
+    expect(saved(editor)).toBe("- b\n- a\n    - a1");
+    editor.remove();
   });
 });

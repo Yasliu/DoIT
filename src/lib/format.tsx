@@ -3,6 +3,7 @@ import { convertFileSrc } from "@tauri-apps/api/core";
 import type { ContentItem } from "../api/tauriBridge";
 import { getMarkdownShortcuts, matchesCombo } from "./shortcuts";
 import { EMOJI_MAP } from "./emoji";
+import { INDENT_STEP, indentWidth, layoutLists, type ListLine, type ListPlace } from "./listLayout";
 
 /**
  * Renders inline markdown bold and italic formatting without raw asterisks.
@@ -521,8 +522,9 @@ export function markdownToHtml(md: string): string {
     }
   }
 
-  const out: string[] = [];
-  let currentOlNumber = 0;
+  // List lines are rendered once every line is known: their depth and number depend on their neighbours.
+  const blocks: { line: ListLine; html: (place: ListPlace) => string }[] = [];
+  const other = (html: string) => blocks.push({ line: { kind: "other" }, html: () => html });
 
   for (let i = 0; i < lines.length; i++) {
     const line = lines[i];
@@ -534,14 +536,12 @@ export function markdownToHtml(md: string): string {
     }
 
     if (!t) {
-      currentOlNumber = 0;
-      out.push("<div><br></div>");
+      other("<div><br></div>");
       continue;
     }
 
     const fence = t.match(/^(`{3,}|~{3,})\s*([^\s`]*)\s*$/);
     if (fence) {
-      currentOlNumber = 0;
       const marker = fence[1];
       let j = i + 1;
       while (j < lines.length) {
@@ -549,13 +549,12 @@ export function markdownToHtml(md: string): string {
         if (c.length >= marker.length && c.split("").every((ch) => ch === marker[0])) break;
         j++;
       }
-      out.push(preHtml(lines.slice(i + 1, j).join("\n"), fence[2] || "", marker[0].repeat(3)));
+      other(preHtml(lines.slice(i + 1, j).join("\n"), fence[2] || "", marker[0].repeat(3)));
       i = j;
       continue;
     }
 
     if (isTableRow(line) && i + 1 < lines.length && isSeparator(lines[i + 1])) {
-      currentOlNumber = 0;
       const header = parseRow(line);
       const aligns = parseRow(lines[i + 1]).map(alignOf);
       const rows: string[][] = [];
@@ -569,7 +568,7 @@ export function markdownToHtml(md: string): string {
         meta = parseTableMeta(lines[k]);
         k++;
       }
-      out.push(tableHtml(header, aligns, rows, meta?.cols, meta?.rows));
+      other(tableHtml(header, aligns, rows, meta?.cols, meta?.rows));
       i = k - 1;
       continue;
     }
@@ -579,40 +578,47 @@ export function markdownToHtml(md: string): string {
     }
 
     if (t && HR_RE.test(line)) {
-      currentOlNumber = 0;
-      out.push(`<div class="md-hr" data-raw="${escapeAttr(t)}" contenteditable="false"><hr></div>`);
+      other(`<div class="md-hr" data-raw="${escapeAttr(t)}" contenteditable="false"><hr></div>`);
       continue;
     }
 
     const info = blockPrefix(line);
     if (info) {
-      let prefix = info.prefix;
-      if (info.cls === "md-ol") {
-        const leadSpace = info.prefix.match(/^\s*/)?.[0] || "";
-        if (currentOlNumber === 0) {
-          const m = info.prefix.match(/\d+/);
-          currentOlNumber = m ? parseInt(m[0], 10) : 1;
-        } else {
-          currentOlNumber += 1;
-        }
-        prefix = `${leadSpace}${currentOlNumber}. `;
-      } else {
-        currentOlNumber = 0;
-      }
       const rest = line.slice(info.consumed);
+      const body = rest ? inlineMarkdownToHtml(rest, refMap) : "<br>";
       const cb = info.cls.startsWith("md-task") ? CHECKBOX_HTML : "";
-      const fnBadge = info.cls === "md-footnote-def" ? `<span class="md-fn-badge" contenteditable="false">${escapeHtml(prefix)}</span>` : "";
-      out.push(
-        `<div class="${info.cls}" data-p="${escapeAttr(prefix)}">${cb}${fnBadge}${rest ? inlineMarkdownToHtml(rest, refMap) : "<br>"}</div>`,
-      );
+      const listLine = listLineOf(info.cls, info.prefix);
+      blocks.push({
+        line: listLine,
+        html: (place) => {
+          const prefix = place.number !== undefined ? numberedPrefix(info.prefix, place.number) : info.prefix;
+          const fnBadge = info.cls === "md-footnote-def" ? `<span class="md-fn-badge" contenteditable="false">${escapeHtml(prefix)}</span>` : "";
+          const depth = place.depth > 0 ? ` style="--md-depth:${place.depth}"` : "";
+          return `<div class="${info.cls}" data-p="${escapeAttr(prefix)}"${depth}>${cb}${fnBadge}${body}</div>`;
+        },
+      });
       continue;
     }
 
-    currentOlNumber = 0;
-    out.push(line ? `<div>${inlineMarkdownToHtml(line, refMap)}</div>` : "<div><br></div>");
+    other(line ? `<div>${inlineMarkdownToHtml(line, refMap)}</div>` : "<div><br></div>");
   }
 
-  return out.join("");
+  const places = layoutLists(blocks.map((b) => b.line));
+  return blocks.map((b, i) => b.html(places[i])).join("");
+}
+
+/** How list nesting sees a block with class `cls` and prefix `prefix`. */
+function listLineOf(cls: string | null | undefined, prefix: string): ListLine {
+  const indent = prefix.match(/^\s*/)?.[0] ?? "";
+  if (cls === "md-li") return { kind: "bullet", indent };
+  if (cls?.startsWith("md-task")) return { kind: "task", indent };
+  if (cls === "md-ol") return { kind: "numbered", indent, start: parseInt(prefix.match(/\d+/)?.[0] ?? "1", 10) };
+  return { kind: "other" };
+}
+
+/** `prefix` (a numbered line's) showing `number` instead. */
+function numberedPrefix(prefix: string, number: number): string {
+  return `${prefix.match(/^\s*/)?.[0] ?? ""}${number}. `;
 }
 
 const BLOCK_SELECTOR = "div,pre,table,p,ul,ol,li,h1,h2,h3,h4,h5,h6,blockquote";
@@ -1177,6 +1183,23 @@ function convertInlineInTextNodes(container: HTMLElement): void {
 }
 
 /** Plain-text paste: multi-line text is re-parsed as markdown so headings / tables / lists render at once. */
+/** Pasting a web address over selected text on one line links that text to it. Returns true when handled. */
+export function handleLinkPaste(e: React.ClipboardEvent<HTMLElement>, editor: HTMLElement): boolean {
+  const url = (e.clipboardData?.getData("text/plain") || "").trim();
+  if (!/^https?:\/\/\S+$/i.test(url)) return false;
+  const sel = window.getSelection();
+  if (!sel || sel.rangeCount === 0 || sel.isCollapsed) return false;
+  const range = sel.getRangeAt(0);
+  if (!editor.contains(range.commonAncestorContainer)) return false;
+  const line = topLevelBlock(editor, range.startContainer, range.startOffset, false);
+  if (!line || line !== topLevelBlock(editor, range.endContainer, range.endOffset, true)) return false;
+  const inside = (node: Node) => (node instanceof Element ? node : node.parentElement)?.closest("a, code, pre, td, th");
+  if (inside(range.startContainer) || inside(range.endContainer) || !range.toString().trim()) return false;
+  e.preventDefault();
+  applyLink(editor, url);
+  return true;
+}
+
 export function handleMarkdownPaste(e: React.ClipboardEvent<HTMLElement>): boolean {
   const items = e.clipboardData?.items;
   if (items && Array.from(items).some((i) => i.type.startsWith("image/"))) return false;
@@ -1928,6 +1951,22 @@ export function handleRichEditorKeyDown(
     return true;
   }
 
+  // ---- list nesting and moving lines: work on every selected line ----
+  if (e.key === "Tab" && !e.altKey && !e.ctrlKey && !e.metaKey) {
+    const lines = selectedBlocks(editor, range);
+    if (lines.some((line) => isListBlock(line))) {
+      // Kept in the editor even when the line cannot move further, so focus never jumps away.
+      e.preventDefault();
+      if (e.shiftKey ? outdentLines(editor, lines) : indentLines(editor, lines)) onInput();
+      return true;
+    }
+  }
+  if (e.altKey && !e.ctrlKey && !e.metaKey && !e.shiftKey && (e.key === "ArrowUp" || e.key === "ArrowDown")) {
+    e.preventDefault();
+    if (moveLines(editor, range, e.key === "ArrowUp" ? -1 : 1)) onInput();
+    return true;
+  }
+
   const block = currentBlock(editor);
   if (!block || block.tagName !== "DIV" || !sel.isCollapsed) return false;
 
@@ -2032,6 +2071,12 @@ export function handleRichEditorKeyDown(
   }
 
   if (e.key === "Enter") {
+    // Empty nested list line: step out one level first, like every outliner.
+    if (isEmpty && lineWidth(block) > 0 && outdentLines(editor, [block])) {
+      e.preventDefault();
+      onInput();
+      return true;
+    }
     if (isEmpty && (isList || isTask || isHeading || isOl || isDd || isFnDef)) {
       // Empty bullet / task / quote / heading line: exit to normal text paragraph!
       e.preventDefault();
@@ -2051,6 +2096,7 @@ export function handleRichEditorKeyDown(
       next.appendChild(makeCheckbox());
       next.appendChild(document.createElement("br"));
       block.after(next);
+      renumberOrderedLists(editor);
       const r = document.createRange();
       r.setStart(next, 1);
       r.collapse(true);
@@ -2068,6 +2114,7 @@ export function handleRichEditorKeyDown(
       next.className = block.className || "md-li";
       next.appendChild(document.createElement("br"));
       block.after(next);
+      renumberOrderedLists(editor);
       placeCaretStart(next);
       scrollCaretIntoView(editor);
       onInput();
@@ -2078,6 +2125,8 @@ export function handleRichEditorKeyDown(
       e.preventDefault();
       const next = document.createElement("div");
       next.className = "md-ol";
+      // Same level as this line; the number is set by renumberOrderedLists below.
+      next.setAttribute("data-p", block.getAttribute("data-p") || "1. ");
 
       const atEnd = caretAtEnd(block, range);
       if (atEnd) {
@@ -2151,6 +2200,12 @@ export function handleRichEditorKeyDown(
     if (prev && prev instanceof HTMLElement && (prev.classList.contains("md-hr") || prev.hasAttribute("data-raw"))) {
       e.preventDefault();
       prev.remove();
+      onInput();
+      return true;
+    }
+    // At the start of a nested list line: step out one level before the marker goes.
+    if (lineWidth(block) > 0 && outdentLines(editor, [block])) {
+      e.preventDefault();
       onInput();
       return true;
     }
@@ -2413,34 +2468,181 @@ function syncTableRowsAfterDelete(table: HTMLTableElement, rowIdx: number): void
   }
 }
 
+/** How list nesting sees a top-level editor block. */
+function blockListLine(block: Element): ListLine {
+  if (!(block instanceof HTMLElement) || block.tagName !== "DIV" || isSpecialBlock(block)) return { kind: "other" };
+  const cls = block.classList.contains("md-task") ? "md-task" : block.classList.contains("md-ol") ? "md-ol" : block.classList.contains("md-li") ? "md-li" : null;
+  return listLineOf(cls, block.getAttribute("data-p") ?? "");
+}
+
+function isListBlock(block: Element | null | undefined): block is HTMLElement {
+  return !!block && blockListLine(block).kind !== "other";
+}
+
 /**
- * Scans top-level editor blocks and ensures contiguous groups of ordered list items (.md-ol)
- * are sequentially numbered (1., 2., 3., ...), preserving any leading indentation.
+ * Lays out the editor's lists after an edit: numbers each run of numbered lines (per nesting level,
+ * keeping their indentation) and draws every list line at its depth.
  */
 export function renumberOrderedLists(editor: HTMLElement): void {
-  let expectedNum = 0;
-  for (const child of Array.from(editor.children)) {
-    if (!(child instanceof HTMLElement) || child.tagName !== "DIV" || isSpecialBlock(child)) {
-      expectedNum = 0;
-      continue;
+  const blocks = Array.from(editor.children);
+  const places = layoutLists(blocks.map(blockListLine));
+  blocks.forEach((block, i) => {
+    if (!(block instanceof HTMLElement)) return;
+    const { depth, number } = places[i];
+    if (number !== undefined) {
+      const prefix = numberedPrefix(block.getAttribute("data-p") ?? "", number);
+      if (block.getAttribute("data-p") !== prefix) block.setAttribute("data-p", prefix);
     }
-    if (child.classList.contains("md-ol")) {
-      const curP = child.getAttribute("data-p") || "";
-      const leadSpace = curP.match(/^\s*/)?.[0] || "";
-      if (expectedNum === 0) {
-        const m = curP.match(/\d+/);
-        expectedNum = m ? parseInt(m[0], 10) : 1;
-      } else {
-        expectedNum += 1;
-      }
-      const targetP = `${leadSpace}${expectedNum}. `;
-      if (curP !== targetP) {
-        child.setAttribute("data-p", targetP);
-      }
-    } else {
-      expectedNum = 0;
-    }
+    if (depth > 0) block.style.setProperty("--md-depth", String(depth));
+    else if (block.style.getPropertyValue("--md-depth")) block.style.removeProperty("--md-depth");
+  });
+}
+
+// ---- list nesting (Tab / Shift+Tab) and moving lines (Alt+Up / Alt+Down) ----
+
+function topLevelBlock(editor: HTMLElement, node: Node, offset: number, atEnd: boolean): HTMLElement | null {
+  if (node === editor) {
+    const child = editor.children[atEnd ? offset - 1 : offset] ?? editor.lastElementChild;
+    return child instanceof HTMLElement ? child : null;
   }
+  let n: Node | null = node;
+  while (n && n.parentNode !== editor) n = n.parentNode;
+  return n instanceof HTMLElement ? n : null;
+}
+
+/** The top-level lines the selection covers. A selection ending at the very start of a line leaves that line out. */
+function selectedBlocks(editor: HTMLElement, range: Range): HTMLElement[] {
+  const first = topLevelBlock(editor, range.startContainer, range.startOffset, false);
+  let last = topLevelBlock(editor, range.endContainer, range.endOffset, true);
+  if (!first || !last) return [];
+  if (last !== first) {
+    const end = range.cloneRange();
+    end.collapse(false);
+    if (caretOffsetIn(last, end) === 0) last = (last.previousElementSibling as HTMLElement | null) ?? first;
+  }
+  const blocks: HTMLElement[] = [];
+  for (let b: Element | null = first; b; b = b.nextElementSibling) {
+    if (b instanceof HTMLElement) blocks.push(b);
+    if (b === last) break;
+  }
+  return blocks;
+}
+
+function lineIndent(block: HTMLElement): string {
+  return (block.getAttribute("data-p") ?? "").match(/^\s*/)?.[0] ?? "";
+}
+
+function lineWidth(block: Element): number {
+  return block instanceof HTMLElement && isListBlock(block) ? indentWidth(lineIndent(block)) : 0;
+}
+
+/** The list lines nested under `block`. */
+function nestedUnder(block: HTMLElement): HTMLElement[] {
+  const width = lineWidth(block);
+  const nested: HTMLElement[] = [];
+  for (let n = block.nextElementSibling; isListBlock(n) && lineWidth(n) > width; n = n.nextElementSibling) nested.push(n);
+  return nested;
+}
+
+/** Shifts a list line's indentation by `delta` columns. Changed lines are indented with spaces. A
+ * numbered line is reset to 1, so it starts a new level at 1 and joins an existing one in sequence. */
+function shiftIndent(block: HTMLElement, delta: number): void {
+  const indent = lineIndent(block);
+  let marker = (block.getAttribute("data-p") ?? "").slice(indent.length);
+  if (block.classList.contains("md-ol")) marker = marker.replace(/\d+/, "1");
+  block.setAttribute("data-p", " ".repeat(Math.max(0, indentWidth(indent) + delta)) + marker);
+}
+
+/** The selected list lines that are not nested under another selected line that moves, each with its
+ * nested lines. A line for which `moves` is false leaves its nested lines free to move on their own. */
+function selectedItems(lines: HTMLElement[], moves: (line: HTMLElement) => boolean = () => true): { line: HTMLElement; nested: HTMLElement[] }[] {
+  const items: { line: HTMLElement; nested: HTMLElement[] }[] = [];
+  const covered = new Set<HTMLElement>();
+  for (const line of lines) {
+    if (!isListBlock(line) || covered.has(line) || !moves(line)) continue;
+    const nested = nestedUnder(line);
+    nested.forEach((n) => covered.add(n));
+    items.push({ line, nested });
+  }
+  return items;
+}
+
+/** Tab: nests the selected list lines (and what is nested under them) one level deeper. A line can
+ * only nest under a list line above it, so a list never skips a level. */
+function indentLines(editor: HTMLElement, lines: HTMLElement[]): boolean {
+  const items = selectedItems(lines);
+  const first = items[0]?.line;
+  const above = first?.previousElementSibling ?? null;
+  if (!first || !isListBlock(above) || lineWidth(above) < lineWidth(first)) return false;
+  const step = indentWidth(INDENT_STEP);
+  for (const { line, nested } of items) [line, ...nested].forEach((b) => shiftIndent(b, step));
+  renumberOrderedLists(editor);
+  return true;
+}
+
+/** Shift+Tab: moves the selected list lines (and what is nested under them) out to their parent's level. */
+function outdentLines(editor: HTMLElement, lines: HTMLElement[]): boolean {
+  const moves = selectedItems(lines, (line) => lineWidth(line) > 0).map(({ line, nested }) => {
+    const width = lineWidth(line);
+    let parent = line.previousElementSibling;
+    while (isListBlock(parent) && lineWidth(parent) >= width) parent = parent.previousElementSibling;
+    const target = isListBlock(parent) ? lineWidth(parent) : 0;
+    return { blocks: [line, ...nested], delta: target - width };
+  });
+  if (moves.length === 0) return false;
+  for (const { blocks, delta } of moves) blocks.forEach((b) => shiftIndent(b, delta));
+  renumberOrderedLists(editor);
+  return true;
+}
+
+/** Alt+Up / Alt+Down: moves the selected lines, with the lines nested under them, past the line or
+ * item next to them. They keep their indentation. */
+function moveLines(editor: HTMLElement, range: Range, direction: -1 | 1): boolean {
+  const lines = selectedBlocks(editor, range);
+  if (lines.length === 0) return false;
+  let last = lines[lines.length - 1];
+  for (const { nested } of selectedItems(lines)) {
+    const end = nested[nested.length - 1];
+    if (end && last.compareDocumentPosition(end) & Node.DOCUMENT_POSITION_FOLLOWING) last = end;
+  }
+  const unit: HTMLElement[] = [];
+  for (let b: Element | null = lines[0]; b; b = b.nextElementSibling) {
+    if (b instanceof HTMLElement) unit.push(b);
+    if (b === last) break;
+  }
+  const width = lineWidth(lines[0]);
+  const saved = { sc: range.startContainer, so: range.startOffset, ec: range.endContainer, eo: range.endOffset };
+
+  if (direction < 0) {
+    let target = lines[0].previousElementSibling;
+    if (!target) return false;
+    // Land above the whole item before, not between it and its nested lines.
+    while (isListBlock(target) && lineWidth(target) > width && target.previousElementSibling) target = target.previousElementSibling;
+    target.before(...unit);
+  } else {
+    const next = last.nextElementSibling;
+    if (!next) return false;
+    const nested = isListBlock(next) && lineWidth(next) >= width ? nestedUnder(next) : [];
+    (nested[nested.length - 1] ?? next).after(...unit);
+  }
+  // Never left nested under nothing: four leading spaces with no list above read as code elsewhere.
+  if (isListBlock(lines[0])) {
+    const above = lines[0].previousElementSibling;
+    const deepest = isListBlock(above) ? lineWidth(above) + indentWidth(INDENT_STEP) : 0;
+    if (width > deepest) unit.filter((b) => isListBlock(b)).forEach((b) => shiftIndent(b, deepest - width));
+  }
+
+  const sel = window.getSelection();
+  if (sel) {
+    const restored = document.createRange();
+    restored.setStart(saved.sc, saved.so);
+    restored.setEnd(saved.ec, saved.eo);
+    sel.removeAllRanges();
+    sel.addRange(restored);
+  }
+  renumberOrderedLists(editor);
+  scrollCaretIntoView(editor);
+  return true;
 }
 
 function clearPrefix(block: HTMLElement): void {
@@ -2625,10 +2827,12 @@ export function handleCheckboxClick(e: React.MouseEvent<HTMLElement>, editor: HT
 // Task lines (`- [ ] text`) are stored as is_todo items; everything else is plain text.
 // ---------------------------------------------------------------------------
 
-const TASK_LINE = /^\s*[-*]\s+\[([ xX])\]\s?(.*)$/;
+const TASK_LINE = /^(\s*)[-*]\s+\[([ xX])\]\s?(.*)$/;
 
-export function contentToMarkdown(content: { text: string; is_todo: boolean; completed: boolean }[]): string {
-  return content.map((c) => (c.is_todo ? `- [${c.completed ? "x" : " "}] ${c.text}` : c.text)).join("\n");
+export function contentToMarkdown(content: Pick<ContentItem, "text" | "is_todo" | "completed" | "indent">[]): string {
+  return content
+    .map((c) => (c.is_todo ? `${c.indent ?? ""}- [${c.completed ? "x" : " "}] ${c.text}` : c.text))
+    .join("\n");
 }
 
 /** The note's lines for `md`. A line that did not change keeps its previous object. */
@@ -2637,11 +2841,20 @@ export function markdownToContent(md: string, prev: ContentItem[], newId: () => 
     const before = prev[idx];
     if (before && !before.is_todo && before.text === line && !line.includes("[")) return before;
     const m = line.match(TASK_LINE);
-    const text = m ? m[2] : line;
+    const text = m ? m[3] : line;
     const is_todo = !!m;
-    const completed = !!m && m[1].toLowerCase() === "x";
-    if (before && before.text === text && before.is_todo === is_todo && before.completed === completed) return before;
-    return { id: before?.id ?? newId(), text, is_todo, completed };
+    const completed = !!m && m[2].toLowerCase() === "x";
+    const indent = m?.[1] ?? "";
+    if (
+      before &&
+      before.text === text &&
+      before.is_todo === is_todo &&
+      before.completed === completed &&
+      (before.indent ?? "") === indent
+    ) {
+      return before;
+    }
+    return indent ? { id: before?.id ?? newId(), text, is_todo, completed, indent } : { id: before?.id ?? newId(), text, is_todo, completed };
   });
 }
 /** Context-menu helpers: operate on the table that owns `cell`. */

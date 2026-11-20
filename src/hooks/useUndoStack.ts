@@ -20,6 +20,7 @@ function isWordOrStructuralBoundary(prev: unknown, next: unknown): boolean {
       const pItem = prev[i];
       if (!pItem) return true;
       if (nItem.is_todo !== pItem.is_todo || nItem.completed !== pItem.completed) return true;
+      if ((nItem.indent ?? "") !== (pItem.indent ?? "")) return true;
       const nText = typeof nItem.text === "string" ? nItem.text : "";
       const pText = typeof pItem.text === "string" ? pItem.text : "";
       if (Math.abs(nText.length - pText.length) > 1) return true;

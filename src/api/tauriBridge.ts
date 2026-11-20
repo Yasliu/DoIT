@@ -14,6 +14,8 @@ export interface ContentItem {
   text: string;
   is_todo: boolean;
   completed: boolean;
+  /** A task's leading whitespace, which nests it under the line above. Other lines keep theirs in `text`. */
+  indent?: string;
 }
 
 export interface NoteItem {

@@ -731,6 +731,8 @@ html[data-theme="monochrome"] .lightscape {
 .md-h2 { font-size: 1.34em; font-weight: 650; line-height: 1.3; margin: 0.35em 0 0.1em; letter-spacing: -0.015em; color: #fff; }
 .md-h3 { font-size: 1.15em; font-weight: 600; line-height: 1.35; margin: 0.3em 0 0.06em; color: #fff; }
 .md-h4, .md-h5, .md-h6 { font-size: 1.04em; font-weight: 600; line-height: 1.4; margin: 0.25em 0 0.05em; }
+/* Nested list lines: --md-depth is set from the line's indentation (see lib/listLayout). */
+:is(.md-li, .md-ol, .md-task) { margin-left: calc(var(--md-depth, 0) * 1.5em); }
 .md-li { position: relative; padding-left: 1.4em; }
 .md-li::before { content: "\2022"; position: absolute; left: 0.4em; color: rgba(255, 255, 255, 0.6); }
 .md-ol { position: relative; padding-left: 1.8em; }

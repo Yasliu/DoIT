@@ -4,6 +4,7 @@ import {
   clearTableResizeHover,
   fixCheckboxCaret,
   handleCheckboxClick,
+  handleLinkPaste,
   handleMarkdownPaste,
   handleRichEditorKeyDown,
   handleTableMouseDown,
@@ -58,7 +59,8 @@ export function NoteBody({ editor, variant, maximized = false }: { editor: NoteE
     <div
       ref={editor.attachBody}
       onPaste={(e) => {
-        if (handleMarkdownPaste(e)) editor.input();
+        const body = editor.bodyRef.current;
+        if ((body && handleLinkPaste(e, body)) || handleMarkdownPaste(e)) editor.input();
       }}
       contentEditable
       suppressContentEditableWarning
