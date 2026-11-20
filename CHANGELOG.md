@@ -8,7 +8,8 @@
   - Added Wayland-aware guidance to bind `doit --quick-note` in desktop keyboard settings and startup-conflict reporting in Settings.
 - **Dock Pill Click Reliability (`window/state.rs`, `window/lifecycle.rs`, `TrayCompanion.tsx`)**:
   - Unified pill click handling and page mount reporting under a single `Engine` lock, cleared readiness only on page retirement, and attached the `set-expanded` listener before signaling readiness so clicks during panel startup are never dropped.
-- **Outliner List Nesting, Line Reordering & URL Link Paste (`listLayout.ts`, `format.tsx`, `models.rs`, `NoteBody.tsx`)**:
+- **Text Indentation, Outliner List Nesting, Line Reordering & URL Link Paste (`listLayout.ts`, `format.tsx`, `RawEditor.tsx`, `models.rs`, `NoteBody.tsx`)**:
+  - Added `Tab`/`Shift+Tab` indentation during regular text (single-line caret insertion and multi-line indent/outdent), inside fenced code blocks, and in Plain Text mode, with indentation preserved in card previews.
   - Added `Tab`/`Shift+Tab` nesting and unnesting for bullets, numbered lists (numbered per level), and checklists with persisted `indent` metadata, plus `Enter`/`Backspace` outdenting.
   - Added `Alt+↑`/`Alt+↓` to move selected lines together with nested children, and URL paste over selected text to create Markdown links.
 - **Free Edge-Resizable Portable Tables & Seamless Navigation (`format.tsx`, `NoteBody.tsx`, `globals.css`, `text.ts`)**:

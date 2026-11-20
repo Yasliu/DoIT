@@ -36,7 +36,7 @@ jobs:
         with:
           tagName: ${{ github.ref_name }}
           releaseName: 'DoIT Desktop Core ${{ github.ref_name }}'
-          releaseBody: 'DoIT ${{ github.ref_name }} — Global quick-note shortcut, reliable dock pill expansion, Tab/Shift+Tab list nesting and Alt+Up/Down line moving, URL paste linking, free edge-resizable portable tables, Linux touchpad pinch zoom, automatic vertical editor scrolling, Debian/Ubuntu .deb packaging, and notes-folder deletion safeguards.'
+          releaseBody: 'DoIT ${{ github.ref_name }} — Global quick-note shortcut, reliable dock pill expansion, Tab/Shift+Tab indentation for text, code blocks, and nested lists, Alt+Up/Down line moving, URL paste linking, free edge-resizable portable tables, Linux touchpad pinch zoom, automatic vertical editor scrolling, Debian/Ubuntu .deb packaging, and notes-folder deletion safeguards.'
           releaseDraft: false
           prerelease: false
           includeUpdaterJson: true

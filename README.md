@@ -86,7 +86,7 @@ Drop any `.md` or `.txt` files into your note repository folder, hit **Sync Repo
 ## What's new in v1.2.3
 
 - **Global quick-note shortcut & reliable dock pill**: Configure a system-wide shortcut in Settings (or bind `doit --quick-note` on Wayland) to pull up the dock panel on your latest note from any app, and clicking the dock pill now expands consistently even while the panel is mounting
-- **Outliner lists, line moving & link paste**: Nest and unnest bullets, numbered lists (numbered per level), and checklists with `Tab` / `Shift+Tab`, reorder lines together with their nested items using `Alt+↑` / `Alt+↓`, and paste URLs onto selected text to turn it into a link
+- **Text indentation, outliner lists, line moving & link paste**: Indent and outdent regular text, code blocks, and Plain Text notes with `Tab` / `Shift+Tab`, nest bullets, numbered lists (numbered per level), and checklists, reorder lines with their nested items using `Alt+↑` / `Alt+↓`, and paste URLs onto selected text to turn it into a link
 - **Edge-resizable portable tables & seamless navigation**: Hover and drag table column or row borders to resize freely, with sizes stored portably inside `.md` files and scaled nicely inside bento card previews, plus smooth arrow navigation in and out of cells
 - **Touchpad two-finger pinch zoom & vertical auto-scroll**: Two-finger touchpad pinch zooms only the note editor instead of the whole Linux app window, and typing or navigating near the bottom automatically scrolls notes smoothly in both Markdown and Text modes
 - **Debian/Ubuntu `.deb` package & notes-folder safeguards**: Official self-updating `.deb` releases join `.rpm`, `.AppImage`, and Windows builds, backed by strict file-only note deletion guards across all OSes so DoIT never attempts to delete your notes folder
@@ -101,7 +101,7 @@ The full history lives in the release log below.
 
 - Global quick-note shortcut: configurable in Settings (requiring at least two modifiers, or via `doit --quick-note` on Wayland) to open or dismiss the dock panel on the most recently edited note from any app
 - Reliable dock pill expansion: unified pill click handling and page mount state under a single lock so clicks during panel mounting are never dropped
-- Outliner list editing & link paste: `Tab`/`Shift+Tab` multi-level nesting with per-level numbering and saved task indentation, `Alt+↑`/`Alt+↓` subtree moving, and pasting URLs over selected text to create Markdown links
+- Text indentation, outliner lists & link paste: `Tab`/`Shift+Tab` indentation in regular text, code blocks, and Plain Text mode (preserved in card previews), multi-level list nesting with per-level numbering and saved task indentation, `Alt+↑`/`Alt+↓` subtree moving, and pasting URLs over selected text to create Markdown links
 - Resizable portable tables & navigation: mouse hover/drag edge resizing saved inside `.md` files (`<!-- doit-table: ... -->`), scaled bento card previews, and seamless arrow navigation into, across, and out of tables
 - Touchpad two-finger pinch zoom: native GTK pinch interception on Linux so zooming scales note content cleanly rather than the entire window
 - Automatic vertical editor scrolling: caret-following auto-scroll in both Rich Markdown and Plain Text modes without height-reset scroll jumps

@@ -53,7 +53,7 @@ export function ReleaseLogModal({ onClose }: ReleaseLogModalProps) {
           </li>
           <li className="flex items-start gap-2">
             <span className="size-1.5 rounded-full bg-white/60 mt-2 shrink-0" />
-            <span>Outliner List Nesting, Line Moving &amp; Link Paste: Nest and unnest lists with Tab / Shift+Tab (with per-level numbering and saved task indentation), reorder lines and their nested children with Alt+&uarr; / Alt+&darr;, and paste URLs onto selected text to turn it into a link.</span>
+            <span>Text Indentation, Outliner Lists &amp; Link Paste: Indent regular text, code blocks, and Plain Text notes or nest lists with Tab / Shift+Tab (with per-level numbering and saved task indentation), reorder lines and nested children with Alt+&uarr; / Alt+&darr;, and paste URLs onto selected text to create links.</span>
           </li>
           <li className="flex items-start gap-2">
             <span className="size-1.5 rounded-full bg-white/60 mt-2 shrink-0" />
