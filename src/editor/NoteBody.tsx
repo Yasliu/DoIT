@@ -115,7 +115,7 @@ export function NoteBody({ editor, variant, maximized = false }: { editor: NoteE
       }}
       onKeyDown={(e) => {
         const body = editor.bodyRef.current;
-        if (e.key === "ArrowUp" && body && isCaretAtEditorStart(body)) {
+        if (e.key === "ArrowUp" && !e.altKey && !e.ctrlKey && !e.metaKey && !e.shiftKey && body && isCaretAtEditorStart(body)) {
           e.preventDefault();
           focusTitleEnd(editor.titleRef.current);
           return;

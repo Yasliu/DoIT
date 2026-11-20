@@ -106,7 +106,7 @@ export function RawEditor({ content, onChange, className = "", minHeight = 240, 
         requestAnimationFrame(() => scrollTextareaCaretIntoView(target));
       }}
       onKeyDown={(e) => {
-        if (e.key === "ArrowUp" && ref.current && ref.current.selectionStart === 0 && ref.current.selectionEnd === 0) {
+        if (e.key === "ArrowUp" && !e.altKey && !e.ctrlKey && !e.metaKey && !e.shiftKey && ref.current && ref.current.selectionStart === 0 && ref.current.selectionEnd === 0) {
           if (onArrowUpAtStart) {
             e.preventDefault();
             onArrowUpAtStart();

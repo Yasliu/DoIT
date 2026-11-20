@@ -43,7 +43,7 @@ export function ShortcutField({ value, def, onChange }: ShortcutFieldProps) {
           return (
             <span key={`${k}-${i}`} className="inline-flex items-center">
               {i > 0 && <span>+</span>}
-              {Icon ? <Icon size={12} strokeWidth={2.2} className="mx-px" /> : k}
+              {Icon ? <Icon size={12} strokeWidth={2.2} className="mx-px" /> : k === " " ? "Space" : k}
             </span>
           );
         })
