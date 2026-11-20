@@ -46,7 +46,7 @@ const TYPING_SHORTCUTS = [
   { label: "Subscript, superscript", keys: "H~2~O, x^2^" },
   { label: "Footnote", keys: "[^1] and [^1]:" },
   { label: "Emoji", keys: ":name:" },
-  { label: "Nest a list line, or bring it back", keys: "Tab, Shift+Tab" },
+  { label: "Indent text or nest list lines", keys: "Tab, Shift+Tab" },
   { label: "Move a line with its nested lines", keys: "Alt+↑, Alt+↓" },
   { label: "Link selected text", keys: "Paste a web address" },
   { label: "Next table cell", keys: "Tab" },

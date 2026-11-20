@@ -9,6 +9,8 @@ import {
   deleteTableColumn,
   deleteTableRow,
   handleRichEditorKeyDown,
+  handleTableMouseDown,
+  handleTableMouseMove,
   htmlToMarkdown,
   imageMarkdownWithAlt,
   isCaretAtEditorStart,
@@ -260,6 +262,160 @@ describe("list nesting and moving lines", () => {
     const editor = editorWith("- a\n    - a1\n- b");
     press(editor, 0, "ArrowDown", { altKey: true });
     expect(saved(editor)).toBe("- b\n- a\n    - a1");
+    editor.remove();
+  });
+
+  it("indents and outdents regular text and code blocks with Tab and Shift+Tab", () => {
+    const editor = editorWith("Hello\nHi there\n\n```\nconst x = 1;\nconst y = 2;\n```");
+
+    // 1. Start of plain text line -> inserts 4 spaces
+    const first = editor.children[0] as HTMLElement;
+    const rStart = document.createRange();
+    rStart.setStart(first.firstChild!, 0);
+    rStart.collapse(true);
+    window.getSelection()!.removeAllRanges();
+    window.getSelection()!.addRange(rStart);
+    handleRichEditorKeyDown(
+      { key: "Tab", shiftKey: false, altKey: false, ctrlKey: false, metaKey: false, preventDefault: vi.fn() } as unknown as React.KeyboardEvent<HTMLDivElement>,
+      editor,
+      vi.fn(),
+    );
+    expect(first.textContent).toBe("    Hello");
+
+    // 2. Mid-line -> inserts 4 spaces at caret
+    const second = editor.children[1] as HTMLElement;
+    const rMid = document.createRange();
+    rMid.setStart(second.firstChild!, 2);
+    rMid.collapse(true);
+    window.getSelection()!.removeAllRanges();
+    window.getSelection()!.addRange(rMid);
+    handleRichEditorKeyDown(
+      { key: "Tab", shiftKey: false, altKey: false, ctrlKey: false, metaKey: false, preventDefault: vi.fn() } as unknown as React.KeyboardEvent<HTMLDivElement>,
+      editor,
+      vi.fn(),
+    );
+    expect(second.textContent).toBe("Hi     there");
+
+    // 3. Multi-line selection across lines 0 and 1 -> indents both lines, Shift+Tab brings them back
+    const rMulti = document.createRange();
+    rMulti.setStart(first.firstChild!, 1);
+    rMulti.setEnd(second.firstChild!, 4);
+    window.getSelection()!.removeAllRanges();
+    window.getSelection()!.addRange(rMulti);
+    handleRichEditorKeyDown(
+      { key: "Tab", shiftKey: false, altKey: false, ctrlKey: false, metaKey: false, preventDefault: vi.fn() } as unknown as React.KeyboardEvent<HTMLDivElement>,
+      editor,
+      vi.fn(),
+    );
+    expect(first.textContent).toBe("        Hello");
+    expect(second.textContent).toBe("    Hi     there");
+
+    handleRichEditorKeyDown(
+      { key: "Tab", shiftKey: true, altKey: false, ctrlKey: false, metaKey: false, preventDefault: vi.fn() } as unknown as React.KeyboardEvent<HTMLDivElement>,
+      editor,
+      vi.fn(),
+    );
+    expect(first.textContent).toBe("    Hello");
+    expect(second.textContent).toBe("Hi     there");
+
+    // 4. Empty line -> Tab adds 4 spaces cleanly
+    const emptyLine = editor.children[2] as HTMLElement;
+    const rEmpty = document.createRange();
+    rEmpty.setStart(emptyLine, 0);
+    rEmpty.collapse(true);
+    window.getSelection()!.removeAllRanges();
+    window.getSelection()!.addRange(rEmpty);
+    handleRichEditorKeyDown(
+      { key: "Tab", shiftKey: false, altKey: false, ctrlKey: false, metaKey: false, preventDefault: vi.fn() } as unknown as React.KeyboardEvent<HTMLDivElement>,
+      editor,
+      vi.fn(),
+    );
+    expect(emptyLine.textContent).toBe("    ");
+
+    // 5. Fenced code block -> Tab indents and Shift+Tab outdents
+    const pre = editor.querySelector("pre.md-pre") as HTMLElement;
+    const rPre = document.createRange();
+    rPre.setStart(pre.firstChild!, 0);
+    rPre.collapse(true);
+    window.getSelection()!.removeAllRanges();
+    window.getSelection()!.addRange(rPre);
+    handleRichEditorKeyDown(
+      { key: "Tab", shiftKey: false, altKey: false, ctrlKey: false, metaKey: false, preventDefault: vi.fn() } as unknown as React.KeyboardEvent<HTMLDivElement>,
+      editor,
+      vi.fn(),
+    );
+    expect(pre.textContent).toContain("    const x = 1;");
+    handleRichEditorKeyDown(
+      { key: "Tab", shiftKey: true, altKey: false, ctrlKey: false, metaKey: false, preventDefault: vi.fn() } as unknown as React.KeyboardEvent<HTMLDivElement>,
+      editor,
+      vi.fn(),
+    );
+    expect(pre.textContent).toBe("const x = 1;\nconst y = 2;");
+
+    // 6. Round-trip preserves indented regular text
+    const md = saved(editor);
+    expect(md.startsWith("    Hello\nHi     there")).toBe(true);
+    const reloaded = document.createElement("div");
+    reloaded.innerHTML = markdownToHtml(md);
+    expect(reloaded.children[0].textContent).toBe("    Hello");
+
+    editor.remove();
+  });
+
+  it("resizes table columns interactively on hover/drag and retains portable sizes across devices and previews", () => {
+    const md = "| Col A | Col B |\n| --- | --- |\n| 1 | 2 |";
+    const editor = editorWith(md);
+    const table = editor.querySelector("table.md-tbl") as HTMLTableElement;
+    const rows = Array.from(table.querySelectorAll("tr"));
+    const th0 = rows[0].children[0] as HTMLElement;
+    const th1 = rows[0].children[1] as HTMLElement;
+    const td0 = rows[1].children[0] as HTMLElement;
+    const td1 = rows[1].children[1] as HTMLElement;
+
+    const mockRect = (left: number, top: number, width: number, height: number) =>
+      () => ({ left, top, right: left + width, bottom: top + height, width, height, x: left, y: top, toJSON: () => ({}) }) as DOMRect;
+    th0.getBoundingClientRect = mockRect(0, 0, 120, 36);
+    th1.getBoundingClientRect = mockRect(120, 0, 160, 36);
+    td0.getBoundingClientRect = mockRect(0, 36, 120, 36);
+    td1.getBoundingClientRect = mockRect(120, 36, 160, 36);
+
+    // Hover near right edge of Col A (x=119, y=18) -> highlights whole Col A & sets cursor attr
+    handleTableMouseMove({ target: th0, clientX: 119, clientY: 18 } as unknown as React.MouseEvent<HTMLElement>, editor);
+    expect(table.getAttribute("data-resize-cursor")).toBe("col");
+    expect(th0.getAttribute("data-resize-col")).toBe("1");
+    expect(td0.getAttribute("data-resize-col")).toBe("1");
+
+    // Drag right by +80px -> Col A becomes 200px wide while keeping standard GFM table intact
+    const onInput = vi.fn();
+    const handled = handleTableMouseDown(
+      { button: 0, target: th0, clientX: 119, clientY: 18, preventDefault: vi.fn(), stopPropagation: vi.fn() } as unknown as React.MouseEvent<HTMLElement>,
+      editor,
+      onInput,
+    );
+    expect(handled).toBe(true);
+    window.dispatchEvent(new MouseEvent("mousemove", { clientX: 199, clientY: 18 }));
+    window.dispatchEvent(new MouseEvent("mouseup", { clientX: 199, clientY: 18 }));
+
+    expect(onInput).toHaveBeenCalledTimes(1);
+    expect(table.getAttribute("data-resize-cursor")).toBeNull();
+    expect(table.getAttribute("data-widths")).toBe("200,160");
+
+    // Portable Markdown stays pure GFM + trailing HTML comment
+    const serialized = saved(editor);
+    expect(serialized).toContain("| Col A | Col B |\n| --- | --- |\n| 1 | 2 |\n<!-- doit-table: cols=200,160 -->");
+
+    // Moving the .md file to another device restores exact column widths & preview scaling
+    const items = markdownToContent(serialized, [], () => "line");
+    const preview = previewMarkup(items);
+    expect(preview.html).toContain('data-sized="1"');
+    expect(preview.html).toContain('--tbl-w:360px');
+    expect(preview.html).toContain('--col-pct:55.56%');
+    expect(preview.html).toContain('--col-pct:44.44%');
+
+    // Leading metadata comment above a table is also honored cleanly
+    const leadingHtml = markdownToHtml("<!-- doit-table: cols=240,120 -->\n| A | B |\n| --- | --- |\n| x | y |");
+    expect(leadingHtml).toContain('data-widths="240,120"');
+
     editor.remove();
   });
 });

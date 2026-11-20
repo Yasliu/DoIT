@@ -525,6 +525,7 @@ export function markdownToHtml(md: string): string {
   // List lines are rendered once every line is known: their depth and number depend on their neighbours.
   const blocks: { line: ListLine; html: (place: ListPlace) => string }[] = [];
   const other = (html: string) => blocks.push({ line: { kind: "other" }, html: () => html });
+  let pendingTableMeta: { cols?: number[]; rows?: number[] } | null = null;
 
   for (let i = 0; i < lines.length; i++) {
     const line = lines[i];
@@ -535,6 +536,11 @@ export function markdownToHtml(md: string): string {
       continue;
     }
 
+    if (TABLE_META_RE.test(line)) {
+      pendingTableMeta = parseTableMeta(line);
+      continue;
+    }
+
     if (!t) {
       other("<div><br></div>");
       continue;
@@ -542,6 +548,7 @@ export function markdownToHtml(md: string): string {
 
     const fence = t.match(/^(`{3,}|~{3,})\s*([^\s`]*)\s*$/);
     if (fence) {
+      pendingTableMeta = null;
       const marker = fence[1];
       let j = i + 1;
       while (j < lines.length) {
@@ -567,15 +574,18 @@ export function markdownToHtml(md: string): string {
       if (k < lines.length && TABLE_META_RE.test(lines[k])) {
         meta = parseTableMeta(lines[k]);
         k++;
+      } else if (k + 1 < lines.length && lines[k].trim() === "" && TABLE_META_RE.test(lines[k + 1])) {
+        meta = parseTableMeta(lines[k + 1]);
+        k += 2;
       }
-      other(tableHtml(header, aligns, rows, meta?.cols, meta?.rows));
+      const dims = meta ?? pendingTableMeta;
+      pendingTableMeta = null;
+      other(tableHtml(header, aligns, rows, dims?.cols, dims?.rows));
       i = k - 1;
       continue;
     }
 
-    if (TABLE_META_RE.test(line)) {
-      continue;
-    }
+    pendingTableMeta = null;
 
     if (t && HR_RE.test(line)) {
       other(`<div class="md-hr" data-raw="${escapeAttr(t)}" contenteditable="false"><hr></div>`);
@@ -1551,8 +1561,7 @@ interface TableEdgeHit {
   table: HTMLTableElement;
   colIdx: number | null;
   rowIdx: number | null;
-  colCell: HTMLElement | null;
-  rowCell: HTMLElement | null;
+  cursorKind: "col" | "row" | "both";
   cursor: string;
 }
 
@@ -1571,7 +1580,7 @@ function detectTableEdge(clientX: number, clientY: number, target: HTMLElement, 
   if (!cell || !table.contains(cell)) {
     for (const candidate of Array.from(table.querySelectorAll("th,td")) as HTMLElement[]) {
       const r = candidate.getBoundingClientRect();
-      if (clientX >= r.left - 6 && clientX <= r.right + 6 && clientY >= r.top - 5 && clientY <= r.bottom + 5) {
+      if (clientX >= r.left - 8 && clientX <= r.right + 8 && clientY >= r.top - 6 && clientY <= r.bottom + 6) {
         cell = candidate;
         break;
       }
@@ -1587,21 +1596,19 @@ function detectTableEdge(clientX: number, clientY: number, target: HTMLElement, 
   if (cellColIdx < 0 || cellRowIdx < 0) return null;
 
   const rect = cell.getBoundingClientRect();
-  const nearRight = Math.abs(clientX - rect.right) <= 6;
-  const nearLeft = !nearRight && cellColIdx > 0 && Math.abs(clientX - rect.left) <= 6;
-  const nearBottom = Math.abs(clientY - rect.bottom) <= 5;
-  const nearTop = !nearBottom && cellRowIdx > 0 && Math.abs(clientY - rect.top) <= 5;
+  const nearRight = Math.abs(clientX - rect.right) <= 8;
+  const nearLeft = !nearRight && cellColIdx > 0 && Math.abs(clientX - rect.left) <= 8;
+  const nearBottom = Math.abs(clientY - rect.bottom) <= 6;
+  const nearTop = !nearBottom && cellRowIdx > 0 && Math.abs(clientY - rect.top) <= 6;
 
   if (!nearRight && !nearLeft && !nearBottom && !nearTop) return null;
 
   const colIdx = nearRight ? cellColIdx : nearLeft ? cellColIdx - 1 : null;
   const rowIdx = nearBottom ? cellRowIdx : nearTop ? cellRowIdx - 1 : null;
-  const colCell = colIdx !== null ? (rowCells[colIdx] ?? null) : null;
-  const rowCell =
-    rowIdx !== null ? ((allRows[rowIdx]?.children[cellColIdx] as HTMLElement | undefined) ?? null) : null;
-  const cursor = colIdx !== null && rowIdx !== null ? "nwse-resize" : colIdx !== null ? "col-resize" : "row-resize";
+  const cursorKind = colIdx !== null && rowIdx !== null ? "both" : colIdx !== null ? "col" : "row";
+  const cursor = cursorKind === "both" ? "nwse-resize" : cursorKind === "col" ? "col-resize" : "row-resize";
 
-  return { table, colIdx, rowIdx, colCell, rowCell, cursor };
+  return { table, colIdx, rowIdx, cursorKind, cursor };
 }
 
 /** Clears table edge hover highlights and resize cursor on the editor. */
@@ -1609,8 +1616,9 @@ export function clearTableResizeHover(editor: HTMLElement | null): void {
   if (!editor) return;
   editor.querySelectorAll("[data-resize-col]").forEach((el) => el.removeAttribute("data-resize-col"));
   editor.querySelectorAll("[data-resize-row]").forEach((el) => el.removeAttribute("data-resize-row"));
-  if (!activeTableResize && editor.style.cursor) {
-    editor.style.cursor = "";
+  if (!activeTableResize) {
+    editor.querySelectorAll("[data-resize-cursor]").forEach((el) => el.removeAttribute("data-resize-cursor"));
+    if (editor.style.cursor) editor.style.cursor = "";
   }
 }
 
@@ -1626,8 +1634,21 @@ export function handleTableMouseMove(e: React.MouseEvent<HTMLElement>, editor: H
   clearTableResizeHover(editor);
   if (!hit) return;
   editor.style.cursor = hit.cursor;
-  if (hit.colCell) hit.colCell.setAttribute("data-resize-col", "1");
-  if (hit.rowCell) hit.rowCell.setAttribute("data-resize-row", "1");
+  hit.table.setAttribute("data-resize-cursor", hit.cursorKind);
+  if (hit.colIdx !== null) {
+    for (const tr of Array.from(hit.table.querySelectorAll("tr"))) {
+      const c = tr.children[hit.colIdx] as HTMLElement | undefined;
+      if (c) c.setAttribute("data-resize-col", "1");
+    }
+  }
+  if (hit.rowIdx !== null) {
+    const row = hit.table.querySelectorAll("tr")[hit.rowIdx];
+    if (row) {
+      for (const c of Array.from(row.children)) {
+        (c as HTMLElement).setAttribute("data-resize-row", "1");
+      }
+    }
+  }
 }
 
 /** Starts free drag-resizing when mousedown lands on a table column/row edge. Returns true if handled. */
@@ -1645,7 +1666,8 @@ export function handleTableMouseDown(
   e.preventDefault();
   e.stopPropagation();
 
-  const { table, colIdx, rowIdx, cursor } = hit;
+  const { table, colIdx, rowIdx, cursorKind, cursor } = hit;
+  table.setAttribute("data-resize-cursor", cursorKind);
   const zoomHost = table.closest("[style*='zoom']") as HTMLElement | null;
   const zoomPct = zoomHost ? parseFloat(zoomHost.style.zoom) : NaN;
   const zoomScale = Number.isFinite(zoomPct) && zoomPct > 0 ? zoomPct / 100 : 1;
@@ -1908,6 +1930,14 @@ export function handleRichEditorKeyDown(
   // ---- inside a code block: plain-text island with clean exit mechanics ----
   const preBlock = startEl?.closest("pre.md-pre") as HTMLElement | null;
   if (preBlock && editor.contains(preBlock)) {
+    if (e.key === "Tab" && !e.altKey && !e.ctrlKey && !e.metaKey) {
+      e.preventDefault();
+      if (indentPreBlock(preBlock, range, e.shiftKey)) {
+        scrollCaretIntoView(editor);
+        onInput();
+      }
+      return true;
+    }
     if (isShortcut) {
       e.preventDefault();
       return true;
@@ -1951,7 +1981,7 @@ export function handleRichEditorKeyDown(
     return true;
   }
 
-  // ---- list nesting and moving lines: work on every selected line ----
+  // ---- list nesting, text indentation, and moving lines: work on every selected line ----
   if (e.key === "Tab" && !e.altKey && !e.ctrlKey && !e.metaKey) {
     const lines = selectedBlocks(editor, range);
     if (lines.some((line) => isListBlock(line))) {
@@ -1960,6 +1990,12 @@ export function handleRichEditorKeyDown(
       if (e.shiftKey ? outdentLines(editor, lines) : indentLines(editor, lines)) onInput();
       return true;
     }
+    e.preventDefault();
+    if (e.shiftKey ? outdentTextLines(editor, range, lines) : indentTextLines(editor, range, lines)) {
+      scrollCaretIntoView(editor);
+      onInput();
+    }
+    return true;
   }
   if (e.altKey && !e.ctrlKey && !e.metaKey && !e.shiftKey && (e.key === "ArrowUp" || e.key === "ArrowDown")) {
     e.preventDefault();
@@ -2592,6 +2628,231 @@ function outdentLines(editor: HTMLElement, lines: HTMLElement[]): boolean {
   if (moves.length === 0) return false;
   for (const { blocks, delta } of moves) blocks.forEach((b) => shiftIndent(b, delta));
   renumberOrderedLists(editor);
+  return true;
+}
+
+function pointAtOffset(block: HTMLElement, offset: number): [Node, number] {
+  let remaining = Math.max(0, offset);
+  const nodes = textNodesOf(block);
+  for (const node of nodes) {
+    if (remaining <= node.data.length) return [node, remaining];
+    remaining -= node.data.length;
+  }
+  if (nodes.length > 0) {
+    const last = nodes[nodes.length - 1];
+    return [last, last.data.length];
+  }
+  return [block, 0];
+}
+
+function setSelectionByOffsets(startBlock: HTMLElement, startOff: number, endBlock: HTMLElement, endOff: number): void {
+  const sel = window.getSelection();
+  if (!sel) return;
+  const [sNode, sPos] = pointAtOffset(startBlock, startOff);
+  const [eNode, ePos] = pointAtOffset(endBlock, endOff);
+  const r = document.createRange();
+  r.setStart(sNode, sPos);
+  r.setEnd(eNode, ePos);
+  sel.removeAllRanges();
+  sel.addRange(r);
+}
+
+function outdentOneTextBlock(block: HTMLElement): number {
+  if (block.tagName !== "DIV" || isSpecialBlock(block)) return 0;
+  let removed = 0;
+  for (const node of textNodesOf(block)) {
+    if (!node.data) continue;
+    if (removed === 0 && node.data[0] === "\t") {
+      node.deleteData(0, 1);
+      removed = 1;
+      break;
+    }
+    let count = 0;
+    while (count < node.data.length && removed + count < INDENT_STEP.length && (node.data[count] === " " || node.data[count] === "\u00a0")) {
+      count++;
+    }
+    if (count > 0) {
+      node.deleteData(0, count);
+      removed += count;
+    }
+    if (node.data.length > 0 || removed >= INDENT_STEP.length) break;
+  }
+  if ((block.textContent || "") === "" && !block.querySelector("br")) {
+    block.appendChild(document.createElement("br"));
+  }
+  return removed;
+}
+
+function indentOneTextBlock(block: HTMLElement): boolean {
+  if (block.tagName !== "DIV" || isSpecialBlock(block)) return false;
+  if (block.childNodes.length === 1 && block.firstChild?.nodeName === "BR") {
+    block.insertBefore(document.createTextNode(INDENT_STEP), block.firstChild);
+  } else if (block.firstChild?.nodeType === Node.TEXT_NODE) {
+    (block.firstChild as Text).insertData(0, INDENT_STEP);
+  } else {
+    block.prepend(document.createTextNode(INDENT_STEP));
+  }
+  return true;
+}
+
+/** Tab on non-list lines: indents multiple selected blocks at line starts, or inserts 4 spaces at the caret. */
+function indentTextLines(_editor: HTMLElement, range: Range, lines: HTMLElement[]): boolean {
+  const editableLines = lines.filter((b) => b.tagName === "DIV" && !isSpecialBlock(b));
+  if (editableLines.length === 0) return false;
+
+  if (editableLines.length > 1) {
+    const startRange = range.cloneRange();
+    startRange.collapse(true);
+    const endRange = range.cloneRange();
+    endRange.collapse(false);
+    const startOff = caretOffsetIn(editableLines[0], startRange);
+    const endOff = caretOffsetIn(editableLines[editableLines.length - 1], endRange);
+    editableLines.forEach((b) => {
+      indentOneTextBlock(b);
+    });
+    setSelectionByOffsets(
+      editableLines[0],
+      startOff + INDENT_STEP.length,
+      editableLines[editableLines.length - 1],
+      endOff + INDENT_STEP.length,
+    );
+    return true;
+  }
+
+  const line = editableLines[0];
+  if (!range.collapsed) range.deleteContents();
+  const sel = window.getSelection();
+  if (range.startContainer.nodeType === Node.TEXT_NODE) {
+    const tn = range.startContainer as Text;
+    const off = range.startOffset;
+    tn.insertData(off, INDENT_STEP);
+    if (sel) {
+      const r = document.createRange();
+      r.setStart(tn, off + INDENT_STEP.length);
+      r.collapse(true);
+      sel.removeAllRanges();
+      sel.addRange(r);
+    }
+    return true;
+  }
+  const tn = document.createTextNode(INDENT_STEP);
+  if (line.childNodes.length === 1 && line.firstChild?.nodeName === "BR") {
+    line.insertBefore(tn, line.firstChild);
+  } else {
+    range.insertNode(tn);
+  }
+  if (sel) {
+    const r = document.createRange();
+    r.setStart(tn, INDENT_STEP.length);
+    r.collapse(true);
+    sel.removeAllRanges();
+    sel.addRange(r);
+  }
+  return true;
+}
+
+/** Shift+Tab on non-list lines: strips up to one indent step of leading whitespace per selected line. */
+function outdentTextLines(_editor: HTMLElement, range: Range, lines: HTMLElement[]): boolean {
+  const editableLines = lines.filter((b) => b.tagName === "DIV" && !isSpecialBlock(b));
+  if (editableLines.length === 0) return false;
+
+  const startRange = range.cloneRange();
+  startRange.collapse(true);
+  const endRange = range.cloneRange();
+  endRange.collapse(false);
+  const startOff = caretOffsetIn(editableLines[0], startRange);
+  const endOff = caretOffsetIn(editableLines[editableLines.length - 1], endRange);
+
+  let firstRemoved = 0;
+  let lastRemoved = 0;
+  let anyChanged = false;
+  editableLines.forEach((b, idx) => {
+    const removed = outdentOneTextBlock(b);
+    if (removed > 0) anyChanged = true;
+    if (idx === 0) firstRemoved = removed;
+    if (idx === editableLines.length - 1) lastRemoved = removed;
+  });
+  if (!anyChanged) return false;
+
+  setSelectionByOffsets(
+    editableLines[0],
+    Math.max(0, startOff - firstRemoved),
+    editableLines[editableLines.length - 1],
+    Math.max(0, endOff - lastRemoved),
+  );
+  return true;
+}
+
+/** Tab / Shift+Tab inside a fenced code block (`pre.md-pre`). */
+function indentPreBlock(pre: HTMLElement, range: Range, outdent: boolean): boolean {
+  const startRange = range.cloneRange();
+  startRange.collapse(true);
+  const endRange = range.cloneRange();
+  endRange.collapse(false);
+  const start = caretOffsetIn(pre, startRange);
+  const end = caretOffsetIn(pre, endRange);
+  const text = (pre.textContent ?? "").replace(/\u00a0/g, " ");
+  const sel = window.getSelection();
+
+  if (!outdent && !text.slice(start, end).includes("\n")) {
+    const next = text.slice(0, start) + INDENT_STEP + text.slice(end);
+    pre.textContent = next;
+    const pos = start + INDENT_STEP.length;
+    if (sel && pre.firstChild) {
+      const r = document.createRange();
+      r.setStart(pre.firstChild, pos);
+      r.collapse(true);
+      sel.removeAllRanges();
+      sel.addRange(r);
+    }
+    return true;
+  }
+
+  const lineStart = start === 0 ? 0 : text.lastIndexOf("\n", start - 1) + 1;
+  const afterEnd = text.indexOf("\n", end);
+  const lineEnd = afterEnd === -1 ? text.length : afterEnd;
+  const chunk = text.slice(lineStart, lineEnd);
+  const split = chunk.split("\n");
+
+  let firstDelta = 0;
+  let totalDelta = 0;
+  const transformed = split.map((line, idx) => {
+    if (!outdent) {
+      if (idx === 0) firstDelta = INDENT_STEP.length;
+      totalDelta += INDENT_STEP.length;
+      return INDENT_STEP + line;
+    }
+    const stripped = line.replace(/^(?:\t| {1,4})/, "");
+    const removed = line.length - stripped.length;
+    if (idx === 0) firstDelta = -removed;
+    totalDelta -= removed;
+    return stripped;
+  });
+
+  if (totalDelta === 0) return false;
+
+  const next = text.slice(0, lineStart) + transformed.join("\n") + text.slice(lineEnd);
+  if (next === "") {
+    pre.textContent = "";
+    pre.appendChild(document.createElement("br"));
+    placeCaretStart(pre);
+    return true;
+  }
+
+  pre.textContent = next;
+  const newStart = start === end
+    ? Math.max(lineStart, Math.min(next.length, start + firstDelta))
+    : Math.max(lineStart, start + (start > lineStart ? firstDelta : 0));
+  const newEnd = start === end
+    ? newStart
+    : Math.max(newStart, Math.min(next.length, end + totalDelta));
+  if (sel && pre.firstChild) {
+    const r = document.createRange();
+    r.setStart(pre.firstChild, newStart);
+    r.setEnd(pre.firstChild, newEnd);
+    sel.removeAllRanges();
+    sel.addRange(r);
+  }
   return true;
 }
 

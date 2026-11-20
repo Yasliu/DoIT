@@ -106,6 +106,58 @@ export function RawEditor({ content, onChange, className = "", minHeight = 240, 
         requestAnimationFrame(() => scrollTextareaCaretIntoView(target));
       }}
       onKeyDown={(e) => {
+        if (e.key === "Tab" && !e.altKey && !e.ctrlKey && !e.metaKey) {
+          e.preventDefault();
+          const el = ref.current;
+          if (!el) return;
+          const start = el.selectionStart ?? 0;
+          const end = el.selectionEnd ?? start;
+          const step = "    ";
+
+          if (!e.shiftKey && !text.slice(start, end).includes("\n")) {
+            const next = text.slice(0, start) + step + text.slice(end);
+            const nextPos = start + step.length;
+            setText(next);
+            onChange(markdownToContent(next, content, () => uid("line")));
+            requestAnimationFrame(() => {
+              el.setSelectionRange(nextPos, nextPos);
+              scrollTextareaCaretIntoView(el);
+            });
+            return;
+          }
+
+          const lineStart = start === 0 ? 0 : text.lastIndexOf("\n", start - 1) + 1;
+          const afterEnd = text.indexOf("\n", end);
+          const lineEnd = afterEnd === -1 ? text.length : afterEnd;
+          const split = text.slice(lineStart, lineEnd).split("\n");
+          let firstDelta = 0;
+          let totalDelta = 0;
+          const transformed = split.map((line, idx) => {
+            if (!e.shiftKey) {
+              if (idx === 0) firstDelta = step.length;
+              totalDelta += step.length;
+              return step + line;
+            }
+            const stripped = line.replace(/^(?:\t| {1,4})/, "");
+            const removed = line.length - stripped.length;
+            if (idx === 0) firstDelta = -removed;
+            totalDelta -= removed;
+            return stripped;
+          });
+          if (totalDelta === 0) return;
+          const next = text.slice(0, lineStart) + transformed.join("\n") + text.slice(lineEnd);
+          const newStart = start === end
+            ? Math.max(lineStart, Math.min(next.length, start + firstDelta))
+            : Math.max(lineStart, start + (start > lineStart ? firstDelta : 0));
+          const newEnd = start === end ? newStart : Math.max(newStart, Math.min(next.length, end + totalDelta));
+          setText(next);
+          onChange(markdownToContent(next, content, () => uid("line")));
+          requestAnimationFrame(() => {
+            el.setSelectionRange(newStart, newEnd);
+            scrollTextareaCaretIntoView(el);
+          });
+          return;
+        }
         if (e.key === "ArrowUp" && !e.altKey && !e.ctrlKey && !e.metaKey && !e.shiftKey && ref.current && ref.current.selectionStart === 0 && ref.current.selectionEnd === 0) {
           if (onArrowUpAtStart) {
             e.preventDefault();
