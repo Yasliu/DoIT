@@ -89,6 +89,31 @@ pub fn restart_app(app: AppHandle) {
     window::restart(&app);
 }
 
+#[derive(Clone, serde::Serialize)]
+pub struct UpdateProgress {
+    received: u64,
+    total: Option<u64>,
+}
+
+/// Downloads, verifies and installs the update the page's check found (`rid`, the plugin's handle
+/// for it), so what installs is what the dialog offered. The error is a sentence for the dialog.
+#[tauri::command]
+pub async fn install_update(
+    webview: tauri::Webview,
+    rid: tauri::ResourceId,
+    on_progress: tauri::ipc::Channel<UpdateProgress>,
+) -> Result<(), String> {
+    use tauri::Manager;
+    let update = webview
+        .resources_table()
+        .get::<tauri_plugin_updater::Update>(rid)
+        .map_err(|_| "This update is no longer available. Check for updates again.".to_string())?;
+    crate::updates::install(&update, |received, total| {
+        let _ = on_progress.send(UpdateProgress { received, total });
+    })
+    .await
+}
+
 /// The page saved everything it held after a `flush-pending` request.
 #[tauri::command]
 pub fn flush_done(window: WebviewWindow) {

@@ -3,6 +3,7 @@ pub mod commands;
 pub mod models;
 pub mod platform;
 pub mod storage;
+pub mod updates;
 pub mod window;
 
 use actions::Action;
@@ -167,6 +168,7 @@ pub fn run() {
             commands::window::save_tray_position,
             commands::window::ensure_dock_topmost,
             commands::window::restart_app,
+            commands::window::install_update,
             commands::window::quit_app,
             commands::window::flush_done,
             commands::window::show_tray_context_menu

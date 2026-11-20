@@ -39,6 +39,7 @@
 //!   itself (so the built-in updater stays out of the way).
 //! - `global_shortcuts_work()`: whether a shortcut DoIT registers reaches it while another app has
 //!   focus (not under Wayland, where the desktop's own shortcut settings run `--quick-note`).
+//! - `install_rpm(bytes)`: install a verified rpm update (Linux; one password prompt).
 //! - `documents_dir()`: the user's Documents folder (default parent of the notes folder).
 //! - `system_fonts()`: installed font family names, sorted and deduplicated.
 
@@ -84,7 +85,7 @@ pub type PillInputHandler = Box<dyn Fn(PillInput) + Send + Sync>;
 
 pub use os::{
     attach_pill, present_pill, ensure_always_on_top,
-    config_dir, dock_drag_by_app, documents_dir, focus_window, global_shortcuts_work, has_tray, init, is_store_package, keep_wm_from_moving, monitor_of_window, prepare_webview, release_webview,
+    config_dir, dock_drag_by_app, documents_dir, focus_window, global_shortcuts_work, has_tray, init, install_rpm, is_store_package, keep_wm_from_moving, monitor_of_window, prepare_webview, release_webview,
     make_visible, map_invisibly, set_webview_memory_level, set_window_bounds,
     system_fonts, trim_memory, work_area,
     BROWSER_ARGS, DOCK_WINDOW_RESIZABLE, TRAY_SKIPS_TASKBAR,
