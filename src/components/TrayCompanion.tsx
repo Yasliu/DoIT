@@ -279,10 +279,11 @@ export function TrayCompanion() {
 
     getCurrentWindow()
       .listen<boolean>("set-expanded", (event) => {
-        if (!event.payload) return;
         // A click that lands while the page reports in waits until it knows its shape.
         void startedRef.current?.then(() => {
-          if (modeRef.current === "pill") void expandFromPill();
+          // false: the quick-note shortcut, pressed while the panel is in front, puts it away.
+          if (!event.payload) closeTray();
+          else if (modeRef.current === "pill") void expandFromPill();
           else openTray();
         });
       })
@@ -311,7 +312,7 @@ export function TrayCompanion() {
       if (unlistenFn) unlistenFn();
       if (unlistenNote) unlistenNote();
     };
-  }, [expandFromPill, openTray, start]);
+  }, [closeTray, expandFromPill, openTray, start]);
   // Load theme mode for tray window
   useEffect(() => {
     void tauriApi.getSettings().then((s) => {

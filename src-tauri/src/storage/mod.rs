@@ -281,6 +281,12 @@ impl StorageManager {
         Ok(lock.clone())
     }
 
+    /// The note edited most recently.
+    pub fn latest_note_id(&self) -> Option<String> {
+        let notes = self.notes.read().ok()?;
+        notes.iter().max_by_key(|note| note.last_edited).map(|note| note.id.clone())
+    }
+
     /// Runs `change` on the shelves and saves them if it changed anything.
     fn change_shelves<R>(&self, change: impl FnOnce(&mut shelves::Shelves) -> Result<R, String>) -> Result<R, String> {
         let (result, changed) = {

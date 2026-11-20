@@ -467,6 +467,13 @@ pub fn is_store_package() -> bool {
     false
 }
 
+/// A Wayland session hands keys only to the focused window, XWayland's included, so a shortcut
+/// pressed in another app never reaches DoIT. There the desktop's own shortcut settings run
+/// `doit --quick-note` instead.
+pub fn global_shortcuts_work() -> bool {
+    std::env::var_os("WAYLAND_DISPLAY").is_none()
+}
+
 /// Font families from fontconfig, the same source WebKitGTK resolves CSS font names against.
 pub fn system_fonts() -> Vec<String> {
     let Ok(output) = std::process::Command::new("fc-list").args(["--format", "%{family[0]}\\n", ":"]).output() else {

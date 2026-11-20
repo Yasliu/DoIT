@@ -111,6 +111,8 @@ export interface AppSettings {
   hotkey_superscript?: string;
   theme_mode?: "glass" | "monochrome";
   dock_on_close?: boolean;
+  /** Keys that open the dock panel on the latest note from any app; empty is off. Set via `setQuickNoteShortcut`. */
+  quick_note_shortcut?: string;
   last_seen_version?: string;
   /** Modern design only: colour theme and light/dark choice (see src/platform/modern/theme.ts). */
   palette?: string;
@@ -450,6 +452,21 @@ export const tauriApi = {
     } catch {
       return false;
     }
+  },
+
+  /** Whether a shortcut DoIT sets works from other apps (not under Wayland). */
+  async quickNoteShortcutSupported(): Promise<boolean> {
+    if (!isTauri()) return false;
+    try {
+      return await invoke<boolean>("quick_note_shortcut_supported");
+    } catch {
+      return false;
+    }
+  },
+
+  /** Takes `keys` as the quick-note shortcut ("" turns it off). Rejects with a sentence to show when the keys can't be used. */
+  async setQuickNoteShortcut(keys: string): Promise<AppSettings> {
+    return await invoke<AppSettings>("set_quick_note_shortcut", { keys });
   },
 
   async setPillLook(look: PillLook): Promise<void> {

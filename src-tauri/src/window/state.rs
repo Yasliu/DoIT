@@ -84,11 +84,12 @@ impl Engine {
         }
     }
 
-    /// The pill was clicked while the dock's page `page_exists`. If that page has not mounted yet,
-    /// records that it must open as the panel. Deciding and recording share one lock with
-    /// `dock_page_mounted`, so a page mounting meanwhile is either told to expand or opens as the
-    /// panel. Before, it could get neither, and the pill ignored every click after that.
-    pub fn click_pill(&mut self, page_exists: bool, anchor: Option<PillAnchor>) -> PillClick {
+    /// The pill was clicked (or the quick-note shortcut pressed) while the dock's page `page_exists`.
+    /// If that page has not mounted yet, records that it must open as the panel, on `note`.
+    /// Deciding and recording share one lock with `dock_page_mounted`, so a page mounting meanwhile
+    /// is either told to expand or opens as the panel. Before, it could get neither, and the pill
+    /// ignored every click after that.
+    pub fn click_pill(&mut self, page_exists: bool, anchor: Option<PillAnchor>, note: Option<String>) -> PillClick {
         if self.mode == Mode::Canvas {
             return PillClick::Ignore;
         }
@@ -100,6 +101,7 @@ impl Engine {
         self.mode = Mode::Dock(DockShape::Panel);
         self.dock_anchor = anchor;
         self.dock_screen = None;
+        self.dock_note = note;
         self.dock_generation += 1;
         if page_exists { PillClick::AwaitPage } else { PillClick::BuildPage }
     }
@@ -132,18 +134,19 @@ mod tests {
     #[test]
     fn a_click_while_the_page_mounts_opens_the_panel_whichever_comes_first() {
         let mut click_first = pill_with_loading_page();
-        assert_eq!(click_first.click_pill(true, None), PillClick::AwaitPage);
-        assert!(click_first.dock_page_mounted().is_some(), "the page shows itself as the panel");
+        assert_eq!(click_first.click_pill(true, None, Some("latest".into())), PillClick::AwaitPage);
+        let opening = click_first.dock_page_mounted().expect("the page shows itself as the panel");
+        assert_eq!(opening.note.as_deref(), Some("latest"), "on the note the shortcut asked for");
 
         let mut page_first = pill_with_loading_page();
         assert!(page_first.dock_page_mounted().is_none(), "the page stays hidden behind the pill");
-        assert_eq!(page_first.click_pill(true, None), PillClick::Expand);
+        assert_eq!(page_first.click_pill(true, None, None), PillClick::Expand);
     }
 
     #[test]
     fn the_pill_still_opens_the_panel_after_a_click_whose_panel_never_showed() {
         // An earlier click expected the panel, but its page had already mounted behind the pill.
         let mut engine = Engine { mode: Mode::Dock(DockShape::Panel), dock_page_ready: true, ..Engine::new() };
-        assert_eq!(engine.click_pill(true, None), PillClick::Expand);
+        assert_eq!(engine.click_pill(true, None, None), PillClick::Expand);
     }
 }

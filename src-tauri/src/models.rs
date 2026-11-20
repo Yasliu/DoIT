@@ -142,6 +142,9 @@ pub struct AppSettings {
     pub is_maximized: bool,
     #[serde(default = "default_dock_on_close")]
     pub dock_on_close: bool,
+    /// Keys that open the dock panel on the latest note from any app ("Ctrl+Alt+N"); empty is off.
+    #[serde(default)]
+    pub quick_note_shortcut: String,
     #[serde(default)]
     pub last_seen_version: Option<String>,
     #[serde(default)]
@@ -245,6 +248,7 @@ impl Default for AppSettings {
             theme_mode: "glass".to_string(),
             is_maximized: false,
             dock_on_close: true,
+            quick_note_shortcut: String::new(),
             last_seen_version: None,
             category_icons: Some(HashMap::new()),
             palette: None,

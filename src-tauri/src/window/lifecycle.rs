@@ -263,12 +263,16 @@ fn prepare_panel(app: &AppHandle) {
     }
 }
 
-/// The pill was clicked: open the panel, reusing a kept webview or building one. The panel grows out
-/// of the pill.
+/// The pill was clicked: open the panel, reusing a kept webview or building one.
 fn open_panel_from_pill(app: &AppHandle) {
+    open_panel_on(app, None);
+}
+
+/// Opens the panel out of the pill, on `note` if given. The panel grows out of the pill.
+fn open_panel_on(app: &AppHandle, note: Option<String>) {
     let anchor = pill::window(app).and_then(|w| Some(PillAnchor { rect: rect_of(&w)?, screen: screen_of(&w)? }));
     let page = app.get_webview_window(DOCK);
-    let click = engine().click_pill(page.is_some(), anchor);
+    let click = engine().click_pill(page.is_some(), anchor, note.clone());
     if click == PillClick::Ignore {
         return;
     }
@@ -278,6 +282,9 @@ fn open_panel_from_pill(app: &AppHandle) {
         PillClick::Expand => {
             if let Some(dock) = page {
                 let _ = dock.emit("set-expanded", true);
+                if let Some(id) = note {
+                    let _ = dock.emit("open-note", id);
+                }
             }
         }
         PillClick::BuildPage => {
@@ -285,7 +292,7 @@ fn open_panel_from_pill(app: &AppHandle) {
                 engine().mode = Mode::Dock(DockShape::Pill);
                 // The hover may have been building the page at the same moment: hand the click to it.
                 if app.get_webview_window(DOCK).is_some() {
-                    open_panel_from_pill(app);
+                    open_panel_on(app, note);
                 }
             }
         }
@@ -386,6 +393,39 @@ fn open_pill_menu(app: &AppHandle, window: &Window) {
             let _ = window.popup_menu(&menu);
         }
     });
+}
+
+/// The quick-note shortcut: the dock panel on `note`, from wherever DoIT is. Pressed while the panel
+/// is the window in front, it puts the panel back into the pill.
+pub fn quick_note(app: &AppHandle, note: Option<String>) {
+    let mode = engine().mode;
+    match mode {
+        Mode::Canvas => {
+            let _ = enter_dock(app, DockOpen { panel: true, note });
+        }
+        Mode::Dock(DockShape::Pill) => open_panel_on(app, note),
+        Mode::Dock(DockShape::Panel) => {
+            let Some(dock) = app.get_webview_window(DOCK) else { return };
+            {
+                let mut state = engine();
+                if !state.dock_page_ready {
+                    // Still loading: it opens on this note when it mounts.
+                    state.dock_note = note;
+                    return;
+                }
+            }
+            let panel = plain(&dock);
+            if panel.is_visible().unwrap_or(false) && panel.is_focused().unwrap_or(false) {
+                let _ = dock.emit("set-expanded", false);
+                return;
+            }
+            focus(&panel);
+            platform::ensure_always_on_top(&panel);
+            if let Some(id) = note {
+                let _ = dock.emit("open-note", id);
+            }
+        }
+    }
 }
 
 pub fn enter_canvas(app: &AppHandle) {

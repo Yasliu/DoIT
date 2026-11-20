@@ -68,7 +68,7 @@ Uninstalling DoIT leaves both in place.
 ## Good to know
 
 - **No tray icon on GNOME:** stock GNOME has no tray, so DoIT stays in your dock instead. Right-click it for **Open Canvas**, **Switch to Docking Mode** and **Quit DoIT**. On desktops with a tray (KDE, or GNOME with the AppIndicator extension), DoIT hides to the tray as on Windows.
-- **A shortcut from anywhere:** bind `doit --toggle` to a key in your system settings (GNOME: Settings → Keyboard → Custom Shortcuts) to switch between the canvas and the docking pill. `--canvas`, `--dock` and `--quit` work too. With the AppImage, use the AppImage's full path instead of `doit`.
+- **A shortcut from anywhere:** bind `doit --toggle` to a key in your system settings (GNOME: Settings → Keyboard → Custom Shortcuts) to switch between the canvas and the docking pill. `--canvas`, `--dock` and `--quit` work too, and `--quick-note` opens the dock panel on your latest note (press it again to put it away). On X11 you can set that quick-note shortcut in DoIT's own Settings instead; Wayland desktops only let apps hear keys while they are in front, so there use your system settings. With the AppImage, use the AppImage's full path instead of `doit`.
 - **Look:** pick one of seven themes, light, dark or following your system, in Settings → Appearance. **Glass** lets the desktop show through; **Boxy** squares the corners.
 - **Wayland:** DoIT runs through XWayland so the docking pill can place itself and stay on top. With fractional scaling this can look slightly soft. Starting it with `DOIT_NATIVE_WAYLAND=1 doit` makes it sharp, but GNOME then decides where the pill goes and doesn't keep it on top.
 

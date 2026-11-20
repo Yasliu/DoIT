@@ -535,6 +535,10 @@ pub fn is_store_package() -> bool {
     result != APPMODEL_ERROR_NO_PACKAGE
 }
 
+pub fn global_shortcuts_work() -> bool {
+    true
+}
+
 pub fn documents_dir() -> Option<PathBuf> {
     std::env::var_os("USERPROFILE")
         .or_else(|| std::env::var_os("HOME"))

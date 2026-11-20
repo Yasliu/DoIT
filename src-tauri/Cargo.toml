@@ -29,6 +29,7 @@ pulldown-cmark = { version = "0.12", default-features = false }
 tokio = { version = "1", features = ["rt-multi-thread"] }
 tiny-skia = { version = "0.11", default-features = false, features = ["std", "simd"] }
 ttf-parser = { version = "0.25", default-features = false, features = ["std"] }
+tauri-plugin-global-shortcut = "2"
 
 
 [target.'cfg(windows)'.dependencies]

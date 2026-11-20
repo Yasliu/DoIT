@@ -46,6 +46,9 @@ const TYPING_SHORTCUTS = [
   { label: "Subscript, superscript", keys: "H~2~O, x^2^" },
   { label: "Footnote", keys: "[^1] and [^1]:" },
   { label: "Emoji", keys: ":name:" },
+  { label: "Nest a list line, or bring it back", keys: "Tab, Shift+Tab" },
+  { label: "Move a line with its nested lines", keys: "Alt+↑, Alt+↓" },
+  { label: "Link selected text", keys: "Paste a web address" },
   { label: "Next table cell", keys: "Tab" },
   { label: "Leave a table", keys: "Enter on an empty row" },
 ];
@@ -140,12 +143,14 @@ export function ModernSettings({ onBack, onStoragePathChanged }: ModernSettingsP
   const [scan, setScan] = useState<{ busy: boolean; message?: string; failed?: boolean }>({ busy: false });
   const [typingOpen, setTypingOpen] = useState(false);
   const [resolvedDark, setResolvedDark] = useState(document.documentElement.dataset.appearance === "dark");
+  const [quickNote, setQuickNote] = useState<{ supported: boolean | null; error?: string }>({ supported: null });
 
   useEffect(() => {
     void tauriApi.getSettings().then((res) => {
       setSettings(res);
       setPathInput(res.storage_path);
     });
+    void tauriApi.quickNoteShortcutSupported().then((supported) => setQuickNote({ supported }));
     void import("@tauri-apps/api/app")
       .then((m) => m.getVersion())
       .then(setVersion)
@@ -186,6 +191,16 @@ export function ModernSettings({ onBack, onStoragePathChanged }: ModernSettingsP
       onStoragePathChanged();
     } catch (err: any) {
       setScan({ busy: false, failed: true, message: typeof err === "string" ? err : err?.message || "The folder could not be read." });
+    }
+  };
+
+  /** Saved only once the OS accepts the keys; otherwise the row says why and the old keys stay. */
+  const changeQuickNote = async (keys: string) => {
+    try {
+      setSettings(await tauriApi.setQuickNoteShortcut(keys));
+      setQuickNote({ supported: true });
+    } catch (err) {
+      setQuickNote({ supported: true, error: typeof err === "string" ? err : "Those keys can't be used. Try different ones." });
     }
   };
 
@@ -329,6 +344,24 @@ export function ModernSettings({ onBack, onStoragePathChanged }: ModernSettingsP
         </Section>
 
         <Section title="App shortcuts">
+          {quickNote.supported === null ? null : quickNote.supported ? (
+            <Row
+              label="Quick note from anywhere"
+              hint={quickNote.error ?? "Opens the dock on your latest note, even from another app. Press again to put it away."}
+            >
+              {settings.quick_note_shortcut && (
+                <button type="button" className="ghost !h-7 text-[12px]" onClick={() => void changeQuickNote("")}>
+                  Turn off
+                </button>
+              )}
+              <ShortcutField value={settings.quick_note_shortcut ?? ""} def="" onChange={(keys) => void changeQuickNote(keys)} />
+            </Row>
+          ) : (
+            <Row
+              label="Quick note from anywhere"
+              hint="Your desktop doesn't let apps listen for keys while another app is in front. In your system's keyboard settings, add a custom shortcut that runs: doit --quick-note"
+            />
+          )}
           {APP_SHORTCUTS.map((row) => (
             <Row key={row.label} label={row.label}>
               <Keys keys={row.keys} />

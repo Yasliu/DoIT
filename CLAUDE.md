@@ -27,8 +27,8 @@ React + TypeScript frontend, Rust backend. Shipped for Windows; a Linux port is 
     the transitions, `pill/` draws the pill natively (no webview runs once it has been alone for
     20 s), `drag` keeps a dragged dock window on screen, `flush` waits for pages to save before one
     is retired or the app quits.
-  - `actions/`: mode switches from outside the UI: tray click, or a second launch with
-    `--canvas`, `--dock`, `--toggle` or `--quit`.
+  - `actions/`: mode switches from outside the UI: tray click, the quick-note global shortcut
+    (`shortcut`), or a second launch with `--canvas`, `--dock`, `--toggle`, `--quick-note` or `--quit`.
   - `platform/`: the only place OS-specific code lives. `mod.rs` documents the interface;
     `windows.rs` (Win32, WebView2, registry) and `unix.rs` (Linux/macOS) implement it.
 
