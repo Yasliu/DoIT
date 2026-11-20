@@ -522,6 +522,19 @@ pub fn present_pill(window: &tauri::Window, frame: crate::platform::PillFrame) {
     pill::present(window, frame);
 }
 
+pub fn is_store_package() -> bool {
+    #[link(name = "kernel32")]
+    unsafe extern "system" {
+        fn GetCurrentPackageFullName(package_full_name_length: *mut u32, package_full_name: *mut u16) -> i32;
+    }
+    const APPMODEL_ERROR_NO_PACKAGE: i32 = 15700;
+    let mut length: u32 = 0;
+    // Any other answer (ERROR_INSUFFICIENT_BUFFER, ERROR_SUCCESS) means the process runs with an
+    // MSIX/AppX package identity, as Microsoft Store installs do.
+    let result = unsafe { GetCurrentPackageFullName(&mut length, std::ptr::null_mut()) };
+    result != APPMODEL_ERROR_NO_PACKAGE
+}
+
 pub fn documents_dir() -> Option<PathBuf> {
     std::env::var_os("USERPROFILE")
         .or_else(|| std::env::var_os("HOME"))

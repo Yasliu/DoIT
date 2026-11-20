@@ -462,6 +462,11 @@ pub fn present_pill(window: &tauri::Window, frame: crate::platform::PillFrame) {
     let _ = (window, frame);
 }
 
+/// Microsoft Store packages exist only on Windows.
+pub fn is_store_package() -> bool {
+    false
+}
+
 /// Font families from fontconfig, the same source WebKitGTK resolves CSS font names against.
 pub fn system_fonts() -> Vec<String> {
     let Ok(output) = std::process::Command::new("fc-list").args(["--format", "%{family[0]}\\n", ":"]).output() else {

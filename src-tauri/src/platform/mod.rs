@@ -35,6 +35,8 @@
 //! The webview items are used only by `window::webview`, which calls them in the right order.
 //! - `attach_pill(window, on_input)`: turn a plain window into the native dock pill's surface and
 //!   report pointer input on it. `present_pill(window, frame)`: show a rendered frame on it.
+//! - `is_store_package()`: whether this install came from the Microsoft Store, which updates it
+//!   itself (so the built-in updater stays out of the way).
 //! - `documents_dir()`: the user's Documents folder (default parent of the notes folder).
 //! - `system_fonts()`: installed font family names, sorted and deduplicated.
 
@@ -80,7 +82,7 @@ pub type PillInputHandler = Box<dyn Fn(PillInput) + Send + Sync>;
 
 pub use os::{
     attach_pill, present_pill, ensure_always_on_top,
-    config_dir, dock_drag_by_app, documents_dir, focus_window, has_tray, init, keep_wm_from_moving, monitor_of_window, prepare_webview, release_webview,
+    config_dir, dock_drag_by_app, documents_dir, focus_window, has_tray, init, is_store_package, keep_wm_from_moving, monitor_of_window, prepare_webview, release_webview,
     make_visible, map_invisibly, set_webview_memory_level, set_window_bounds,
     system_fonts, trim_memory, work_area,
     BROWSER_ARGS, DOCK_WINDOW_RESIZABLE, TRAY_SKIPS_TASKBAR,
