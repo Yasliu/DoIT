@@ -95,11 +95,20 @@ pub struct UpdateProgress {
     total: Option<u64>,
 }
 
-/// Downloads, verifies and installs the newest release; `false` if there is nothing newer. The
-/// error is a sentence for the update dialog.
+/// Downloads, verifies and installs the update the page's check found (`rid`, the plugin's handle
+/// for it), so what installs is what the dialog offered. The error is a sentence for the dialog.
 #[tauri::command]
-pub async fn install_update(app: AppHandle, on_progress: tauri::ipc::Channel<UpdateProgress>) -> Result<bool, String> {
-    crate::updates::install_latest(&app, |received, total| {
+pub async fn install_update(
+    webview: tauri::Webview,
+    rid: tauri::ResourceId,
+    on_progress: tauri::ipc::Channel<UpdateProgress>,
+) -> Result<(), String> {
+    use tauri::Manager;
+    let update = webview
+        .resources_table()
+        .get::<tauri_plugin_updater::Update>(rid)
+        .map_err(|_| "This update is no longer available. Check for updates again.".to_string())?;
+    crate::updates::install(&update, |received, total| {
         let _ = on_progress.send(UpdateProgress { received, total });
     })
     .await

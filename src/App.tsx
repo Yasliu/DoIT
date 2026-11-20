@@ -140,8 +140,7 @@ export default function App() {
           // Installed by the backend, which can install an rpm the way Fedora's RPM accepts it.
           onInstall: async (onProgress) => {
             onProgress(0);
-            await tauriApi.installUpdate(onProgress);
-            onProgress(100);
+            await tauriApi.installUpdate(update.rid, onProgress);
             await tauriApi.restartApp();
           },
           onDismiss: () => setAvailableUpdate(null),

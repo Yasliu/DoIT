@@ -5,17 +5,18 @@
 use std::time::Duration;
 
 use tauri::utils::{config::BundleType, platform::bundle_type};
-use tauri::AppHandle;
-use tauri_plugin_updater::UpdaterExt;
+use tauri_plugin_updater::Update;
 
-/// Downloads and installs the newest release, reporting bytes received so far and the total when
-/// known. `false` when there is nothing newer. On Windows a successful install exits the app; the
-/// caller restarts it everywhere else.
-pub async fn install_latest(app: &AppHandle, mut progress: impl FnMut(u64, Option<u64>)) -> Result<bool, String> {
-    let updater = app.updater_builder().timeout(Duration::from_secs(120)).build().map_err(|e| e.to_string())?;
-    let Some(update) = updater.check().await.map_err(|e| e.to_string())? else {
-        return Ok(false);
-    };
+/// The whole download, however slow the connection. The update found by the check carries that
+/// check's short timeout, which a slow download would outlast.
+const DOWNLOAD_TIMEOUT: Duration = Duration::from_secs(600);
+
+/// Downloads and installs `update`, reporting bytes received so far and the total when known. The
+/// last report (received == total) comes once the download is verified, before any password
+/// prompt. On Windows a successful install exits the app; the caller restarts it everywhere else.
+pub async fn install(update: &Update, mut progress: impl FnMut(u64, Option<u64>)) -> Result<(), String> {
+    let mut update = update.clone();
+    update.timeout = Some(DOWNLOAD_TIMEOUT);
     let mut received = 0u64;
     let bytes = update
         .download(
@@ -27,10 +28,15 @@ pub async fn install_latest(app: &AppHandle, mut progress: impl FnMut(u64, Optio
         )
         .await
         .map_err(|e| e.to_string())?;
-    if bundle_type() == Some(BundleType::Rpm) {
-        crate::platform::install_rpm(&bytes)?;
-    } else {
-        update.install(&bytes).map_err(|e| e.to_string())?;
-    }
-    Ok(true)
+    progress(bytes.len() as u64, Some(bytes.len() as u64));
+    // The install waits on a password prompt (or the Windows installer): keep it off the async workers.
+    tauri::async_runtime::spawn_blocking(move || {
+        if bundle_type() == Some(BundleType::Rpm) {
+            crate::platform::install_rpm(&bytes)
+        } else {
+            update.install(&bytes).map_err(|e| e.to_string())
+        }
+    })
+    .await
+    .map_err(|e| e.to_string())?
 }

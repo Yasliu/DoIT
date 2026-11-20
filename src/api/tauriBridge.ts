@@ -610,14 +610,14 @@ export const tauriApi = {
   },
 
   /**
-   * Downloads, verifies and installs the newest release, reporting percent done (null while the size
-   * is unknown). Rejects with a sentence to show. Restart afterwards; on Windows the installer does.
+   * Downloads, verifies and installs the update a `check()` found (its `rid`), reporting percent done
+   * (null while the size is unknown; 100 once verified, before any password prompt). Rejects with a
+   * sentence to show. Restart afterwards; on Windows the installer does.
    */
-  async installUpdate(onProgress: (percent: number | null) => void): Promise<void> {
+  async installUpdate(rid: number, onProgress: (percent: number | null) => void): Promise<void> {
     const channel = new Channel<{ received: number; total: number | null }>();
     channel.onmessage = ({ received, total }) => onProgress(total ? Math.min(100, Math.round((received / total) * 100)) : null);
-    const installed = await invoke<boolean>("install_update", { onProgress: channel });
-    if (!installed) throw "This update is no longer available. You may already have the newest version.";
+    await invoke("install_update", { rid, onProgress: channel });
   },
 
   async restartApp(): Promise<void> {
