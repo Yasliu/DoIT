@@ -13,8 +13,9 @@ use crate::models::{
     NoteItem, ScanSummary, MAX_FILE_SIZE_BYTES,
 };
 
-/// Unlinks a single `.md` or `.txt` note file and never removes directories or non-note files.
-/// DoIT must never attempt to delete a notes folder on any OS, whether running from source or installed.
+/// Unlinks a single note file (`.md`, `.markdown` or `.txt`, the kinds DoIT opens) and never
+/// removes directories or other files. DoIT must never attempt to delete a notes folder on any OS,
+/// whether running from source or installed.
 pub(crate) fn remove_note_file_safely(path: &Path) {
     let Ok(meta) = fs::symlink_metadata(path) else {
         return;
@@ -25,7 +26,7 @@ pub(crate) fn remove_note_file_safely(path: &Path) {
     let Some(ext) = path.extension().and_then(|s| s.to_str()) else {
         return;
     };
-    if !ext.eq_ignore_ascii_case("md") && !ext.eq_ignore_ascii_case("txt") {
+    if !["md", "markdown", "txt"].iter().any(|note| ext.eq_ignore_ascii_case(note)) {
         return;
     }
     let _ = fs::remove_file(path);
@@ -891,22 +892,27 @@ mod tests {
         let kept_note = notes_subdir.join("keep.md");
         let non_note = dir.join("settings.json");
         let real_note = dir.join("old.md");
+        // An opened external file, left behind when it was saved as .txt instead.
+        let external_note = dir.join("notes.markdown");
 
         std::fs::create_dir_all(&notes_subdir).unwrap();
         std::fs::write(&kept_note, "# Keep").unwrap();
         std::fs::write(&non_note, "{}").unwrap();
         std::fs::write(&real_note, "# Old").unwrap();
+        std::fs::write(&external_note, "# External").unwrap();
 
         super::remove_note_file_safely(&dir);
         super::remove_note_file_safely(&notes_subdir);
         super::remove_note_file_safely(&non_note);
         super::remove_note_file_safely(&real_note);
+        super::remove_note_file_safely(&external_note);
 
         assert!(dir.is_dir());
         assert!(notes_subdir.is_dir());
         assert!(kept_note.is_file());
         assert!(non_note.is_file());
         assert!(!real_note.exists());
+        assert!(!external_note.exists());
 
         std::fs::remove_dir_all(&dir).unwrap();
     }
