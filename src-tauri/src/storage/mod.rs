@@ -20,7 +20,10 @@ pub(crate) fn remove_note_file_safely(path: &Path) {
     let Ok(meta) = fs::symlink_metadata(path) else {
         return;
     };
-    if meta.is_dir() || path.is_dir() || !meta.file_type().is_file() {
+    // A symlinked note loads like any other, so removing it must work too; that removes only the
+    // link. A link to a folder is still refused by `path.is_dir()`, which follows it.
+    let kind = meta.file_type();
+    if meta.is_dir() || path.is_dir() || !(kind.is_file() || kind.is_symlink()) {
         return;
     }
     let Some(ext) = path.extension().and_then(|s| s.to_str()) else {
