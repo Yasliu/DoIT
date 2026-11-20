@@ -18,7 +18,7 @@ use super::placement::{
     DockShape, Growth, PillAnchor, Rect, Screen,
 };
 use super::pill;
-use super::state::{engine, Mode};
+use super::state::{engine, Mode, PillClick};
 use super::webview::{self, Surface};
 use super::{DockOpen, CANVAS, DOCK};
 use crate::platform;
@@ -120,7 +120,7 @@ fn reveal_canvas(app: &AppHandle) {
         platform::make_visible(&plain(&canvas));
     }
     if let Some(dock) = app.get_webview_window(DOCK) {
-        webview::retire(&dock);
+        retire_dock_page(&dock);
     }
     pill::close(app);
 }
@@ -217,17 +217,12 @@ pub fn enter_dock(app: &AppHandle, open: DockOpen) -> Result<(), String> {
 /// and which note to open. A page that reloads while the dock is a pill stays hidden.
 pub fn dock_ready(window: &WebviewWindow) -> (DockShape, Option<String>) {
     let app = window.app_handle();
-    let (mode, screen_name, anchor, note) = {
-        let mut state = engine();
-        state.dock_page_ready = true;
-        (state.mode, state.dock_screen.take(), state.dock_anchor.take(), state.dock_note.take())
-    };
-    if mode != Mode::Dock(DockShape::Panel) {
+    let Some(opening) = engine().dock_page_mounted() else {
         return (DockShape::Pill, None);
-    }
+    };
     let dock = plain(window);
-    let home = screen_name.and_then(|name| screen_named(&dock, &name)).or_else(|| screen_or_primary(app, Some(&dock)));
-    if let Some(rect) = panel_opening(anchor.as_ref(), home.as_ref()) {
+    let home = opening.screen.and_then(|name| screen_named(&dock, &name)).or_else(|| screen_or_primary(app, Some(&dock)));
+    if let Some(rect) = panel_opening(opening.anchor.as_ref(), home.as_ref()) {
         place(&dock, rect);
     }
     let _ = dock.show();
@@ -235,13 +230,19 @@ pub fn dock_ready(window: &WebviewWindow) -> (DockShape, Option<String>) {
     platform::keep_wm_from_moving(&dock);
     platform::focus_window(&dock);
     pill::hide(app);
-    (DockShape::Panel, note)
+    (DockShape::Panel, opening.note)
 }
 
 /// Builds the dock's webview, hidden; its page reports in through `dock_ready`.
 fn open_dock_page(app: &AppHandle) -> Result<(), String> {
-    engine().dock_page_ready = false;
     webview::open(app, Surface::Dock, false).map(|_| ())
+}
+
+/// Destroys the dock's webview. Its readiness is cleared here, not when a page is built: a build that
+/// fails because the hover's page already exists must not wipe that page's readiness.
+fn retire_dock_page(dock: &WebviewWindow) {
+    engine().dock_page_ready = false;
+    webview::retire(dock);
 }
 
 /// The pointer is on the pill, so a click is likely: start the panel's page now, hidden, and retire
@@ -262,35 +263,34 @@ fn prepare_panel(app: &AppHandle) {
     }
 }
 
-/// Makes the panel the dock's shape, growing out of the pill, once its page shows it.
-fn expect_panel_from_pill(app: &AppHandle) {
-    let anchor = pill::window(app).and_then(|w| Some(PillAnchor { rect: rect_of(&w)?, screen: screen_of(&w)? }));
-    let mut state = engine();
-    state.mode = Mode::Dock(DockShape::Panel);
-    state.dock_anchor = anchor;
-    state.dock_screen = None;
-    state.dock_generation += 1;
-}
-
-/// The pill was clicked: open the panel, reusing a kept webview or building one.
+/// The pill was clicked: open the panel, reusing a kept webview or building one. The panel grows out
+/// of the pill.
 fn open_panel_from_pill(app: &AppHandle) {
-    if engine().mode != Mode::Dock(DockShape::Pill) {
+    let anchor = pill::window(app).and_then(|w| Some(PillAnchor { rect: rect_of(&w)?, screen: screen_of(&w)? }));
+    let page = app.get_webview_window(DOCK);
+    let click = engine().click_pill(page.is_some(), anchor);
+    if click == PillClick::Ignore {
         return;
     }
     retire_canvas(app);
-    match app.get_webview_window(DOCK) {
-        // The kept page expands itself and calls `reshape_dock(Panel)`.
-        Some(dock) if engine().dock_page_ready => {
-            let _ = dock.emit("set-expanded", true);
-        }
-        // The hover's page is still loading: `dock_ready` shows it as the panel.
-        Some(_) => expect_panel_from_pill(app),
-        None => {
-            expect_panel_from_pill(app);
-            if open_dock_page(app).is_err() {
-                engine().mode = Mode::Dock(DockShape::Pill);
+    match click {
+        // The page expands itself and calls `reshape_dock(Panel)`.
+        PillClick::Expand => {
+            if let Some(dock) = page {
+                let _ = dock.emit("set-expanded", true);
             }
         }
+        PillClick::BuildPage => {
+            if open_dock_page(app).is_err() {
+                engine().mode = Mode::Dock(DockShape::Pill);
+                // The hover may have been building the page at the same moment: hand the click to it.
+                if app.get_webview_window(DOCK).is_some() {
+                    open_panel_from_pill(app);
+                }
+            }
+        }
+        // `dock_ready` shows the page as the panel.
+        PillClick::AwaitPage | PillClick::Ignore => {}
     }
 }
 
@@ -348,7 +348,7 @@ fn retire_panel_later(app: &AppHandle, generation: u64) {
         if let Some(dock) = app.get_webview_window(DOCK) {
             flush::pages(&app, &[DOCK]);
             if still_idle(generation) {
-                webview::retire(&dock);
+                retire_dock_page(&dock);
             }
         }
     });

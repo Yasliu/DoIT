@@ -255,9 +255,12 @@ export function TrayCompanion() {
     closeTray();
   }, [closeTray]);
 
-  // The page just mounted inside a hidden, pre-positioned frame: reveal it and fade the panel in
-  useEffect(() => {
-    void tauriApi.trayReady().then(({ shape: start, note }) => {
+  // The page just mounted inside a hidden, pre-positioned frame: reveal it and fade the panel in.
+  // Runs once the page listens for `set-expanded`: from the moment it reports in, a click on the pill
+  // sends one.
+  const startedRef = useRef<Promise<void> | null>(null);
+  const start = useCallback(() => {
+    startedRef.current ??= tauriApi.trayReady().then(({ shape: start, note }) => {
       if (note) setActiveNoteId(note);
       if (start === "pill") {
         changeMode("pill");
@@ -268,7 +271,7 @@ export function TrayCompanion() {
     });
   }, [changeMode, openTray]);
 
-  // Tray menu asked for the panel while the frame already exists
+  // The pill was clicked, or the tray menu asked for the panel, while the frame already exists
   useEffect(() => {
     let unlistenFn: (() => void) | null = null;
     let unlistenNote: (() => void) | null = null;
@@ -277,12 +280,19 @@ export function TrayCompanion() {
     getCurrentWindow()
       .listen<boolean>("set-expanded", (event) => {
         if (!event.payload) return;
-        if (modeRef.current === "pill") void expandFromPill();
-        else openTray();
+        // A click that lands while the page reports in waits until it knows its shape.
+        void startedRef.current?.then(() => {
+          if (modeRef.current === "pill") void expandFromPill();
+          else openTray();
+        });
       })
       .then((unlisten) => {
-        if (disposed) unlisten();
-        else unlistenFn = unlisten;
+        if (disposed) {
+          unlisten();
+        } else {
+          unlistenFn = unlisten;
+          start();
+        }
       });
 
     getCurrentWindow()
@@ -301,7 +311,7 @@ export function TrayCompanion() {
       if (unlistenFn) unlistenFn();
       if (unlistenNote) unlistenNote();
     };
-  }, [expandFromPill, openTray]);
+  }, [expandFromPill, openTray, start]);
   // Load theme mode for tray window
   useEffect(() => {
     void tauriApi.getSettings().then((s) => {
