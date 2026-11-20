@@ -25,6 +25,33 @@ pub fn update_settings(
     Ok(settings)
 }
 
+/// Takes `keys` as the quick-note shortcut ("" turns it off) and saves it once the OS has accepted
+/// it. The error is a sentence for the Settings screen.
+#[tauri::command]
+pub fn set_quick_note_shortcut(keys: String, storage: State<'_, StorageManager>, app: AppHandle) -> Result<AppSettings, String> {
+    if !crate::platform::global_shortcuts_work() {
+        return Err("This desktop doesn't let apps set shortcuts that work from other apps.".to_string());
+    }
+    crate::actions::set_quick_note_shortcut(&app, &keys)?;
+    let mut patch = serde_json::Map::new();
+    patch.insert("quick_note_shortcut".into(), serde_json::Value::String(keys));
+    storage.update_settings(patch)
+}
+
+#[derive(serde::Serialize)]
+pub struct QuickNoteShortcutStatus {
+    /// Whether a shortcut DoIT registers works from other apps. Where it does not (Wayland),
+    /// Settings explains how to bind `--quick-note` in the desktop's own settings instead.
+    supported: bool,
+    /// Why the saved shortcut is not working, if DoIT could not take it back when it started.
+    error: Option<String>,
+}
+
+#[tauri::command]
+pub fn quick_note_shortcut_status() -> QuickNoteShortcutStatus {
+    QuickNoteShortcutStatus { supported: crate::platform::global_shortcuts_work(), error: crate::actions::quick_note_shortcut_error() }
+}
+
 /// Lets the webview load the images next to the notes, wherever the notes folder is.
 pub fn allow_note_images(app: &AppHandle, storage: &StorageManager) {
     if let Ok(dir) = storage.notes_dir() {
@@ -39,24 +66,5 @@ pub fn get_system_fonts() -> Vec<String> {
 
 #[tauri::command]
 pub fn is_ms_store_package() -> bool {
-    #[cfg(windows)]
-    {
-        #[link(name = "kernel32")]
-        unsafe extern "system" {
-            fn GetCurrentPackageFullName(
-                package_full_name_length: *mut u32,
-                package_full_name: *mut u16,
-            ) -> i32;
-        }
-        let mut length: u32 = 0;
-        let result = unsafe { GetCurrentPackageFullName(&mut length, std::ptr::null_mut()) };
-        // 15700 is APPMODEL_ERROR_NO_PACKAGE.
-        // Any other return (such as 122 ERROR_INSUFFICIENT_BUFFER or 0 ERROR_SUCCESS) means
-        // the app is executing inside an MSIX / AppX package identity (e.g. Microsoft Store).
-        result != 15700
-    }
-    #[cfg(not(windows))]
-    {
-        false
-    }
+    crate::platform::is_store_package()
 }

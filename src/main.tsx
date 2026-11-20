@@ -9,6 +9,19 @@ import { markPlatform, pick } from "./platform";
 
 markPlatform();
 
+// Block browser-level page zoom from touchpad pinch and Ctrl+wheel anywhere in the app chrome;
+// open note editors handle zoom locally on the note body.
+window.addEventListener(
+  "wheel",
+  (e) => {
+    if (e.ctrlKey || e.metaKey) e.preventDefault();
+  },
+  { passive: false },
+);
+for (const type of ["gesturestart", "gesturechange", "gestureend"] as const) {
+  window.addEventListener(type, (e) => e.preventDefault(), { passive: false });
+}
+
 // Force absolute transparency on root elements
 document.documentElement.style.background = "transparent";
 document.documentElement.style.backgroundColor = "transparent";

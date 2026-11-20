@@ -13,6 +13,28 @@ use crate::models::{
     NoteItem, ScanSummary, MAX_FILE_SIZE_BYTES,
 };
 
+/// Unlinks a single note file (`.md`, `.markdown` or `.txt`, the kinds DoIT opens) and never
+/// removes directories or other files. DoIT must never attempt to delete a notes folder on any OS,
+/// whether running from source or installed.
+pub(crate) fn remove_note_file_safely(path: &Path) {
+    let Ok(meta) = fs::symlink_metadata(path) else {
+        return;
+    };
+    // A symlinked note loads like any other, so removing it must work too; that removes only the
+    // link. A link to a folder is still refused by `path.is_dir()`, which follows it.
+    let kind = meta.file_type();
+    if meta.is_dir() || path.is_dir() || !(kind.is_file() || kind.is_symlink()) {
+        return;
+    }
+    let Some(ext) = path.extension().and_then(|s| s.to_str()) else {
+        return;
+    };
+    if !["md", "markdown", "txt"].iter().any(|note| ext.eq_ignore_ascii_case(note)) {
+        return;
+    }
+    let _ = fs::remove_file(path);
+}
+
 pub struct StorageManager {
     settings_path: PathBuf,
     settings: Arc<RwLock<AppSettings>>,
@@ -263,6 +285,12 @@ impl StorageManager {
         Ok(lock.clone())
     }
 
+    /// The note edited most recently.
+    pub fn latest_note_id(&self) -> Option<String> {
+        let notes = self.notes.read().ok()?;
+        notes.iter().max_by_key(|note| note.last_edited).map(|note| note.id.clone())
+    }
+
     /// Runs `change` on the shelves and saves them if it changed anything.
     fn change_shelves<R>(&self, change: impl FnOnce(&mut shelves::Shelves) -> Result<R, String>) -> Result<R, String> {
         let (result, changed) = {
@@ -405,7 +433,7 @@ impl StorageManager {
         fs::write(&tmp, text.as_bytes()).map_err(|e| format!("Cannot write file: {e}"))?;
         fs::rename(&tmp, &target).map_err(|e| format!("Cannot finalise file: {e}"))?;
         if target != path {
-            let _ = fs::remove_file(&path);
+            remove_note_file_safely(&path);
         }
 
         let mut saved = note;
@@ -858,5 +886,37 @@ mod tests {
 
         assert_eq!((scanned, skipped, notes.len()), (3, 0, 3));
         assert!(notes.iter().all(|n| n.category == "Recipes"));
+    }
+
+    #[test]
+    fn remove_note_file_safely_never_deletes_directories_or_non_note_files() {
+        let dir = std::env::temp_dir().join(format!("doit-safe-remove-{}", std::process::id()));
+        let notes_subdir = dir.join("folder.md");
+        let kept_note = notes_subdir.join("keep.md");
+        let non_note = dir.join("settings.json");
+        let real_note = dir.join("old.md");
+        // An opened external file, left behind when it was saved as .txt instead.
+        let external_note = dir.join("notes.markdown");
+
+        std::fs::create_dir_all(&notes_subdir).unwrap();
+        std::fs::write(&kept_note, "# Keep").unwrap();
+        std::fs::write(&non_note, "{}").unwrap();
+        std::fs::write(&real_note, "# Old").unwrap();
+        std::fs::write(&external_note, "# External").unwrap();
+
+        super::remove_note_file_safely(&dir);
+        super::remove_note_file_safely(&notes_subdir);
+        super::remove_note_file_safely(&non_note);
+        super::remove_note_file_safely(&real_note);
+        super::remove_note_file_safely(&external_note);
+
+        assert!(dir.is_dir());
+        assert!(notes_subdir.is_dir());
+        assert!(kept_note.is_file());
+        assert!(non_note.is_file());
+        assert!(!real_note.exists());
+        assert!(!external_note.exists());
+
+        std::fs::remove_dir_all(&dir).unwrap();
     }
 }

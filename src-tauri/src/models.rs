@@ -27,6 +27,22 @@ pub struct ContentItem {
     pub text: String,
     pub is_todo: bool,
     pub completed: bool,
+    /// A task's leading whitespace, which nests it under the line above. Other lines keep theirs in
+    /// `text`.
+    #[serde(default, skip_serializing_if = "String::is_empty")]
+    pub indent: String,
+}
+
+impl ContentItem {
+    /// The item as one line of the note file.
+    fn line(&self) -> String {
+        if self.is_todo {
+            let mark = if self.completed { "x" } else { " " };
+            format!("{}- [{mark}] {}", self.indent, self.text)
+        } else {
+            self.text.clone()
+        }
+    }
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -126,6 +142,9 @@ pub struct AppSettings {
     pub is_maximized: bool,
     #[serde(default = "default_dock_on_close")]
     pub dock_on_close: bool,
+    /// Keys that open the dock panel on the latest note from any app ("Ctrl+Alt+N"); empty is off.
+    #[serde(default)]
+    pub quick_note_shortcut: String,
     #[serde(default)]
     pub last_seen_version: Option<String>,
     #[serde(default)]
@@ -229,6 +248,7 @@ impl Default for AppSettings {
             theme_mode: "glass".to_string(),
             is_maximized: false,
             dock_on_close: true,
+            quick_note_shortcut: String::new(),
             last_seen_version: None,
             category_icons: Some(HashMap::new()),
             palette: None,
@@ -437,12 +457,8 @@ impl NoteItem {
         md.push_str("---\n\n");
 
         for item in &self.content {
-            if item.is_todo {
-                let mark = if item.completed { "x" } else { " " };
-                md.push_str(&format!("- [{mark}] {}\n", item.text));
-            } else {
-                md.push_str(&format!("{}\n", item.text));
-            }
+            md.push_str(&item.line());
+            md.push('\n');
         }
 
         md
@@ -518,18 +534,26 @@ impl NoteItem {
         let mut content_items: Vec<ContentItem> = Vec::new();
         for (idx, line) in body_lines.iter().enumerate() {
             if let Some((completed, text)) = parse_todo_line(line.trim()) {
-                content_items.push(ContentItem { id: format!("item_{idx}"), text, is_todo: true, completed });
+                let indent = line[..line.len() - line.trim_start().len()].to_string();
+                content_items.push(ContentItem { id: format!("item_{idx}"), text, is_todo: true, completed, indent });
             } else {
                 content_items.push(ContentItem {
                     id: format!("item_{idx}"),
                     text: line.trim_end().to_string(),
                     is_todo: false,
                     completed: false,
+                    indent: String::new(),
                 });
             }
         }
         if content_items.is_empty() {
-            content_items.push(ContentItem { id: "item_0".to_string(), text: String::new(), is_todo: false, completed: false });
+            content_items.push(ContentItem {
+                id: "item_0".to_string(),
+                text: String::new(),
+                is_todo: false,
+                completed: false,
+                indent: String::new(),
+            });
         }
 
         let flag = |key: &str| fm.get(key).map(|s| s.eq_ignore_ascii_case("true")).unwrap_or(false);
@@ -613,12 +637,8 @@ impl NoteItem {
     pub fn to_plain_text(&self) -> String {
         let mut out = String::new();
         for item in &self.content {
-            if item.is_todo {
-                let mark = if item.completed { "x" } else { " " };
-                out.push_str(&format!("- [{mark}] {}\n", item.text));
-            } else {
-                out.push_str(&format!("{}\n", item.text));
-            }
+            out.push_str(&item.line());
+            out.push('\n');
         }
         out
     }
@@ -757,6 +777,7 @@ mod tests {
                     text: "Check item".to_string(),
                     is_todo: true,
                     completed: false,
+                    indent: String::new(),
                 },
             ],
             category: "Architecture".to_string(),
@@ -795,16 +816,17 @@ mod tests {
 
     #[test]
     fn test_mixed_tasks_and_text_roundtrip() {
-        let doc = "# Plan\n\nSome paragraph\n- [ ] first task\n- [x] done task\nmore text\n";
+        let doc = "# Plan\n\nSome paragraph\n- [ ] first task\n    - [ ] nested task\n- [x] done task\nmore text\n";
         let note = NoteItem::from_file(doc, "mixed", "md", 0);
         let todos: Vec<_> = note.content.iter().filter(|c| c.is_todo).collect();
-        assert_eq!(todos.len(), 2);
-        assert!(todos[1].completed);
+        assert_eq!(todos.len(), 3);
+        assert!(todos[2].completed);
+        assert_eq!(todos[1].text, "nested task");
         assert!(note.content.iter().any(|c| !c.is_todo && c.text == "Some paragraph"));
         let md = note.to_markdown(0);
-        assert!(md.contains("- [ ] first task\n") && md.contains("- [x] done task\n") && md.contains("more text\n"));
+        assert!(md.contains("- [ ] first task\n    - [ ] nested task\n- [x] done task\nmore text\n"));
         let again = NoteItem::from_file(&md, "mixed", "md", 0);
-        assert_eq!(again.content.iter().filter(|c| c.is_todo).count(), 2);
+        assert_eq!(again.content.iter().filter(|c| c.is_todo).count(), 3);
         assert!(again.content.iter().any(|c| !c.is_todo && c.text == "more text"));
     }
     #[test]

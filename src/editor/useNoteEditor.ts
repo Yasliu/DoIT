@@ -12,6 +12,7 @@ import {
   isRichItalicActive,
   markdownToContent,
   markdownToHtml,
+  scrollCaretIntoView,
 } from "../lib/format";
 import { createBodyReader, type BodyReader } from "./bodyReader";
 import { uid } from "../lib/text";
@@ -92,6 +93,7 @@ export function useNoteEditor({ note, edit, titleRef, onSave }: NoteEditorOption
       const markdown = bodyReader.current?.read() ?? "";
       change({ content: markdownToContent(markdown, current.content, () => uid("line")) });
       refreshFormatting();
+      scrollCaretIntoView(body);
     },
     [change, refreshFormatting],
   );
@@ -336,3 +338,78 @@ export function useNoteEditor({ note, edit, titleRef, onSave }: NoteEditorOption
 }
 
 export type NoteEditor = ReturnType<typeof useNoteEditor>;
+
+/**
+ * Attaches non-passive wheel (Ctrl+scroll and Windows/Chromium touchpad pinch) and native pinch
+ * (`doit:pinch-zoom` / Safari `gesture*`) listeners so two-finger zoom scales only the note text.
+ */
+export function useNoteZoomListeners(enabled: boolean, adjustZoom: (delta: number) => void) {
+  const wheelAccumRef = useRef(0);
+  const gestureScaleRef = useRef(1);
+
+  useEffect(() => {
+    if (!enabled) {
+      wheelAccumRef.current = 0;
+      return;
+    }
+
+    const onWheel = (e: WheelEvent) => {
+      if (!(e.ctrlKey || e.metaKey)) return;
+      e.preventDefault();
+      if (e.deltaY === 0) return;
+
+      if (Math.abs(e.deltaY) >= 40 || e.deltaMode !== 0) {
+        wheelAccumRef.current = 0;
+        adjustZoom(e.deltaY < 0 ? 10 : -10);
+        return;
+      }
+
+      if (wheelAccumRef.current !== 0 && Math.sign(wheelAccumRef.current) !== Math.sign(e.deltaY)) {
+        wheelAccumRef.current = 0;
+      }
+      wheelAccumRef.current += e.deltaY;
+      if (Math.abs(wheelAccumRef.current) >= 15) {
+        const step = wheelAccumRef.current < 0 ? 10 : -10;
+        wheelAccumRef.current = 0;
+        adjustZoom(step);
+      }
+    };
+
+    const onPinchZoom = (e: Event) => {
+      const detail = (e as CustomEvent<number>).detail;
+      if (typeof detail === "number" && detail !== 0) {
+        adjustZoom(detail);
+      }
+    };
+
+    const onGestureStart = (e: Event) => {
+      e.preventDefault();
+      gestureScaleRef.current = (e as unknown as { scale?: number }).scale || 1;
+    };
+
+    const onGestureChange = (e: Event) => {
+      e.preventDefault();
+      const scale = (e as unknown as { scale?: number }).scale;
+      if (!scale || scale <= 0) return;
+      const ratio = scale / gestureScaleRef.current;
+      if (ratio >= 1.08) {
+        gestureScaleRef.current = scale;
+        adjustZoom(10);
+      } else if (ratio <= 1 / 1.08) {
+        gestureScaleRef.current = scale;
+        adjustZoom(-10);
+      }
+    };
+
+    window.addEventListener("wheel", onWheel, { passive: false });
+    window.addEventListener("doit:pinch-zoom", onPinchZoom);
+    window.addEventListener("gesturestart", onGestureStart, { passive: false });
+    window.addEventListener("gesturechange", onGestureChange, { passive: false });
+    return () => {
+      window.removeEventListener("wheel", onWheel);
+      window.removeEventListener("doit:pinch-zoom", onPinchZoom);
+      window.removeEventListener("gesturestart", onGestureStart);
+      window.removeEventListener("gesturechange", onGestureChange);
+    };
+  }, [enabled, adjustZoom]);
+}

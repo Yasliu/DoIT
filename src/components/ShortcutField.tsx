@@ -35,6 +35,8 @@ export function ShortcutField({ value, def, onChange }: ShortcutFieldProps) {
     >
       {listening ? (
         <span className="text-ink-4">Press keys...</span>
+      ) : parts.length === 0 ? (
+        <span className="text-ink-4">Set keys</span>
       ) : (
         parts.map((k, i) => {
           const Icon = ARROWS[k];

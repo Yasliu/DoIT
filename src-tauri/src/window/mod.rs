@@ -68,6 +68,13 @@ pub fn show_dock(app: &AppHandle, open: DockOpen) {
     });
 }
 
+/// The quick-note shortcut: the dock panel on `note` from wherever DoIT is, or back into the pill if
+/// the panel is already the window in front.
+pub fn quick_note(app: &AppHandle, note: Option<String>) {
+    let app = app.clone();
+    std::thread::spawn(move || lifecycle::quick_note(&app, note));
+}
+
 /// The canvas's page started loading; its window can be mapped, unseen, so the page can paint.
 pub fn canvas_loading(app: &AppHandle) {
     lifecycle::canvas_loading(app);

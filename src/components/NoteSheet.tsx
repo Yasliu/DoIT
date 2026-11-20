@@ -21,6 +21,7 @@ import {  Bold,
 import type { NoteItem } from "../api/tauriBridge";
 import { NOTE_FONTS, fontStack, tauriApi } from "../api/tauriBridge";
 import { EditorOverlays, NoteBody, NoteGallery, hasGallery, useNoteEditor } from "../editor";
+import { useNoteZoomListeners } from "../editor/useNoteEditor";
 import { HeadingSelect } from "./HeadingSelect";
 import { InsertMenu } from "./InsertMenu";
 import { ModeToggle } from "./ModeToggle";
@@ -353,6 +354,8 @@ export function NoteSheet({
       if (draftRef.current.source_path) void saveExternal();
     }
   });
+
+  useNoteZoomListeners(!editor.previewImage, adjustZoom);
 
   // ---- Right-side drawer slide-in: single spring-like curve, transform only ----
   // Decided once, at mount: App flips `instant` to true on the very next render, and re-running this
@@ -1030,12 +1033,6 @@ export function NoteSheet({
         </div>
 
         <div
-          onWheel={(e) => {
-            if (e.ctrlKey || e.metaKey) {
-              e.preventDefault();
-              adjustZoom(e.deltaY < 0 ? 10 : -10);
-            }
-          }}
           className={cx("scroll min-h-0 flex-1 overflow-y-auto overflow-x-auto", isMaximized ? "px-8 md:px-12" : "px-6")}
         >
           <div

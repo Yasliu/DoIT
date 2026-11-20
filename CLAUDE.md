@@ -27,8 +27,8 @@ React + TypeScript frontend, Rust backend. Shipped for Windows; a Linux port is 
     the transitions, `pill/` draws the pill natively (no webview runs once it has been alone for
     20 s), `drag` keeps a dragged dock window on screen, `flush` waits for pages to save before one
     is retired or the app quits.
-  - `actions/`: mode switches from outside the UI: tray click, or a second launch with
-    `--canvas`, `--dock`, `--toggle` or `--quit`.
+  - `actions/`: mode switches from outside the UI: tray click, the quick-note global shortcut
+    (`shortcut`), or a second launch with `--canvas`, `--dock`, `--toggle`, `--quick-note` or `--quit`.
   - `platform/`: the only place OS-specific code lives. `mod.rs` documents the interface;
     `windows.rs` (Win32, WebView2, registry) and `unix.rs` (Linux/macOS) implement it.
 
@@ -57,7 +57,8 @@ React + TypeScript frontend, Rust backend. Shipped for Windows; a Linux port is 
 - PRs and `v1.2.3-beta.1` tags run `.github/workflows/checks.yml`: tests on Windows and Linux, and a
   Windows preview installer as a workflow artifact (beta tags also publish it as a prerelease).
 - Release: a `v1.2.3` tag runs `.github/workflows/release.yml` (Windows), then `release-linux.yml` adds
-  the Fedora rpm (self-updating) and an experimental AppImage to the same release and `latest.json`.
+  the Debian/Ubuntu deb (self-updating), Fedora rpm (self-updating), and an experimental AppImage to
+  the same release and `latest.json`.
   Local Linux build: `npx tauri build`; Linux-only config `src-tauri/tauri.linux.conf.json`, desktop
   entry `src-tauri/linux/doit.desktop`.
 - Linux runs through XWayland by default (positioning needs it); set `DOIT_NATIVE_WAYLAND=1` to opt out.

@@ -82,6 +82,12 @@ pub fn run() {
                 return Ok(());
             }
             commands::settings::allow_note_images(app.handle(), &app.state::<StorageManager>());
+            if platform::global_shortcuts_work() {
+                if let Ok(settings) = app.state::<StorageManager>().get_settings() {
+                    // A shortcut another app took since it was set stays off; Settings shows why.
+                    actions::restore_quick_note_shortcut(app.handle(), &settings.quick_note_shortcut);
+                }
+            }
             window::launch_canvas(app.handle(), app.state::<StorageManager>().get_is_maximized())?;
             // Native Windows taskbar notification tray icon
             let show_item = MenuItem::with_id(app, "show", "Open Canvas", true, None::<&str>)?;
@@ -145,6 +151,8 @@ pub fn run() {
             commands::settings::update_settings,
             commands::settings::get_system_fonts,
             commands::settings::is_ms_store_package,
+            commands::settings::set_quick_note_shortcut,
+            commands::settings::quick_note_shortcut_status,
             commands::window::toggle_window_minimize,
             commands::window::open_tray_mode,
             commands::window::open_canvas_mode,

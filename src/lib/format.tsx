@@ -3,6 +3,7 @@ import { convertFileSrc } from "@tauri-apps/api/core";
 import type { ContentItem } from "../api/tauriBridge";
 import { getMarkdownShortcuts, matchesCombo } from "./shortcuts";
 import { EMOJI_MAP } from "./emoji";
+import { INDENT_STEP, indentWidth, layoutLists, type ListLine, type ListPlace } from "./listLayout";
 
 /**
  * Renders inline markdown bold and italic formatting without raw asterisks.
@@ -402,6 +403,25 @@ function parseRow(line: string): string[] {
 
 const isTableRow = (line: string) => TABLE_ROW_RE.test(line);
 const isSeparator = (line: string) => isTableRow(line) && parseRow(line).every((c) => /^:?-+:?$/.test(c));
+export const TABLE_META_RE = /^\s*<!--\s*doit-table:\s*(.*?)\s*-->\s*$/i;
+
+function parseNumList(raw: string): number[] {
+  return raw.split(",").map((s) => Math.max(0, Math.round(Number(s.trim()) || 0)));
+}
+
+function parseTableMeta(line: string): { cols?: number[]; rows?: number[] } | null {
+  const m = line.match(TABLE_META_RE);
+  if (!m) return null;
+  const body = m[1];
+  const colsMatch = body.match(/\bcols=([0-9]+(?:\s*,\s*[0-9]+)*)/i);
+  const rowsMatch = body.match(/\brows=([0-9]+(?:\s*,\s*[0-9]+)*)/i);
+  const cols = colsMatch ? parseNumList(colsMatch[1]) : undefined;
+  const rows = rowsMatch ? parseNumList(rowsMatch[1]) : undefined;
+  return {
+    cols: cols && cols.some((v) => v > 0) ? cols : undefined,
+    rows: rows && rows.some((v) => v > 0) ? rows : undefined,
+  };
+}
 
 function alignOf(cell: string): string {
   const l = cell.startsWith(":");
@@ -409,18 +429,62 @@ function alignOf(cell: string): string {
   return l && r ? "c" : r ? "r" : l ? "l" : "n";
 }
 
-function tableHtml(header: string[], aligns: string[], rows: string[][]): string {
+function tableHtml(
+  header: string[],
+  aligns: string[],
+  rows: string[][],
+  colWidths?: number[],
+  rowHeights?: number[],
+): string {
   const n = header.length;
   const al = Array.from({ length: n }, (_, i) => aligns[i] || "n");
-  const style = (i: number) =>
-    al[i] === "r" ? ' style="text-align:right"' : al[i] === "c" ? ' style="text-align:center"' : "";
+  const hasCols = Boolean(colWidths && colWidths.some((w) => w > 0));
+  const widths = hasCols
+    ? Array.from({ length: n }, (_, i) => {
+        const w = colWidths?.[i] ?? 0;
+        return w > 0 ? Math.round(w) : 140;
+      })
+    : [];
+  const totalW = widths.reduce((a, b) => a + b, 0);
+  const hasRows = Boolean(rowHeights && rowHeights.some((h) => h > 0));
+  const rowCount = 1 + rows.length;
+  const heights = hasRows
+    ? Array.from({ length: rowCount }, (_, i) => {
+        const h = rowHeights?.[i] ?? 0;
+        return h > 0 ? Math.round(h) : 0;
+      })
+    : [];
+
+  const style = (i: number) => {
+    const parts: string[] = [];
+    if (al[i] === "r") parts.push("text-align:right");
+    else if (al[i] === "c") parts.push("text-align:center");
+    if (hasCols && totalW > 0) {
+      const w = widths[i];
+      const pct = ((w / totalW) * 100).toFixed(2);
+      parts.push(`width:${w}px`, `--col-w:${w}px`, `--col-pct:${pct}%`);
+    }
+    return parts.length > 0 ? ` style="${parts.join(";")}"` : "";
+  };
+  const rowAttr = (rIdx: number) => {
+    const h = heights[rIdx] ?? 0;
+    return h > 0 ? ` data-h="${h}" style="height:${h}px;--row-h:${h}px"` : "";
+  };
   const cell = (tag: string, text: string, i: number) =>
     `<${tag} contenteditable="true"${style(i)}>${inlineMarkdownToHtml(text)}</${tag}>`;
-  const head = `<tr>${header.map((h, i) => cell("th", h, i)).join("")}</tr>`;
+  const head = `<tr${rowAttr(0)}>${header.map((h, i) => cell("th", h, i)).join("")}</tr>`;
   const body = rows
-    .map((r) => `<tr>${Array.from({ length: n }, (_, i) => cell("td", r[i] ?? "", i)).join("")}</tr>`)
+    .map((r, rIdx) => `<tr${rowAttr(rIdx + 1)}>${Array.from({ length: n }, (_, i) => cell("td", r[i] ?? "", i)).join("")}</tr>`)
     .join("");
-  return `<div class="md-tablewrap w-full overflow-x-auto scrollbar-thin scrollbar-thumb-white/10 scrollbar-track-transparent" data-md-table="1" contenteditable="false"><table class="md-tbl" data-align="${al.join(",")}"><thead>${head}</thead><tbody>${body}</tbody></table></div>`;
+  const tblAttrs = [
+    `class="md-tbl"`,
+    `data-align="${al.join(",")}"`,
+    hasCols ? `data-sized="1" data-widths="${widths.join(",")}" style="--tbl-w:${totalW}px"` : "",
+    hasRows ? `data-heights="${heights.join(",")}"` : "",
+  ]
+    .filter(Boolean)
+    .join(" ");
+  return `<div class="md-tablewrap w-full overflow-x-auto scrollbar-thin scrollbar-thumb-white/10 scrollbar-track-transparent" data-md-table="1" contenteditable="false"><table ${tblAttrs}><thead>${head}</thead><tbody>${body}</tbody></table></div>`;
 }
 
 function preHtml(code: string, lang: string, fence: string): string {
@@ -458,8 +522,9 @@ export function markdownToHtml(md: string): string {
     }
   }
 
-  const out: string[] = [];
-  let currentOlNumber = 0;
+  // List lines are rendered once every line is known: their depth and number depend on their neighbours.
+  const blocks: { line: ListLine; html: (place: ListPlace) => string }[] = [];
+  const other = (html: string) => blocks.push({ line: { kind: "other" }, html: () => html });
 
   for (let i = 0; i < lines.length; i++) {
     const line = lines[i];
@@ -471,14 +536,12 @@ export function markdownToHtml(md: string): string {
     }
 
     if (!t) {
-      currentOlNumber = 0;
-      out.push("<div><br></div>");
+      other("<div><br></div>");
       continue;
     }
 
     const fence = t.match(/^(`{3,}|~{3,})\s*([^\s`]*)\s*$/);
     if (fence) {
-      currentOlNumber = 0;
       const marker = fence[1];
       let j = i + 1;
       while (j < lines.length) {
@@ -486,13 +549,12 @@ export function markdownToHtml(md: string): string {
         if (c.length >= marker.length && c.split("").every((ch) => ch === marker[0])) break;
         j++;
       }
-      out.push(preHtml(lines.slice(i + 1, j).join("\n"), fence[2] || "", marker[0].repeat(3)));
+      other(preHtml(lines.slice(i + 1, j).join("\n"), fence[2] || "", marker[0].repeat(3)));
       i = j;
       continue;
     }
 
     if (isTableRow(line) && i + 1 < lines.length && isSeparator(lines[i + 1])) {
-      currentOlNumber = 0;
       const header = parseRow(line);
       const aligns = parseRow(lines[i + 1]).map(alignOf);
       const rows: string[][] = [];
@@ -501,46 +563,62 @@ export function markdownToHtml(md: string): string {
         rows.push(parseRow(lines[k]));
         k++;
       }
-      out.push(tableHtml(header, aligns, rows));
+      let meta: { cols?: number[]; rows?: number[] } | null = null;
+      if (k < lines.length && TABLE_META_RE.test(lines[k])) {
+        meta = parseTableMeta(lines[k]);
+        k++;
+      }
+      other(tableHtml(header, aligns, rows, meta?.cols, meta?.rows));
       i = k - 1;
       continue;
     }
 
+    if (TABLE_META_RE.test(line)) {
+      continue;
+    }
+
     if (t && HR_RE.test(line)) {
-      currentOlNumber = 0;
-      out.push(`<div class="md-hr" data-raw="${escapeAttr(t)}" contenteditable="false"><hr></div>`);
+      other(`<div class="md-hr" data-raw="${escapeAttr(t)}" contenteditable="false"><hr></div>`);
       continue;
     }
 
     const info = blockPrefix(line);
     if (info) {
-      let prefix = info.prefix;
-      if (info.cls === "md-ol") {
-        const leadSpace = info.prefix.match(/^\s*/)?.[0] || "";
-        if (currentOlNumber === 0) {
-          const m = info.prefix.match(/\d+/);
-          currentOlNumber = m ? parseInt(m[0], 10) : 1;
-        } else {
-          currentOlNumber += 1;
-        }
-        prefix = `${leadSpace}${currentOlNumber}. `;
-      } else {
-        currentOlNumber = 0;
-      }
       const rest = line.slice(info.consumed);
+      const body = rest ? inlineMarkdownToHtml(rest, refMap) : "<br>";
       const cb = info.cls.startsWith("md-task") ? CHECKBOX_HTML : "";
-      const fnBadge = info.cls === "md-footnote-def" ? `<span class="md-fn-badge" contenteditable="false">${escapeHtml(prefix)}</span>` : "";
-      out.push(
-        `<div class="${info.cls}" data-p="${escapeAttr(prefix)}">${cb}${fnBadge}${rest ? inlineMarkdownToHtml(rest, refMap) : "<br>"}</div>`,
-      );
+      const listLine = listLineOf(info.cls, info.prefix);
+      blocks.push({
+        line: listLine,
+        html: (place) => {
+          const prefix = place.number !== undefined ? numberedPrefix(info.prefix, place.number) : info.prefix;
+          const fnBadge = info.cls === "md-footnote-def" ? `<span class="md-fn-badge" contenteditable="false">${escapeHtml(prefix)}</span>` : "";
+          const depth = place.depth > 0 ? ` style="--md-depth:${place.depth}"` : "";
+          return `<div class="${info.cls}" data-p="${escapeAttr(prefix)}"${depth}>${cb}${fnBadge}${body}</div>`;
+        },
+      });
       continue;
     }
 
-    currentOlNumber = 0;
-    out.push(line ? `<div>${inlineMarkdownToHtml(line, refMap)}</div>` : "<div><br></div>");
+    other(line ? `<div>${inlineMarkdownToHtml(line, refMap)}</div>` : "<div><br></div>");
   }
 
-  return out.join("");
+  const places = layoutLists(blocks.map((b) => b.line));
+  return blocks.map((b, i) => b.html(places[i])).join("");
+}
+
+/** How list nesting sees a block with class `cls` and prefix `prefix`. */
+function listLineOf(cls: string | null | undefined, prefix: string): ListLine {
+  const indent = prefix.match(/^\s*/)?.[0] ?? "";
+  if (cls === "md-li") return { kind: "bullet", indent };
+  if (cls?.startsWith("md-task")) return { kind: "task", indent };
+  if (cls === "md-ol") return { kind: "numbered", indent, start: parseInt(prefix.match(/\d+/)?.[0] ?? "1", 10) };
+  return { kind: "other" };
+}
+
+/** `prefix` (a numbered line's) showing `number` instead. */
+function numberedPrefix(prefix: string, number: number): string {
+  return `${prefix.match(/^\s*/)?.[0] ?? ""}${number}. `;
 }
 
 const BLOCK_SELECTOR = "div,pre,table,p,ul,ol,li,h1,h2,h3,h4,h5,h6,blockquote";
@@ -596,7 +674,15 @@ function wrapStrayNodes(editor: HTMLElement): void {
   }
 }
 
+function focusEditableHost(el: HTMLElement): void {
+  const host = (el.closest('[contenteditable="true"], [contenteditable=""]') as HTMLElement | null) ?? el;
+  if (document.activeElement !== host) {
+    host.focus({ preventScroll: true });
+  }
+}
+
 function placeCaretStart(el: HTMLElement): void {
+  focusEditableHost(el);
   const sel = window.getSelection();
   if (!sel) return;
   const r = document.createRange();
@@ -607,6 +693,7 @@ function placeCaretStart(el: HTMLElement): void {
 }
 
 function selectContents(el: HTMLElement, collapseToEnd = false): void {
+  focusEditableHost(el);
   const sel = window.getSelection();
   if (!sel) return;
   const r = document.createRange();
@@ -1096,6 +1183,23 @@ function convertInlineInTextNodes(container: HTMLElement): void {
 }
 
 /** Plain-text paste: multi-line text is re-parsed as markdown so headings / tables / lists render at once. */
+/** Pasting a web address over selected text on one line links that text to it. Returns true when handled. */
+export function handleLinkPaste(e: React.ClipboardEvent<HTMLElement>, editor: HTMLElement): boolean {
+  const url = (e.clipboardData?.getData("text/plain") || "").trim();
+  if (!/^https?:\/\/\S+$/i.test(url)) return false;
+  const sel = window.getSelection();
+  if (!sel || sel.rangeCount === 0 || sel.isCollapsed) return false;
+  const range = sel.getRangeAt(0);
+  if (!editor.contains(range.commonAncestorContainer)) return false;
+  const line = topLevelBlock(editor, range.startContainer, range.startOffset, false);
+  if (!line || line !== topLevelBlock(editor, range.endContainer, range.endOffset, true)) return false;
+  const inside = (node: Node) => (node instanceof Element ? node : node.parentElement)?.closest("a, code, pre, td, th");
+  if (inside(range.startContainer) || inside(range.endContainer) || !range.toString().trim()) return false;
+  e.preventDefault();
+  applyLink(editor, url);
+  return true;
+}
+
 export function handleMarkdownPaste(e: React.ClipboardEvent<HTMLElement>): boolean {
   const items = e.clipboardData?.items;
   if (items && Array.from(items).some((i) => i.type.startsWith("image/"))) return false;
@@ -1294,11 +1398,91 @@ export function readMarkdown(container: HTMLElement, nodes: Node[]): MarkdownPie
 
   return { lines, references: refDefinitions };
 }
+function parseAttrNums(attr: string | null): number[] {
+  if (!attr) return [];
+  return attr.split(",").map((s) => Math.max(0, Math.round(Number(s.trim()) || 0)));
+}
+
+function getTableDimensions(table: HTMLTableElement): { widths: number[]; heights: number[] } {
+  return {
+    widths: parseAttrNums(table.getAttribute("data-widths")),
+    heights: parseAttrNums(table.getAttribute("data-heights")),
+  };
+}
+
+/** Applies custom column widths and row heights to `table` and stores them on data attributes for serialization. */
+export function applyTableDimensions(table: HTMLTableElement, colWidths?: number[], rowHeights?: number[]): void {
+  const rows = Array.from(table.querySelectorAll("tr"));
+  const cols = rows[0]?.children.length ?? 0;
+  const hasCols = Boolean(colWidths && colWidths.some((w) => w > 0));
+  const widths = hasCols
+    ? Array.from({ length: cols }, (_, i) => {
+        const w = colWidths?.[i] ?? 0;
+        return w > 0 ? Math.round(w) : 140;
+      })
+    : [];
+  const totalW = widths.reduce((a, b) => a + b, 0);
+
+  if (hasCols && totalW > 0) {
+    table.setAttribute("data-sized", "1");
+    table.setAttribute("data-widths", widths.join(","));
+    table.style.setProperty("--tbl-w", `${totalW}px`);
+  } else {
+    table.removeAttribute("data-sized");
+    table.removeAttribute("data-widths");
+    table.style.removeProperty("--tbl-w");
+  }
+
+  const hasRows = Boolean(rowHeights && rowHeights.some((h) => h > 0));
+  const heights = hasRows
+    ? Array.from({ length: rows.length }, (_, i) => {
+        const h = rowHeights?.[i] ?? 0;
+        return h > 0 ? Math.round(h) : 0;
+      })
+    : [];
+
+  if (hasRows) {
+    table.setAttribute("data-heights", heights.join(","));
+  } else {
+    table.removeAttribute("data-heights");
+  }
+
+  rows.forEach((tr, rIdx) => {
+    const rowEl = tr as HTMLElement;
+    const h = heights[rIdx] ?? 0;
+    if (h > 0) {
+      rowEl.setAttribute("data-h", String(h));
+      rowEl.style.height = `${h}px`;
+      rowEl.style.setProperty("--row-h", `${h}px`);
+    } else {
+      rowEl.removeAttribute("data-h");
+      rowEl.style.removeProperty("height");
+      rowEl.style.removeProperty("--row-h");
+    }
+
+    Array.from(tr.children).forEach((cellEl, cIdx) => {
+      const c = cellEl as HTMLElement;
+      if (hasCols && totalW > 0 && cIdx < widths.length) {
+        const w = widths[cIdx];
+        const pct = ((w / totalW) * 100).toFixed(2);
+        c.style.width = `${w}px`;
+        c.style.setProperty("--col-w", `${w}px`);
+        c.style.setProperty("--col-pct", `${pct}%`);
+      } else {
+        c.style.removeProperty("width");
+        c.style.removeProperty("--col-w");
+        c.style.removeProperty("--col-pct");
+      }
+    });
+  });
+}
+
 function tableToLines(wrap: HTMLElement): string[] {
-  const table = wrap.querySelector("table");
+  const table = wrap.querySelector("table") as HTMLTableElement | null;
   if (!table) return [];
   const aligns = (table.getAttribute("data-align") || "").split(",");
-  const rows = Array.from(table.querySelectorAll("tr")).map((tr) =>
+  const trs = Array.from(table.querySelectorAll("tr"));
+  const rows = trs.map((tr) =>
     Array.from(tr.children).map((c) =>
       htmlToMarkdown(c as HTMLElement).replace(/\n+/g, " ").replace(/\|/g, "\\|").trim(),
     ),
@@ -1308,7 +1492,219 @@ function tableToLines(wrap: HTMLElement): string[] {
   const fmt = (cells: string[]) => `| ${Array.from({ length: n }, (_, i) => cells[i] ?? "").join(" | ")} |`;
   const marks: Record<string, string> = { l: ":---", c: ":---:", r: "---:" };
   const sep = `| ${Array.from({ length: n }, (_, i) => marks[aligns[i]] ?? "---").join(" | ")} |`;
-  return [fmt(rows[0]), sep, ...rows.slice(1).map(fmt)];
+  const out = [fmt(rows[0]), sep, ...rows.slice(1).map(fmt)];
+
+  const { widths, heights } = getTableDimensions(table);
+  const rowHeights = heights.length > 0 ? heights : trs.map((tr) => Math.max(0, Math.round(Number(tr.getAttribute("data-h")) || 0)));
+  const parts: string[] = [];
+  if (widths.some((w) => w > 0)) {
+    const normalized = Array.from({ length: n }, (_, i) => (widths[i] > 0 ? widths[i] : 140));
+    parts.push(`cols=${normalized.join(",")}`);
+  }
+  if (rowHeights.some((h) => h > 0)) {
+    const normalized = Array.from({ length: trs.length }, (_, i) => (rowHeights[i] > 0 ? rowHeights[i] : 0));
+    parts.push(`rows=${normalized.join(",")}`);
+  }
+  if (parts.length > 0) {
+    out.push(`<!-- doit-table: ${parts.join(" ")} -->`);
+  }
+  return out;
+}
+
+/** Scrolls the enclosing note scroll container so the caret stays comfortably inside the viewport. */
+export function scrollCaretIntoView(editor: HTMLElement | null): void {
+  if (!editor) return;
+  const scrollContainer = editor.closest(".overflow-y-auto, .overflow-y-scroll") as HTMLElement | null;
+  if (!scrollContainer) return;
+  const sel = window.getSelection();
+  if (!sel || sel.rangeCount === 0) return;
+  const range = sel.getRangeAt(0);
+  if (!editor.contains(range.startContainer)) return;
+
+  let rect = range.getBoundingClientRect();
+  if (rect.height === 0 && rect.top === 0 && rect.bottom === 0) {
+    const clientRect = range.getClientRects()[0];
+    if (clientRect && (clientRect.height > 0 || clientRect.top !== 0 || clientRect.bottom !== 0)) {
+      rect = clientRect;
+    } else {
+      const el =
+        range.startContainer instanceof HTMLElement
+          ? range.startContainer
+          : range.startContainer.parentElement;
+      if (!el) return;
+      rect = el.getBoundingClientRect();
+    }
+  }
+  if (rect.height === 0 && rect.top === 0 && rect.bottom === 0) return;
+
+  const containerRect = scrollContainer.getBoundingClientRect();
+  const bottomMargin = 44;
+  const topMargin = 24;
+  if (rect.bottom > containerRect.bottom - bottomMargin) {
+    scrollContainer.scrollTop += rect.bottom - (containerRect.bottom - bottomMargin);
+  } else if (rect.top < containerRect.top + topMargin) {
+    scrollContainer.scrollTop -= (containerRect.top + topMargin) - rect.top;
+  }
+}
+
+interface TableEdgeHit {
+  table: HTMLTableElement;
+  colIdx: number | null;
+  rowIdx: number | null;
+  colCell: HTMLElement | null;
+  rowCell: HTMLElement | null;
+  cursor: string;
+}
+
+let activeTableResize = false;
+
+function detectTableEdge(clientX: number, clientY: number, target: HTMLElement, editor: HTMLElement): TableEdgeHit | null {
+  const wrap = target.closest(".md-tablewrap") as HTMLElement | null;
+  if (!wrap || !editor.contains(wrap)) return null;
+  const table = wrap.querySelector("table.md-tbl") as HTMLTableElement | null;
+  if (!table) return null;
+
+  const allRows = Array.from(table.querySelectorAll("tr"));
+  if (allRows.length === 0) return null;
+
+  let cell = target.closest("th,td") as HTMLElement | null;
+  if (!cell || !table.contains(cell)) {
+    for (const candidate of Array.from(table.querySelectorAll("th,td")) as HTMLElement[]) {
+      const r = candidate.getBoundingClientRect();
+      if (clientX >= r.left - 6 && clientX <= r.right + 6 && clientY >= r.top - 5 && clientY <= r.bottom + 5) {
+        cell = candidate;
+        break;
+      }
+    }
+  }
+  if (!cell) return null;
+
+  const tr = cell.closest("tr");
+  if (!tr) return null;
+  const rowCells = Array.from(tr.children) as HTMLElement[];
+  const cellColIdx = rowCells.indexOf(cell);
+  const cellRowIdx = allRows.indexOf(tr);
+  if (cellColIdx < 0 || cellRowIdx < 0) return null;
+
+  const rect = cell.getBoundingClientRect();
+  const nearRight = Math.abs(clientX - rect.right) <= 6;
+  const nearLeft = !nearRight && cellColIdx > 0 && Math.abs(clientX - rect.left) <= 6;
+  const nearBottom = Math.abs(clientY - rect.bottom) <= 5;
+  const nearTop = !nearBottom && cellRowIdx > 0 && Math.abs(clientY - rect.top) <= 5;
+
+  if (!nearRight && !nearLeft && !nearBottom && !nearTop) return null;
+
+  const colIdx = nearRight ? cellColIdx : nearLeft ? cellColIdx - 1 : null;
+  const rowIdx = nearBottom ? cellRowIdx : nearTop ? cellRowIdx - 1 : null;
+  const colCell = colIdx !== null ? (rowCells[colIdx] ?? null) : null;
+  const rowCell =
+    rowIdx !== null ? ((allRows[rowIdx]?.children[cellColIdx] as HTMLElement | undefined) ?? null) : null;
+  const cursor = colIdx !== null && rowIdx !== null ? "nwse-resize" : colIdx !== null ? "col-resize" : "row-resize";
+
+  return { table, colIdx, rowIdx, colCell, rowCell, cursor };
+}
+
+/** Clears table edge hover highlights and resize cursor on the editor. */
+export function clearTableResizeHover(editor: HTMLElement | null): void {
+  if (!editor) return;
+  editor.querySelectorAll("[data-resize-col]").forEach((el) => el.removeAttribute("data-resize-col"));
+  editor.querySelectorAll("[data-resize-row]").forEach((el) => el.removeAttribute("data-resize-row"));
+  if (!activeTableResize && editor.style.cursor) {
+    editor.style.cursor = "";
+  }
+}
+
+/** Updates hover cursor and border highlight when the pointer nears a table cell edge. */
+export function handleTableMouseMove(e: React.MouseEvent<HTMLElement>, editor: HTMLElement): void {
+  if (activeTableResize) return;
+  const target = e.target as HTMLElement | null;
+  if (!target) {
+    clearTableResizeHover(editor);
+    return;
+  }
+  const hit = detectTableEdge(e.clientX, e.clientY, target, editor);
+  clearTableResizeHover(editor);
+  if (!hit) return;
+  editor.style.cursor = hit.cursor;
+  if (hit.colCell) hit.colCell.setAttribute("data-resize-col", "1");
+  if (hit.rowCell) hit.rowCell.setAttribute("data-resize-row", "1");
+}
+
+/** Starts free drag-resizing when mousedown lands on a table column/row edge. Returns true if handled. */
+export function handleTableMouseDown(
+  e: React.MouseEvent<HTMLElement>,
+  editor: HTMLElement,
+  onInput: () => void,
+): boolean {
+  if (e.button !== 0) return false;
+  const target = e.target as HTMLElement | null;
+  if (!target) return false;
+  const hit = detectTableEdge(e.clientX, e.clientY, target, editor);
+  if (!hit) return false;
+
+  e.preventDefault();
+  e.stopPropagation();
+
+  const { table, colIdx, rowIdx, cursor } = hit;
+  const zoomHost = table.closest("[style*='zoom']") as HTMLElement | null;
+  const zoomPct = zoomHost ? parseFloat(zoomHost.style.zoom) : NaN;
+  const zoomScale = Number.isFinite(zoomPct) && zoomPct > 0 ? zoomPct / 100 : 1;
+
+  const firstRowCells = Array.from(table.querySelector("tr")?.children ?? []) as HTMLElement[];
+  const allRows = Array.from(table.querySelectorAll("tr"));
+  const existing = getTableDimensions(table);
+  const hasExistingCols = existing.widths.length === firstRowCells.length && existing.widths.some((w) => w > 0);
+  const widths = hasExistingCols
+    ? [...existing.widths]
+    : firstRowCells.map((c) => Math.max(48, Math.round(c.getBoundingClientRect().width / zoomScale) || 140));
+  const heights = Array.from({ length: allRows.length }, (_, i) => existing.heights[i] ?? 0);
+
+  const startX = e.clientX;
+  const startY = e.clientY;
+  const startColW = colIdx !== null ? (widths[colIdx] || 140) : 0;
+  const startRowH =
+    rowIdx !== null
+      ? heights[rowIdx] > 0
+        ? heights[rowIdx]
+        : Math.max(28, Math.round(allRows[rowIdx].getBoundingClientRect().height / zoomScale) || 36)
+      : 0;
+
+  let resized = false;
+  activeTableResize = true;
+  document.body.style.userSelect = "none";
+  document.body.style.cursor = cursor;
+
+  const onMove = (moveEv: MouseEvent) => {
+    const dx = moveEv.clientX - startX;
+    const dy = moveEv.clientY - startY;
+    if (!resized && Math.abs(dx) < 2 && Math.abs(dy) < 2) return;
+    resized = true;
+    if (colIdx !== null) {
+      widths[colIdx] = Math.max(48, Math.round(startColW + dx / zoomScale));
+    }
+    if (rowIdx !== null) {
+      heights[rowIdx] = Math.max(28, Math.round(startRowH + dy / zoomScale));
+    }
+    applyTableDimensions(
+      table,
+      colIdx !== null || hasExistingCols ? widths : undefined,
+      rowIdx !== null || existing.heights.some((h) => h > 0) ? heights : undefined,
+    );
+  };
+
+  const onUp = () => {
+    window.removeEventListener("mousemove", onMove);
+    window.removeEventListener("mouseup", onUp);
+    activeTableResize = false;
+    document.body.style.userSelect = "";
+    document.body.style.cursor = "";
+    clearTableResizeHover(editor);
+    if (resized) onInput();
+  };
+
+  window.addEventListener("mousemove", onMove);
+  window.addEventListener("mouseup", onUp);
+  return true;
 }
 /**
  * Toggles bold in the active contenteditable editor or fallback input.
@@ -1409,6 +1805,55 @@ export function handleRichEditorKeyDown(
       onInput();
       return true;
     }
+    if (!e.shiftKey && !e.altKey && !e.ctrlKey && !e.metaKey && sel.isCollapsed) {
+      const table = cell.closest("table") as HTMLTableElement | null;
+      const tableWrap = (cell.closest(".md-tablewrap") as HTMLElement | null) ?? table;
+      if (table && tableWrap) {
+        const cells = Array.from(table.querySelectorAll("th,td")) as HTMLElement[];
+        const cols = table.querySelector("tr")?.children.length ?? 1;
+        const idx = cells.indexOf(cell);
+        if (e.key === "ArrowRight" && caretAtEnd(cell, range)) {
+          e.preventDefault();
+          if (idx + 1 < cells.length) {
+            focusTableCell(cells[idx + 1], true, editor);
+          } else {
+            const created = moveCaretAfterTable(tableWrap, editor, false);
+            if (created) onInput();
+          }
+          return true;
+        }
+        if (e.key === "ArrowLeft" && caretAtStart(cell, range)) {
+          e.preventDefault();
+          if (idx > 0) {
+            focusTableCell(cells[idx - 1], false, editor);
+          } else {
+            moveCaretBeforeTable(tableWrap, editor);
+          }
+          return true;
+        }
+        if (e.key === "ArrowDown" && caretOnLastLine(cell, range)) {
+          e.preventDefault();
+          if (idx + cols < cells.length) {
+            focusTableCell(cells[idx + cols], false, editor);
+          } else {
+            const created = moveCaretAfterTable(tableWrap, editor, false);
+            if (created) onInput();
+          }
+          return true;
+        }
+        if (e.key === "ArrowUp" && caretOnFirstLine(cell, range)) {
+          if (idx - cols >= 0) {
+            e.preventDefault();
+            focusTableCell(cells[idx - cols], false, editor);
+            return true;
+          }
+          if (moveCaretBeforeTable(tableWrap, editor)) {
+            e.preventDefault();
+            return true;
+          }
+        }
+      }
+    }
     if (e.key === "Backspace" && !e.shiftKey && !e.altKey && !e.ctrlKey) {
       const table = cell.closest("table") as HTMLTableElement | null;
       if (table) {
@@ -1431,29 +1876,19 @@ export function handleRichEditorKeyDown(
         const cells = Array.from(table.querySelectorAll("th,td")) as HTMLElement[];
         const isLastCell = cells.indexOf(cell) === cells.length - 1;
         const tr = cell.closest("tr");
-        const isLastRow = tr && tr === table.querySelector("tbody tr:last-child, tr:last-child");
+        const allRows = table.querySelectorAll("tr");
+        const isLastRow = tr && tr === allRows[allRows.length - 1];
         const isRowEmpty = tr && Array.from(tr.children).every((c) => (c.textContent || "").trim() === "");
 
         if ((isLastCell && caretAtEnd(cell, range)) || (isLastRow && isRowEmpty)) {
           e.preventDefault();
           if (isLastRow && isRowEmpty && table.querySelectorAll("tr").length > 1) {
+            const rowIdx = tr ? Array.from(table.querySelectorAll("tr")).indexOf(tr) : -1;
             tr?.remove();
+            syncTableRowsAfterDelete(table, rowIdx);
           }
           const tableWrap = (cell.closest(".md-tablewrap") as HTMLElement) || table;
-          let targetLine = tableWrap.nextElementSibling as HTMLElement | null;
-          if (
-            !targetLine ||
-            targetLine.classList.contains("md-tablewrap") ||
-            targetLine.classList.contains("md-pre") ||
-            targetLine.hasAttribute("data-raw") ||
-            targetLine.textContent?.trim()
-          ) {
-            const newLine = document.createElement("div");
-            newLine.appendChild(document.createElement("br"));
-            tableWrap.after(newLine);
-            targetLine = newLine;
-          }
-          placeCaretStart(targetLine);
+          moveCaretAfterTable(tableWrap, editor, true);
           onInput();
           return true;
         }
@@ -1516,8 +1951,67 @@ export function handleRichEditorKeyDown(
     return true;
   }
 
+  // ---- list nesting and moving lines: work on every selected line ----
+  if (e.key === "Tab" && !e.altKey && !e.ctrlKey && !e.metaKey) {
+    const lines = selectedBlocks(editor, range);
+    if (lines.some((line) => isListBlock(line))) {
+      // Kept in the editor even when the line cannot move further, so focus never jumps away.
+      e.preventDefault();
+      if (e.shiftKey ? outdentLines(editor, lines) : indentLines(editor, lines)) onInput();
+      return true;
+    }
+  }
+  if (e.altKey && !e.ctrlKey && !e.metaKey && !e.shiftKey && (e.key === "ArrowUp" || e.key === "ArrowDown")) {
+    e.preventDefault();
+    if (moveLines(editor, range, e.key === "ArrowUp" ? -1 : 1)) onInput();
+    return true;
+  }
+
   const block = currentBlock(editor);
   if (!block || block.tagName !== "DIV" || !sel.isCollapsed) return false;
+
+  // Seamless arrow entry into adjacent tables from normal/task blocks
+  if (!e.shiftKey && !e.altKey && !e.ctrlKey && !e.metaKey) {
+    if (
+      (e.key === "ArrowDown" && caretOnLastLine(block, range)) ||
+      (e.key === "ArrowRight" && caretAtEnd(block, range))
+    ) {
+      let next = block.nextElementSibling as HTMLElement | null;
+      while (next && next.classList.contains("md-hr")) next = next.nextElementSibling as HTMLElement | null;
+      if (next && next.classList.contains("md-tablewrap")) {
+        const firstCell = next.querySelector("th,td") as HTMLElement | null;
+        if (firstCell) {
+          e.preventDefault();
+          focusTableCell(firstCell, true, editor);
+          return true;
+        }
+      }
+    }
+    const cbInBlock = block.classList.contains("md-task") ? block.querySelector(".md-cb") : null;
+    const atBlockStart = cbInBlock
+      ? isCaretRightAfterCheckbox(block, cbInBlock, range)
+      : caretOffsetIn(block, range) === 0;
+    if (
+      (e.key === "ArrowUp" && caretOnFirstLine(block, range)) ||
+      (e.key === "ArrowLeft" && atBlockStart)
+    ) {
+      let prev = block.previousElementSibling as HTMLElement | null;
+      while (prev && prev.classList.contains("md-hr")) prev = prev.previousElementSibling as HTMLElement | null;
+      if (prev && prev.classList.contains("md-tablewrap")) {
+        const rows = Array.from(prev.querySelectorAll("tr"));
+        const lastRow = rows[rows.length - 1];
+        const targetCell =
+          e.key === "ArrowLeft"
+            ? (Array.from(prev.querySelectorAll("th,td")).pop() as HTMLElement | undefined)
+            : (lastRow?.firstElementChild as HTMLElement | null);
+        if (targetCell) {
+          e.preventDefault();
+          focusTableCell(targetCell, false, editor);
+          return true;
+        }
+      }
+    }
+  }
 
   const isList = block.classList.contains("md-li") || block.classList.contains("md-quote");
   const isTask = block.classList.contains("md-task");
@@ -1541,6 +2035,7 @@ export function handleRichEditorKeyDown(
       next.appendChild(document.createElement("br"));
       hrNode.after(next);
       placeCaretStart(next);
+      scrollCaretIntoView(editor);
       onInput();
       return true;
     }
@@ -1556,6 +2051,7 @@ export function handleRichEditorKeyDown(
       block.replaceWith(preNode);
       ensureTrailingLine(preNode);
       placeCaretStart(preNode);
+      scrollCaretIntoView(editor);
       onInput();
       return true;
     }
@@ -1575,12 +2071,19 @@ export function handleRichEditorKeyDown(
   }
 
   if (e.key === "Enter") {
+    // Empty nested list line: step out one level first, like every outliner.
+    if (isEmpty && lineWidth(block) > 0 && outdentLines(editor, [block])) {
+      e.preventDefault();
+      onInput();
+      return true;
+    }
     if (isEmpty && (isList || isTask || isHeading || isOl || isDd || isFnDef)) {
       // Empty bullet / task / quote / heading line: exit to normal text paragraph!
       e.preventDefault();
       clearPrefix(block);
       renumberOrderedLists(editor);
       placeCaretStart(block);
+      scrollCaretIntoView(editor);
       onInput();
       return true;
     }
@@ -1593,11 +2096,13 @@ export function handleRichEditorKeyDown(
       next.appendChild(makeCheckbox());
       next.appendChild(document.createElement("br"));
       block.after(next);
+      renumberOrderedLists(editor);
       const r = document.createRange();
       r.setStart(next, 1);
       r.collapse(true);
       sel.removeAllRanges();
       sel.addRange(r);
+      scrollCaretIntoView(editor);
       onInput();
       return true;
     }
@@ -1609,7 +2114,9 @@ export function handleRichEditorKeyDown(
       next.className = block.className || "md-li";
       next.appendChild(document.createElement("br"));
       block.after(next);
+      renumberOrderedLists(editor);
       placeCaretStart(next);
+      scrollCaretIntoView(editor);
       onInput();
       return true;
     }
@@ -1618,6 +2125,8 @@ export function handleRichEditorKeyDown(
       e.preventDefault();
       const next = document.createElement("div");
       next.className = "md-ol";
+      // Same level as this line; the number is set by renumberOrderedLists below.
+      next.setAttribute("data-p", block.getAttribute("data-p") || "1. ");
 
       const atEnd = caretAtEnd(block, range);
       if (atEnd) {
@@ -1645,6 +2154,7 @@ export function handleRichEditorKeyDown(
       block.after(next);
       renumberOrderedLists(editor);
       placeCaretStart(next);
+      scrollCaretIntoView(editor);
       onInput();
       return true;
     }
@@ -1655,6 +2165,7 @@ export function handleRichEditorKeyDown(
       next.appendChild(document.createElement("br"));
       block.after(next);
       placeCaretStart(next);
+      scrollCaretIntoView(editor);
       onInput();
       return true;
     }
@@ -1689,6 +2200,12 @@ export function handleRichEditorKeyDown(
     if (prev && prev instanceof HTMLElement && (prev.classList.contains("md-hr") || prev.hasAttribute("data-raw"))) {
       e.preventDefault();
       prev.remove();
+      onInput();
+      return true;
+    }
+    // At the start of a nested list line: step out one level before the marker goes.
+    if (lineWidth(block) > 0 && outdentLines(editor, [block])) {
+      e.preventDefault();
       onInput();
       return true;
     }
@@ -1765,6 +2282,15 @@ export function isCaretAtEditorStart(editor: HTMLElement): boolean {
   if (!firstBlock.contains(range.startContainer) && range.startContainer !== editor && range.startContainer !== firstBlock) {
     return false;
   }
+  if (firstBlock.classList.contains("md-tablewrap")) {
+    const startEl =
+      range.startContainer instanceof HTMLElement ? range.startContainer : range.startContainer.parentElement;
+    const cell = startEl?.closest("th,td") as HTMLElement | null;
+    if (!cell || !firstBlock.contains(cell)) return false;
+    const firstRow = firstBlock.querySelector("tr");
+    if (!firstRow || cell.closest("tr") !== firstRow) return false;
+    return caretOnFirstLine(cell, range);
+  }
   const pre = document.createRange();
   pre.selectNodeContents(firstBlock);
   try {
@@ -1828,34 +2354,295 @@ function caretAtEnd(block: HTMLElement, range: Range): boolean {
   }
 }
 
-/**
- * Scans top-level editor blocks and ensures contiguous groups of ordered list items (.md-ol)
- * are sequentially numbered (1., 2., 3., ...), preserving any leading indentation.
- */
-export function renumberOrderedLists(editor: HTMLElement): void {
-  let expectedNum = 0;
-  for (const child of Array.from(editor.children)) {
-    if (!(child instanceof HTMLElement) || child.tagName !== "DIV" || isSpecialBlock(child)) {
-      expectedNum = 0;
-      continue;
-    }
-    if (child.classList.contains("md-ol")) {
-      const curP = child.getAttribute("data-p") || "";
-      const leadSpace = curP.match(/^\s*/)?.[0] || "";
-      if (expectedNum === 0) {
-        const m = curP.match(/\d+/);
-        expectedNum = m ? parseInt(m[0], 10) : 1;
-      } else {
-        expectedNum += 1;
-      }
-      const targetP = `${leadSpace}${expectedNum}. `;
-      if (curP !== targetP) {
-        child.setAttribute("data-p", targetP);
-      }
-    } else {
-      expectedNum = 0;
+function caretOnFirstLine(container: HTMLElement, range: Range): boolean {
+  if (caretAtStart(container, range)) return true;
+  const rect = range.getBoundingClientRect();
+  if (rect.height === 0) return true;
+  const startRange = document.createRange();
+  startRange.selectNodeContents(container);
+  startRange.collapse(true);
+  const startRect = startRange.getBoundingClientRect();
+  if (startRect.height === 0) {
+    const cs = getComputedStyle(container);
+    const padTop = parseFloat(cs.paddingTop) || 0;
+    return rect.top - (container.getBoundingClientRect().top + padTop) < rect.height * 0.9;
+  }
+  return Math.abs(rect.top - startRect.top) < Math.max(rect.height, startRect.height) * 0.6;
+}
+
+function caretOnLastLine(container: HTMLElement, range: Range): boolean {
+  if (caretAtEnd(container, range)) return true;
+  const rect = range.getBoundingClientRect();
+  if (rect.height === 0) return true;
+  const endRange = document.createRange();
+  endRange.selectNodeContents(container);
+  endRange.collapse(false);
+  const endRect = endRange.getBoundingClientRect();
+  if (endRect.height === 0) {
+    const cs = getComputedStyle(container);
+    const padBottom = parseFloat(cs.paddingBottom) || 0;
+    return container.getBoundingClientRect().bottom - padBottom - rect.bottom < rect.height * 0.9;
+  }
+  return Math.abs(rect.bottom - endRect.bottom) < Math.max(rect.height, endRect.height) * 0.6;
+}
+
+function focusTableCell(cell: HTMLElement, toStart: boolean, editor?: HTMLElement | null): void {
+  cell.focus({ preventScroll: true });
+  const sel = window.getSelection();
+  if (sel) {
+    const r = document.createRange();
+    r.selectNodeContents(cell);
+    r.collapse(toStart);
+    sel.removeAllRanges();
+    sel.addRange(r);
+  }
+  scrollCaretIntoView(editor ?? cell);
+}
+
+function moveCaretBeforeTable(tableWrap: HTMLElement, editor: HTMLElement): boolean {
+  let prev = tableWrap.previousElementSibling as HTMLElement | null;
+  while (prev && prev.classList.contains("md-hr")) prev = prev.previousElementSibling as HTMLElement | null;
+  if (!prev) return false;
+  if (prev.classList.contains("md-tablewrap")) {
+    const lastCell = Array.from(prev.querySelectorAll("th,td")).pop() as HTMLElement | undefined;
+    if (lastCell) {
+      focusTableCell(lastCell, false, editor);
+      return true;
     }
   }
+  selectContents(prev, true);
+  scrollCaretIntoView(editor);
+  return true;
+}
+
+function moveCaretAfterTable(tableWrap: HTMLElement, editor: HTMLElement, createIfNonEmpty: boolean): boolean {
+  let targetLine = tableWrap.nextElementSibling as HTMLElement | null;
+  while (targetLine && targetLine.classList.contains("md-hr")) {
+    targetLine = targetLine.nextElementSibling as HTMLElement | null;
+  }
+  if (!createIfNonEmpty && targetLine && targetLine.classList.contains("md-tablewrap")) {
+    const nextCell = targetLine.querySelector("th,td") as HTMLElement | null;
+    if (nextCell) {
+      focusTableCell(nextCell, true, editor);
+      return false;
+    }
+  }
+  let created = false;
+  if (
+    !targetLine ||
+    targetLine.classList.contains("md-tablewrap") ||
+    targetLine.classList.contains("md-pre") ||
+    targetLine.hasAttribute("data-raw") ||
+    (createIfNonEmpty && targetLine.textContent?.trim())
+  ) {
+    const newLine = document.createElement("div");
+    newLine.appendChild(document.createElement("br"));
+    tableWrap.after(newLine);
+    targetLine = newLine;
+    created = true;
+  }
+  placeCaretStart(targetLine);
+  scrollCaretIntoView(editor);
+  return created;
+}
+
+function syncTableRowInserted(table: HTMLTableElement, rowIdx: number): void {
+  const { widths, heights } = getTableDimensions(table);
+  if (heights.some((h) => h > 0)) {
+    const rowCount = table.querySelectorAll("tr").length;
+    while (heights.length < rowCount - 1) heights.push(0);
+    heights.splice(Math.max(0, rowIdx), 0, 0);
+  }
+  if (widths.some((w) => w > 0) || heights.some((h) => h > 0)) {
+    applyTableDimensions(table, widths, heights);
+  }
+}
+
+function syncTableRowsAfterDelete(table: HTMLTableElement, rowIdx: number): void {
+  const { widths, heights } = getTableDimensions(table);
+  if (rowIdx >= 0 && rowIdx < heights.length) {
+    heights.splice(rowIdx, 1);
+  }
+  if (widths.some((w) => w > 0) || heights.some((h) => h > 0)) {
+    applyTableDimensions(table, widths, heights);
+  }
+}
+
+/** How list nesting sees a top-level editor block. */
+function blockListLine(block: Element): ListLine {
+  if (!(block instanceof HTMLElement) || block.tagName !== "DIV" || isSpecialBlock(block)) return { kind: "other" };
+  const cls = block.classList.contains("md-task") ? "md-task" : block.classList.contains("md-ol") ? "md-ol" : block.classList.contains("md-li") ? "md-li" : null;
+  return listLineOf(cls, block.getAttribute("data-p") ?? "");
+}
+
+function isListBlock(block: Element | null | undefined): block is HTMLElement {
+  return !!block && blockListLine(block).kind !== "other";
+}
+
+/**
+ * Lays out the editor's lists after an edit: numbers each run of numbered lines (per nesting level,
+ * keeping their indentation) and draws every list line at its depth.
+ */
+export function renumberOrderedLists(editor: HTMLElement): void {
+  const blocks = Array.from(editor.children);
+  const places = layoutLists(blocks.map(blockListLine));
+  blocks.forEach((block, i) => {
+    if (!(block instanceof HTMLElement)) return;
+    const { depth, number } = places[i];
+    if (number !== undefined) {
+      const prefix = numberedPrefix(block.getAttribute("data-p") ?? "", number);
+      if (block.getAttribute("data-p") !== prefix) block.setAttribute("data-p", prefix);
+    }
+    if (depth > 0) block.style.setProperty("--md-depth", String(depth));
+    else if (block.style.getPropertyValue("--md-depth")) block.style.removeProperty("--md-depth");
+  });
+}
+
+// ---- list nesting (Tab / Shift+Tab) and moving lines (Alt+Up / Alt+Down) ----
+
+function topLevelBlock(editor: HTMLElement, node: Node, offset: number, atEnd: boolean): HTMLElement | null {
+  if (node === editor) {
+    const child = editor.children[atEnd ? offset - 1 : offset] ?? editor.lastElementChild;
+    return child instanceof HTMLElement ? child : null;
+  }
+  let n: Node | null = node;
+  while (n && n.parentNode !== editor) n = n.parentNode;
+  return n instanceof HTMLElement ? n : null;
+}
+
+/** The top-level lines the selection covers. A selection ending at the very start of a line leaves that line out. */
+function selectedBlocks(editor: HTMLElement, range: Range): HTMLElement[] {
+  const first = topLevelBlock(editor, range.startContainer, range.startOffset, false);
+  let last = topLevelBlock(editor, range.endContainer, range.endOffset, true);
+  if (!first || !last) return [];
+  if (last !== first) {
+    const end = range.cloneRange();
+    end.collapse(false);
+    if (caretOffsetIn(last, end) === 0) last = (last.previousElementSibling as HTMLElement | null) ?? first;
+  }
+  const blocks: HTMLElement[] = [];
+  for (let b: Element | null = first; b; b = b.nextElementSibling) {
+    if (b instanceof HTMLElement) blocks.push(b);
+    if (b === last) break;
+  }
+  return blocks;
+}
+
+function lineIndent(block: HTMLElement): string {
+  return (block.getAttribute("data-p") ?? "").match(/^\s*/)?.[0] ?? "";
+}
+
+function lineWidth(block: Element): number {
+  return block instanceof HTMLElement && isListBlock(block) ? indentWidth(lineIndent(block)) : 0;
+}
+
+/** The list lines nested under `block`. */
+function nestedUnder(block: HTMLElement): HTMLElement[] {
+  const width = lineWidth(block);
+  const nested: HTMLElement[] = [];
+  for (let n = block.nextElementSibling; isListBlock(n) && lineWidth(n) > width; n = n.nextElementSibling) nested.push(n);
+  return nested;
+}
+
+/** Shifts a list line's indentation by `delta` columns. Changed lines are indented with spaces. A
+ * numbered line is reset to 1, so it starts a new level at 1 and joins an existing one in sequence. */
+function shiftIndent(block: HTMLElement, delta: number): void {
+  const indent = lineIndent(block);
+  let marker = (block.getAttribute("data-p") ?? "").slice(indent.length);
+  if (block.classList.contains("md-ol")) marker = marker.replace(/\d+/, "1");
+  block.setAttribute("data-p", " ".repeat(Math.max(0, indentWidth(indent) + delta)) + marker);
+}
+
+/** The selected list lines that are not nested under another selected line that moves, each with its
+ * nested lines. A line for which `moves` is false leaves its nested lines free to move on their own. */
+function selectedItems(lines: HTMLElement[], moves: (line: HTMLElement) => boolean = () => true): { line: HTMLElement; nested: HTMLElement[] }[] {
+  const items: { line: HTMLElement; nested: HTMLElement[] }[] = [];
+  const covered = new Set<HTMLElement>();
+  for (const line of lines) {
+    if (!isListBlock(line) || covered.has(line) || !moves(line)) continue;
+    const nested = nestedUnder(line);
+    nested.forEach((n) => covered.add(n));
+    items.push({ line, nested });
+  }
+  return items;
+}
+
+/** Tab: nests the selected list lines (and what is nested under them) one level deeper. A line can
+ * only nest under a list line above it, so a list never skips a level. */
+function indentLines(editor: HTMLElement, lines: HTMLElement[]): boolean {
+  const items = selectedItems(lines);
+  const first = items[0]?.line;
+  const above = first?.previousElementSibling ?? null;
+  if (!first || !isListBlock(above) || lineWidth(above) < lineWidth(first)) return false;
+  const step = indentWidth(INDENT_STEP);
+  for (const { line, nested } of items) [line, ...nested].forEach((b) => shiftIndent(b, step));
+  renumberOrderedLists(editor);
+  return true;
+}
+
+/** Shift+Tab: moves the selected list lines (and what is nested under them) out to their parent's level. */
+function outdentLines(editor: HTMLElement, lines: HTMLElement[]): boolean {
+  const moves = selectedItems(lines, (line) => lineWidth(line) > 0).map(({ line, nested }) => {
+    const width = lineWidth(line);
+    let parent = line.previousElementSibling;
+    while (isListBlock(parent) && lineWidth(parent) >= width) parent = parent.previousElementSibling;
+    const target = isListBlock(parent) ? lineWidth(parent) : 0;
+    return { blocks: [line, ...nested], delta: target - width };
+  });
+  if (moves.length === 0) return false;
+  for (const { blocks, delta } of moves) blocks.forEach((b) => shiftIndent(b, delta));
+  renumberOrderedLists(editor);
+  return true;
+}
+
+/** Alt+Up / Alt+Down: moves the selected lines, with the lines nested under them, past the line or
+ * item next to them. They keep their indentation. */
+function moveLines(editor: HTMLElement, range: Range, direction: -1 | 1): boolean {
+  const lines = selectedBlocks(editor, range);
+  if (lines.length === 0) return false;
+  let last = lines[lines.length - 1];
+  for (const { nested } of selectedItems(lines)) {
+    const end = nested[nested.length - 1];
+    if (end && last.compareDocumentPosition(end) & Node.DOCUMENT_POSITION_FOLLOWING) last = end;
+  }
+  const unit: HTMLElement[] = [];
+  for (let b: Element | null = lines[0]; b; b = b.nextElementSibling) {
+    if (b instanceof HTMLElement) unit.push(b);
+    if (b === last) break;
+  }
+  const width = lineWidth(lines[0]);
+  const saved = { sc: range.startContainer, so: range.startOffset, ec: range.endContainer, eo: range.endOffset };
+
+  if (direction < 0) {
+    let target = lines[0].previousElementSibling;
+    if (!target) return false;
+    // Land above the whole item before, not between it and its nested lines.
+    while (isListBlock(target) && lineWidth(target) > width && target.previousElementSibling) target = target.previousElementSibling;
+    target.before(...unit);
+  } else {
+    const next = last.nextElementSibling;
+    if (!next) return false;
+    const nested = isListBlock(next) && lineWidth(next) >= width ? nestedUnder(next) : [];
+    (nested[nested.length - 1] ?? next).after(...unit);
+  }
+  // Never left nested under nothing: four leading spaces with no list above read as code elsewhere.
+  if (isListBlock(lines[0])) {
+    const above = lines[0].previousElementSibling;
+    const deepest = isListBlock(above) ? lineWidth(above) + indentWidth(INDENT_STEP) : 0;
+    if (width > deepest) unit.filter((b) => isListBlock(b)).forEach((b) => shiftIndent(b, deepest - width));
+  }
+
+  const sel = window.getSelection();
+  if (sel) {
+    const restored = document.createRange();
+    restored.setStart(saved.sc, saved.so);
+    restored.setEnd(saved.ec, saved.eo);
+    sel.removeAllRanges();
+    sel.addRange(restored);
+  }
+  renumberOrderedLists(editor);
+  scrollCaretIntoView(editor);
+  return true;
 }
 
 function clearPrefix(block: HTMLElement): void {
@@ -1909,12 +2696,16 @@ export function insertTableAtCaret(editor: HTMLElement): void {
 
   ensureTrailingLine(wrap);
   const first = wrap.querySelector("th") as HTMLElement | null;
-  if (first) selectContents(first);
+  if (first) {
+    selectContents(first);
+    scrollCaretIntoView(editor);
+  }
 }
 
 function moveInTable(cell: HTMLElement, dir: number, forceRow = false): void {
   const table = cell.closest("table") as HTMLTableElement | null;
   if (!table) return;
+  const editor = cell.closest(".md-tablewrap")?.parentElement ?? null;
   const cells = Array.from(table.querySelectorAll("th,td")) as HTMLElement[];
   const cols = table.querySelector("tr")?.children.length ?? 1;
   const idx = cells.indexOf(cell);
@@ -1932,20 +2723,18 @@ function moveInTable(cell: HTMLElement, dir: number, forceRow = false): void {
   if (target >= cells.length) {
     if (dir === 0) {
       const tableWrap = (cell.closest(".md-tablewrap") as HTMLElement) || table;
-      let targetLine = tableWrap.nextElementSibling as HTMLElement | null;
-      if (
-        !targetLine ||
-        targetLine.classList.contains("md-tablewrap") ||
-        targetLine.classList.contains("md-pre") ||
-        targetLine.hasAttribute("data-raw") ||
-        targetLine.textContent?.trim()
-      ) {
-        const newLine = document.createElement("div");
-        newLine.appendChild(document.createElement("br"));
-        tableWrap.after(newLine);
-        targetLine = newLine;
+      if (editor) {
+        moveCaretAfterTable(tableWrap, editor, true);
+      } else {
+        let targetLine = tableWrap.nextElementSibling as HTMLElement | null;
+        if (!targetLine || isSpecialBlock(targetLine) || targetLine.textContent?.trim()) {
+          const newLine = document.createElement("div");
+          newLine.appendChild(document.createElement("br"));
+          tableWrap.after(newLine);
+          targetLine = newLine;
+        }
+        placeCaretStart(targetLine);
       }
-      placeCaretStart(targetLine);
       return;
     }
     const body = table.querySelector("tbody") ?? table.appendChild(document.createElement("tbody"));
@@ -1959,12 +2748,14 @@ function moveInTable(cell: HTMLElement, dir: number, forceRow = false): void {
       row.appendChild(td);
     }
     body.appendChild(row);
+    const rowIdx = Array.from(table.querySelectorAll("tr")).indexOf(row);
+    syncTableRowInserted(table, rowIdx);
     const firstOfNew = row.children[dir === 0 ? idx % cols : 0] as HTMLElement;
-    selectContents(firstOfNew, true);
+    focusTableCell(firstOfNew, false, editor);
     return;
   }
   if (target < 0) target = 0;
-  selectContents(cells[target], true);
+  focusTableCell(cells[target], false, editor);
 }
 
 /** Appends a fresh column to every row of the table (header gets a th, body rows a td). */
@@ -1982,7 +2773,12 @@ function addColumn(table: HTMLTableElement, focusFrom: HTMLElement): void {
   const aligns = (table.getAttribute("data-align") || "").split(",").filter((a) => a !== "");
   aligns.push("n");
   table.setAttribute("data-align", aligns.join(","));
-  if (focusTarget) selectContents(focusTarget, true);
+  const { widths, heights } = getTableDimensions(table);
+  if (widths.some((w) => w > 0)) {
+    widths.push(140);
+    applyTableDimensions(table, widths, heights);
+  }
+  if (focusTarget) focusTableCell(focusTarget, false, table.closest(".md-tablewrap")?.parentElement);
 }
 
 /** Heading level of the caret line (0 = normal text); drives the toolbar dropdown label. */
@@ -2031,10 +2827,12 @@ export function handleCheckboxClick(e: React.MouseEvent<HTMLElement>, editor: HT
 // Task lines (`- [ ] text`) are stored as is_todo items; everything else is plain text.
 // ---------------------------------------------------------------------------
 
-const TASK_LINE = /^\s*[-*]\s+\[([ xX])\]\s?(.*)$/;
+const TASK_LINE = /^(\s*)[-*]\s+\[([ xX])\]\s?(.*)$/;
 
-export function contentToMarkdown(content: { text: string; is_todo: boolean; completed: boolean }[]): string {
-  return content.map((c) => (c.is_todo ? `- [${c.completed ? "x" : " "}] ${c.text}` : c.text)).join("\n");
+export function contentToMarkdown(content: Pick<ContentItem, "text" | "is_todo" | "completed" | "indent">[]): string {
+  return content
+    .map((c) => (c.is_todo ? `${c.indent ?? ""}- [${c.completed ? "x" : " "}] ${c.text}` : c.text))
+    .join("\n");
 }
 
 /** The note's lines for `md`. A line that did not change keeps its previous object. */
@@ -2043,11 +2841,20 @@ export function markdownToContent(md: string, prev: ContentItem[], newId: () => 
     const before = prev[idx];
     if (before && !before.is_todo && before.text === line && !line.includes("[")) return before;
     const m = line.match(TASK_LINE);
-    const text = m ? m[2] : line;
+    const text = m ? m[3] : line;
     const is_todo = !!m;
-    const completed = !!m && m[1].toLowerCase() === "x";
-    if (before && before.text === text && before.is_todo === is_todo && before.completed === completed) return before;
-    return { id: before?.id ?? newId(), text, is_todo, completed };
+    const completed = !!m && m[2].toLowerCase() === "x";
+    const indent = m?.[1] ?? "";
+    if (
+      before &&
+      before.text === text &&
+      before.is_todo === is_todo &&
+      before.completed === completed &&
+      (before.indent ?? "") === indent
+    ) {
+      return before;
+    }
+    return indent ? { id: before?.id ?? newId(), text, is_todo, completed, indent } : { id: before?.id ?? newId(), text, is_todo, completed };
   });
 }
 /** Context-menu helpers: operate on the table that owns `cell`. */
@@ -2076,7 +2883,9 @@ export function addTableRow(cell: HTMLElement): void {
   } else {
     tr.after(row);
   }
-  selectContents(row.children[0] as HTMLElement, true);
+  const rowIdx = Array.from(table.querySelectorAll("tr")).indexOf(row);
+  syncTableRowInserted(table, rowIdx);
+  focusTableCell(row.children[0] as HTMLElement, false, table.closest(".md-tablewrap")?.parentElement);
 }
 
 /** Removes the row under `cell` (body rows only; the header row is protected). */
@@ -2094,12 +2903,15 @@ export function deleteTable(cell: HTMLElement): boolean {
 
 export function deleteTableRow(cell: HTMLElement): boolean {
   const tr = cell.closest("tr");
-  if (!tr || tr.closest("thead")) return false;
+  const table = cell.closest("table") as HTMLTableElement | null;
+  if (!tr || !table || tr.closest("thead")) return false;
+  const rowIdx = Array.from(table.querySelectorAll("tr")).indexOf(tr);
   const next = (tr.nextElementSibling ?? tr.previousElementSibling) as HTMLElement | null;
   const idx = Array.from(tr.children).indexOf(cell);
   tr.remove();
+  syncTableRowsAfterDelete(table, rowIdx);
   const target = (next?.children[Math.max(0, idx)] as HTMLElement | undefined) ?? null;
-  if (target) selectContents(target, true);
+  if (target) focusTableCell(target, false, table.closest(".md-tablewrap")?.parentElement);
   return true;
 }
 /**
@@ -2110,10 +2922,17 @@ export function deleteTableRow(cell: HTMLElement): boolean {
 const PREVIEW_LINES = 40;
 const IMAGE_REFERENCE_LINE = /^\s*\[[a-zA-Z0-9_\-]+\]:\s*\S+\s*$/;
 
-/** The start of a note, plus the image references at its end that those first lines may link to. */
+/** The start of a note, plus any trailing rows/metadata of an open table and image references it links to. */
 function previewContent(content: ContentItem[]): ContentItem[] {
   if (content.length <= PREVIEW_LINES) return content;
-  return [...content.slice(0, PREVIEW_LINES), ...content.slice(PREVIEW_LINES).filter((item) => IMAGE_REFERENCE_LINE.test(item.text))];
+  let end = PREVIEW_LINES;
+  if (isTableRow(content[end - 1]?.text ?? "")) {
+    while (end < content.length && isTableRow(content[end].text)) end++;
+  }
+  if (end < content.length && TABLE_META_RE.test(content[end].text)) {
+    end++;
+  }
+  return [...content.slice(0, end), ...content.slice(end).filter((item) => IMAGE_REFERENCE_LINE.test(item.text))];
 }
 
 /** The start of a text-mode note, as its card shows it. */
@@ -2155,8 +2974,13 @@ export function deleteTableColumn(cell: HTMLElement): boolean {
   const aligns = (table.getAttribute("data-align") || "").split(",").filter((a) => a !== "");
   aligns.splice(idx, 1);
   table.setAttribute("data-align", aligns.join(","));
+  const { widths, heights } = getTableDimensions(table);
+  if (idx < widths.length) widths.splice(idx, 1);
+  if (widths.some((w) => w > 0) || heights.some((h) => h > 0)) {
+    applyTableDimensions(table, widths, heights);
+  }
   const target = tr.children[Math.min(idx, cols - 2)] as HTMLElement | undefined;
-  if (target) selectContents(target, true);
+  if (target) focusTableCell(target, false, table.closest(".md-tablewrap")?.parentElement);
   return true;
 }
 

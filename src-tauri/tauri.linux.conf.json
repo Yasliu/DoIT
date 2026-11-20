@@ -2,6 +2,7 @@
   "$schema": "https://schema.tauri.app/config/2",
   "bundle": {
     "targets": [
+      "deb",
       "rpm",
       "appimage"
     ],
@@ -21,6 +22,11 @@
       "icons/icon.png"
     ],
     "linux": {
+      "deb": {
+        "desktopTemplate": "linux/doit.desktop",
+        "section": "utils",
+        "priority": "optional"
+      },
       "rpm": {
         "desktopTemplate": "linux/doit.desktop"
       }

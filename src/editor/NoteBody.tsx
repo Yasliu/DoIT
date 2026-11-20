@@ -1,12 +1,17 @@
 import { fontStack } from "../api/tauriBridge";
 import { RawEditor } from "../components/RawEditor";
 import {
+  clearTableResizeHover,
   fixCheckboxCaret,
   handleCheckboxClick,
+  handleLinkPaste,
   handleMarkdownPaste,
   handleRichEditorKeyDown,
+  handleTableMouseDown,
+  handleTableMouseMove,
   isCaretAtEditorStart,
   openExternalUrl,
+  scrollCaretIntoView,
 } from "../lib/format";
 import { getMarkdownShortcuts, matchesCombo } from "../lib/shortcuts";
 import { cx } from "../lib/text";
@@ -54,11 +59,15 @@ export function NoteBody({ editor, variant, maximized = false }: { editor: NoteE
     <div
       ref={editor.attachBody}
       onPaste={(e) => {
-        if (handleMarkdownPaste(e)) editor.input();
+        const body = editor.bodyRef.current;
+        if ((body && handleLinkPaste(e, body)) || handleMarkdownPaste(e)) editor.input();
       }}
       contentEditable
       suppressContentEditableWarning
-      onInput={() => editor.input()}
+      onInput={() => {
+        editor.input();
+        requestAnimationFrame(() => scrollCaretIntoView(editor.bodyRef.current));
+      }}
       onContextMenu={(e) => {
         const img = (e.target as HTMLElement).closest("img.md-img") as HTMLImageElement | null;
         if (img) {
@@ -74,8 +83,18 @@ export function NoteBody({ editor, variant, maximized = false }: { editor: NoteE
           editor.setTableMenu({ x: e.clientX, y: e.clientY, cell });
         }
       }}
+      onMouseMove={(e) => {
+        if (editor.bodyRef.current) handleTableMouseMove(e, editor.bodyRef.current);
+      }}
+      onMouseLeave={() => clearTableResizeHover(editor.bodyRef.current)}
       onMouseDown={(e) => {
-        if ((e.target as HTMLElement).closest(".md-cb")) e.preventDefault();
+        if ((e.target as HTMLElement).closest(".md-cb")) {
+          e.preventDefault();
+          return;
+        }
+        if (editor.bodyRef.current) {
+          handleTableMouseDown(e, editor.bodyRef.current, editor.input);
+        }
       }}
       onClick={(e) => {
         const img = (e.target as HTMLElement).closest("img.md-img") as HTMLImageElement | null;
@@ -108,6 +127,9 @@ export function NoteBody({ editor, variant, maximized = false }: { editor: NoteE
           return;
         }
         if (body) handleRichEditorKeyDown(e, body, editor.input);
+        if (e.key === "Enter" || e.key === "ArrowDown" || e.key === "ArrowUp" || e.key === "Tab" || e.key === "Backspace") {
+          requestAnimationFrame(() => scrollCaretIntoView(editor.bodyRef.current));
+        }
       }}
       onKeyUp={fixCaret}
       onMouseUp={fixCaret}

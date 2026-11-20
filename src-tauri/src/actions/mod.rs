@@ -1,10 +1,15 @@
-//! Mode switches that arrive from outside the UI: a tray-icon click, or a second launch such as
-//! `doit --dock` from a desktop shortcut, dock menu or keyboard binding (forwarded to the running
-//! instance by the single-instance plugin). Many Linux desktops have no tray, so these flags are
-//! how the shell drives DoIT there.
+//! Mode switches that arrive from outside the UI: a tray-icon click, the quick-note shortcut, or a
+//! second launch such as `doit --dock` from a desktop shortcut, dock menu or keyboard binding
+//! (forwarded to the running instance by the single-instance plugin). Many Linux desktops have no
+//! tray, so these flags are how the shell drives DoIT there.
 
-use tauri::AppHandle;
+mod shortcut;
 
+use tauri::{AppHandle, Manager};
+
+pub use shortcut::{restore_quick_note_shortcut, set_quick_note_shortcut, startup_error as quick_note_shortcut_error};
+
+use crate::storage::StorageManager;
 use crate::window::{self, DockOpen};
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
@@ -12,6 +17,8 @@ pub enum Action {
     Canvas,
     Dock,
     Toggle,
+    /// The dock panel on the most recently edited note, or put away if it is already in front.
+    QuickNote,
     Quit,
 }
 
@@ -22,6 +29,7 @@ impl Action {
             "--canvas" => Some(Self::Canvas),
             "--dock" => Some(Self::Dock),
             "--toggle" => Some(Self::Toggle),
+            "--quick-note" => Some(Self::QuickNote),
             "--quit" => Some(Self::Quit),
             _ => None,
         })
@@ -33,6 +41,7 @@ impl Action {
             Self::Toggle if window::in_canvas() => window::show_dock(app, DockOpen::default()),
             Self::Toggle | Self::Canvas => window::show_canvas(app),
             Self::Dock => window::show_dock(app, DockOpen::default()),
+            Self::QuickNote => window::quick_note(app, app.state::<StorageManager>().latest_note_id()),
             Self::Quit => window::quit(app),
         }
     }

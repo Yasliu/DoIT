@@ -235,14 +235,78 @@ pub fn set_webview_memory_level(_window: &tauri::WebviewWindow, _low: bool) {}
 /// The WebKitGTK counterpart of the WebView2 cache flags: the default web-browser cache model keeps
 /// large memory caches, a back/forward cache and spare web processes for fast navigation, none of
 /// which a local one-page-per-window app uses. The context is shared, so repeating this is harmless.
+///
+/// Also disables WebKitGTK's built-in pinch-to-zoom gesture (which zooms the whole app chrome on
+/// two-finger touchpad pinch) and forwards pinch scale steps into the page as `doit:pinch-zoom`.
 pub fn prepare_webview(window: &tauri::WebviewWindow) {
     #[cfg(target_os = "linux")]
-    let _ = window.with_webview(|webview| {
-        use webkit2gtk::{CacheModel, WebContextExt, WebViewExt};
-        if let Some(context) = webview.inner().context() {
-            context.set_cache_model(CacheModel::DocumentViewer);
-        }
-    });
+    {
+        let target = window.clone();
+        let _ = window.with_webview(move |webview| {
+            use std::cell::Cell;
+            use std::rc::Rc;
+            use gtk::glib::Propagation;
+            use gtk::prelude::*;
+            use webkit2gtk::{CacheModel, WebContextExt, WebViewExt};
+
+            let view = webview.inner();
+            if let Some(context) = view.context() {
+                context.set_cache_model(CacheModel::DocumentViewer);
+            }
+            if unsafe { view.data::<std::ffi::c_void>("doit-zoom-gesture") }.is_some() {
+                return;
+            }
+            if let Some(ctrl) = unsafe { view.data::<std::ffi::c_void>("wk-view-zoom-gesture") } {
+                unsafe extern "C" {
+                    fn gtk_event_controller_set_propagation_phase(
+                        controller: *mut std::ffi::c_void,
+                        phase: std::ffi::c_int,
+                    );
+                }
+                // 0 = GTK_PHASE_NONE: prevent WebKitGTK's native zoom gesture from scaling the app UI.
+                unsafe { gtk_event_controller_set_propagation_phase(ctrl.as_ptr(), 0) };
+            }
+
+            view.add_events(gtk::gdk::EventMask::TOUCHPAD_GESTURE_MASK);
+            let zoom = gtk::GestureZoom::new(&view);
+            zoom.set_propagation_phase(gtk::PropagationPhase::Capture);
+
+            let last_scale = Rc::new(Cell::new(1.0_f64));
+            let reset_scale = last_scale.clone();
+            zoom.connect_begin(move |gesture, _| {
+                reset_scale.set(1.0);
+                let _ = gesture.set_state(gtk::EventSequenceState::Claimed);
+            });
+
+            let step_scale = last_scale;
+            zoom.connect_scale_changed(move |_, scale| {
+                if scale <= 0.0 {
+                    return;
+                }
+                let ratio = scale / step_scale.get();
+                let delta = if ratio >= 1.08 {
+                    10
+                } else if ratio <= 1.0 / 1.08 {
+                    -10
+                } else {
+                    return;
+                };
+                step_scale.set(scale);
+                let _ = target.eval(format!(
+                    "window.dispatchEvent(new CustomEvent('doit:pinch-zoom',{{detail:{delta}}}))"
+                ));
+            });
+
+            unsafe { view.set_data("doit-zoom-gesture", zoom) };
+            let _ = view.connect_event(|_, event| {
+                if event.event_type() == gtk::gdk::EventType::TouchpadPinch {
+                    Propagation::Stop
+                } else {
+                    Propagation::Proceed
+                }
+            });
+        });
+    }
     #[cfg(not(target_os = "linux"))]
     let _ = window;
 }
@@ -396,6 +460,18 @@ pub fn present_pill(window: &tauri::Window, frame: crate::platform::PillFrame) {
     }
     #[cfg(not(target_os = "linux"))]
     let _ = (window, frame);
+}
+
+/// Microsoft Store packages exist only on Windows.
+pub fn is_store_package() -> bool {
+    false
+}
+
+/// A Wayland session hands keys only to the focused window, XWayland's included, so a shortcut
+/// pressed in another app never reaches DoIT. There the desktop's own shortcut settings run
+/// `doit --quick-note` instead.
+pub fn global_shortcuts_work() -> bool {
+    std::env::var_os("WAYLAND_DISPLAY").is_none()
 }
 
 /// Font families from fontconfig, the same source WebKitGTK resolves CSS font names against.
