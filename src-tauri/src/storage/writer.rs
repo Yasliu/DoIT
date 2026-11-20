@@ -121,7 +121,7 @@ fn apply(mut job: Job) {
     // Keep the old file when the new one could not be written.
     let replaced = job.target.is_none() || written.is_some_and(|new| new != old);
     if replaced {
-        super::remove_note_file_safely(old);
+        super::remove_note_file_safely(&old);
     }
 }
 

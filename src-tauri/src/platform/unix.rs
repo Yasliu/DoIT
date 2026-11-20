@@ -268,7 +268,7 @@ pub fn prepare_webview(window: &tauri::WebviewWindow) {
             }
 
             view.add_events(gtk::gdk::EventMask::TOUCHPAD_GESTURE_MASK);
-            let zoom = gtk::GestureZoom::new(&*view);
+            let zoom = gtk::GestureZoom::new(&view);
             zoom.set_propagation_phase(gtk::PropagationPhase::Capture);
 
             let last_scale = Rc::new(Cell::new(1.0_f64));
@@ -292,7 +292,7 @@ pub fn prepare_webview(window: &tauri::WebviewWindow) {
                     return;
                 };
                 step_scale.set(scale);
-                let _ = target.eval(&format!(
+                let _ = target.eval(format!(
                     "window.dispatchEvent(new CustomEvent('doit:pinch-zoom',{{detail:{delta}}}))"
                 ));
             });
