@@ -89,6 +89,18 @@ pub fn restart_app(app: AppHandle) {
     window::restart(&app);
 }
 
+/// The same string for every page of this run of DoIT and a new one after each launch, so pages
+/// can tell a design picked for this run from one saved for the next.
+#[tauri::command]
+pub fn launch_id() -> String {
+    static ID: std::sync::OnceLock<String> = std::sync::OnceLock::new();
+    ID.get_or_init(|| {
+        let since = std::time::SystemTime::now().duration_since(std::time::UNIX_EPOCH).unwrap_or_default();
+        format!("{}-{}", std::process::id(), since.as_nanos())
+    })
+    .clone()
+}
+
 #[derive(Clone, serde::Serialize)]
 pub struct UpdateProgress {
     received: u64,

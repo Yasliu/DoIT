@@ -5,7 +5,7 @@
 use std::sync::OnceLock;
 
 use serde::Deserialize;
-use tiny_skia::{FillRule, FilterQuality, IntSize, Paint, Path, PathBuilder, Pixmap, PixmapPaint, Stroke, Transform};
+use tiny_skia::{FillRule, FilterQuality, IntSize, Paint, Path, PathBuilder, Pixmap, PixmapPaint, Stroke, StrokeDash, Transform};
 
 use crate::platform::PillFrame;
 
@@ -33,6 +33,9 @@ pub struct PillLook {
     pub border_width: f32,
     pub text: [u8; 4],
     pub letter_spacing: f32,
+    /// Dash and gap lengths for a dotted edge (ILOVEMARKDOWN's frames); a solid edge when absent.
+    #[serde(default)]
+    pub dash: Option<[f32; 2]>,
 }
 
 impl Default for PillLook {
@@ -47,6 +50,7 @@ impl Default for PillLook {
             border_width: 1.0,
             text: [255, 255, 255, 217],
             letter_spacing: 0.26,
+            dash: None,
         }
     }
 }
@@ -64,9 +68,18 @@ pub fn render(look: &PillLook, size: (u32, u32), scale: f32, zoom: f32) -> Optio
     pixmap.fill_path(&body, &paint(look.background), FillRule::Winding, t, None);
     if look.border_width > 0.0 && look.border[3] > 0 {
         let inset = look.border_width / 2.0;
-        if let Some(edge) = rounded_rect(-w / 2.0 + inset, -h / 2.0 + inset, w - look.border_width, h - look.border_width, look.radius - inset) {
-            let stroke = Stroke { width: look.border_width, ..Stroke::default() };
-            pixmap.stroke_path(&edge, &paint(look.border), &stroke, t, None);
+        let (x, y, ew, eh) = (-w / 2.0 + inset, -h / 2.0 + inset, w - look.border_width, h - look.border_width);
+        let dash = look.dash.and_then(|[on, off]| StrokeDash::new(vec![on, off], 0.0));
+        let edges: Vec<Path> = if dash.is_some() && look.radius < 0.5 {
+            // Each side starts on a dash at its own corner, as the page's dotted frames do.
+            let (r, b) = (x + ew, y + eh);
+            [((x, y), (r, y)), ((r, y), (r, b)), ((x, b), (r, b)), ((x, y), (x, b))].into_iter().filter_map(|(a, z)| line(a, z)).collect()
+        } else {
+            rounded_rect(x, y, ew, eh, look.radius - inset).into_iter().collect()
+        };
+        let stroke = Stroke { width: look.border_width, dash, ..Stroke::default() };
+        for edge in &edges {
+            pixmap.stroke_path(edge, &paint(look.border), &stroke, t, None);
         }
     }
 
@@ -100,6 +113,13 @@ fn logo(px: f32) -> Option<(u32, &'static Pixmap)> {
         LOGOS.iter().filter_map(|&(n, rgba)| Some((n, Pixmap::from_vec(rgba.to_vec(), IntSize::from_wh(n, n)?)?))).collect()
     });
     pixmaps.iter().find(|(n, _)| *n as f32 >= px).or(pixmaps.last()).map(|(n, p)| (*n, p))
+}
+
+fn line((x0, y0): (f32, f32), (x1, y1): (f32, f32)) -> Option<Path> {
+    let mut pb = PathBuilder::new();
+    pb.move_to(x0, y0);
+    pb.line_to(x1, y1);
+    pb.finish()
 }
 
 fn rounded_rect(x: f32, y: f32, w: f32, h: f32, radius: f32) -> Option<Path> {
@@ -198,5 +218,15 @@ mod tests {
         let row = 52 * frame.width as usize * 4;
         let ink = (150..250).any(|x| frame.rgba[row + x * 4] < 200);
         assert!(ink, "the logo and label are drawn in the middle");
+    }
+
+    #[test]
+    fn a_dashed_edge_leaves_gaps_along_the_border() {
+        let look = PillLook { radius: 0.0, background: [0, 0, 0, 0], border: [0, 0, 0, 255], dash: Some([2.0, 5.0]), ..PillLook::default() };
+        // A 200x52 window at 1x: the 172x38 pill's top edge is the row y = 7, from x = 14.
+        let frame = render(&look, (200, 52), 1.0, 1.0).expect("frame");
+        let top: Vec<u8> = (14..28).map(|x| frame.rgba[((7 * frame.width + x) * 4 + 3) as usize]).collect();
+        assert!(top.iter().any(|&a| a > 200), "dashes are drawn: {top:?}");
+        assert!(top.contains(&0), "gaps are left between them: {top:?}");
     }
 }

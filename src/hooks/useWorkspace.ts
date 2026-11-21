@@ -2,6 +2,7 @@ import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { getCurrentWindow } from "@tauri-apps/api/window";
 import { NoteItem, ScanSummary, Shelf, tauriApi } from "../api/tauriBridge";
 import { initCategoryIcons } from "../lib/categoryIcons";
+import { initShelfMarks } from "../lib/shelfMarks";
 import { uid } from "../lib/text";
 
 export type LoadState = "loading" | "ready" | "error";
@@ -26,7 +27,10 @@ export function useWorkspace() {
     shelfList.forEach((shelf) => {
       if (shelf.icon) icons[shelf.name.toLowerCase()] = shelf.icon;
     });
-    if (shelfList.length) initCategoryIcons(icons);
+    if (shelfList.length) {
+      initCategoryIcons(icons);
+      initShelfMarks(icons);
+    }
   }, [shelfList]);
 
   /** Puts `order` first (others keep their place after it); the backend keeps "Uncategorized" last. */
@@ -265,7 +269,8 @@ export function useWorkspace() {
     }
   }, [persist, reloadShelves]);
 
-  const createCategory = useCallback(async (category: string) => {
+  /** Adds a shelf, with `icon` saved before the list reloads so the reload carries it. */
+  const createCategory = useCallback(async (category: string, icon?: string | null) => {
     const trimmed = category.trim().slice(0, 24);
     if (!trimmed) return;
     setShelfList((prev) => {
@@ -276,6 +281,7 @@ export function useWorkspace() {
       return next;
     });
     await tauriApi.createShelf(trimmed);
+    if (icon) await tauriApi.setShelfIcon(trimmed, icon);
     reloadShelves();
   }, [reloadShelves]);
 
@@ -430,9 +436,10 @@ export function useWorkspace() {
     return summary;
   }, []);
 
-  const importFolderAsShelf = useCallback(async (shelf?: string) => {
+  const importFolderAsShelf = useCallback(async (shelf?: string, icon?: string | null) => {
     const result = await tauriApi.importFolderAsShelf(shelf);
     showAll(result.notes);
+    if (icon) await tauriApi.setShelfIcon(result.shelf, icon);
     reloadShelves();
     return result;
   }, []);

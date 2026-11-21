@@ -42,13 +42,16 @@
         width: 72px;
         height: 72px;
       }
-      *, *::before, *::after {
+      /* ILOVEMARKDOWN draws its own focus outlines and window frame, so these resets skip it. */
+      html:not([data-design="markdown"]) *,
+      html:not([data-design="markdown"]) *::before,
+      html:not([data-design="markdown"]) *::after {
         -webkit-tap-highlight-color: transparent !important;
         outline: none !important;
         box-shadow: none !important;
         -webkit-focus-ring-color: transparent !important;
       }
-      *:hover, *:focus, *:focus-visible, *:focus-within, *:active {
+      html:not([data-design="markdown"]) :is(*:hover, *:focus, *:focus-visible, *:focus-within, *:active) {
         outline: none !important;
         box-shadow: none !important;
         ring: 0 !important;

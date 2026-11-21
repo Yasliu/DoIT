@@ -8,7 +8,7 @@ import { ShortcutField } from "../../components/ShortcutField";
 import { applyShortcutSettings } from "../../lib/shortcuts";
 import { cx } from "../../lib/text";
 import { applyThemeSettings, designIsOptional, isLinux } from "..";
-import { setDesign } from "../DesignSwitch";
+import { useMarkdownFlag } from "../DesignSwitch";
 import {
   APPEARANCES,
   type Appearance,
@@ -145,6 +145,7 @@ export function ModernSettings({ onBack, onStoragePathChanged }: ModernSettingsP
   const [typingOpen, setTypingOpen] = useState(false);
   const [resolvedDark, setResolvedDark] = useState(document.documentElement.dataset.appearance === "dark");
   const [quickNote, setQuickNote] = useState<{ supported: boolean | null; error?: string }>({ supported: null });
+  const markdownFlag = useMarkdownFlag();
 
   useEffect(() => {
     void tauriApi.getSettings().then((res) => {
@@ -425,8 +426,16 @@ export function ModernSettings({ onBack, onStoragePathChanged }: ModernSettingsP
 
         {designIsOptional && (
           <Section title="Experimental">
-            <Row label="New design" hint="Turn off to go back to the classic look. DoIT reloads to switch.">
-              <Switch label="New design" on onChange={() => void setDesign("classic")} />
+            <Row
+              label="ILOVEMARKDOWN"
+              hint={markdownFlag.pending ? "Restart DoIT to switch." : "A monospace look, with figures you can put in notes. Takes effect after a restart."}
+            >
+              {markdownFlag.pending && (
+                <button type="button" className="btn" data-variant="primary" onClick={markdownFlag.restart}>
+                  Restart now
+                </button>
+              )}
+              <Switch label="ILOVEMARKDOWN" on={markdownFlag.on} onChange={markdownFlag.set} />
             </Row>
           </Section>
         )}

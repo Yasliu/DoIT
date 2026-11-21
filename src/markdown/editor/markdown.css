@@ -1,0 +1,427 @@
+/* The rich Markdown editor and the card previews, in text mode. Markers live in data-p and never
+   show; headings and list bullets draw their own faint markers so a note still reads like source. */
+
+.md-h1,
+.md-h2,
+.md-h3,
+.md-h4,
+.md-h5,
+.md-h6 {
+  font-weight: 700;
+  line-height: 1.35;
+  color: var(--foreground);
+}
+.md-h1 {
+  font-size: 1.32em;
+  margin: 0.5em 0 0.15em;
+  letter-spacing: 0.01em;
+}
+.md-h2 {
+  font-size: 1.16em;
+  margin: 0.45em 0 0.1em;
+}
+.md-h3 {
+  font-size: 1.04em;
+  margin: 0.35em 0 0.06em;
+}
+.md-h4,
+.md-h5,
+.md-h6 {
+  font-size: 1em;
+  margin: 0.3em 0 0.05em;
+  color: var(--graph-muted);
+}
+.md-h1::before,
+.md-h2::before,
+.md-h3::before {
+  color: var(--graph-accent);
+  font-weight: 400;
+  user-select: none;
+}
+.md-h1::before {
+  content: "# ";
+}
+.md-h2::before {
+  content: "## ";
+}
+.md-h3::before {
+  content: "### ";
+}
+
+/* Nested list lines: --md-depth is set from the line's indentation (see lib/listLayout). */
+:is(.md-li, .md-ol, .md-task) {
+  margin-left: calc(var(--md-depth, 0) * 2ch);
+}
+.md-li {
+  position: relative;
+  padding-left: 2ch;
+}
+.md-li::before {
+  content: "-";
+  position: absolute;
+  left: 0;
+  color: var(--graph-muted);
+}
+.md-ol {
+  position: relative;
+  padding-left: 3.5ch;
+}
+.md-ol::before {
+  content: attr(data-p);
+  position: absolute;
+  left: 0;
+  color: var(--graph-muted);
+  font-variant-numeric: tabular-nums;
+}
+.md-dd {
+  position: relative;
+  padding-left: 3ch;
+  color: var(--graph-muted);
+}
+.md-dd::before {
+  content: ":";
+  position: absolute;
+  left: 1ch;
+  color: var(--graph-accent);
+}
+.md-footnote-def {
+  padding-left: 2ch;
+  font-size: 0.92em;
+  color: var(--graph-muted);
+  margin: 0.25em 0;
+  background-image: repeating-linear-gradient(to bottom, var(--graph-frame) 0 2px, transparent 2px 7px);
+  background-repeat: repeat-y;
+  background-size: 1px 100%;
+}
+.md-fn-badge {
+  color: var(--graph-accent);
+  margin-right: 1ch;
+  user-select: none;
+}
+.md-quote {
+  padding-left: 2ch;
+  color: var(--graph-muted);
+  background-image: repeating-linear-gradient(to bottom, var(--graph-accent) 0 2px, transparent 2px 5px);
+  background-repeat: repeat-y;
+  background-size: 1px 100%;
+}
+.md-del {
+  text-decoration: line-through;
+  color: var(--graph-muted);
+}
+.md-mark {
+  background: color-mix(in oklab, var(--graph-accent-2) 30%, transparent);
+  color: var(--foreground);
+  padding: 0 0.3ch;
+}
+.md-link {
+  color: var(--graph-accent);
+  text-decoration: underline dashed;
+  text-decoration-color: color-mix(in oklab, var(--graph-accent) 55%, transparent);
+  text-underline-offset: 0.22em;
+  cursor: pointer;
+}
+.md-link:hover {
+  text-decoration-style: solid;
+}
+.md-sub,
+.md-sup {
+  font-size: 0.8em;
+  line-height: 1;
+  display: inline-block;
+}
+.md-sub {
+  vertical-align: -0.22em;
+}
+.md-sup {
+  vertical-align: 0.32em;
+}
+.md-footnote-ref {
+  font-size: 0.75em;
+  vertical-align: 0.32em;
+  line-height: 1;
+  display: inline-block;
+  color: var(--graph-accent);
+  padding: 0 1px;
+  cursor: pointer;
+}
+.md-hr {
+  padding: 0.55em 0;
+  user-select: none;
+}
+.md-hr hr {
+  border: 0;
+  height: 1px;
+  margin: 0;
+  background-image: repeating-linear-gradient(to right, var(--graph-frame) 0 2px, transparent 2px 7px);
+}
+.md-pre {
+  font-size: 0.94em;
+  line-height: 1.6;
+  min-height: 2.6em;
+  margin: 0.5em 0;
+  padding: 0.7em 1.5ch;
+  white-space: pre-wrap;
+  word-break: break-word;
+  background-color: var(--surface);
+  background-image: repeating-linear-gradient(to bottom, var(--graph-accent) 0 2px, transparent 2px 5px);
+  background-repeat: repeat-y;
+  background-size: 1px 100%;
+  outline: none;
+}
+.md-code {
+  padding: 0 0.5ch;
+  background: var(--hover);
+  color: var(--foreground);
+  font-weight: 600;
+}
+
+/* Isolated horizontal scroll: wide tables never push the sheet or dock sideways. */
+.md-tablewrap {
+  display: block;
+  width: 100%;
+  max-width: 100%;
+  min-width: 0;
+  margin: 0.55em 0;
+  padding-right: 10px;
+  padding-bottom: 6px;
+  overflow-x: auto;
+  overflow-y: hidden;
+}
+.md-tbl {
+  width: max-content;
+  min-width: 100%;
+  border-collapse: collapse;
+}
+.md-tbl[data-sized="1"] {
+  table-layout: fixed;
+  width: var(--tbl-w);
+  min-width: var(--tbl-w);
+}
+.md-tbl th,
+.md-tbl td {
+  position: relative;
+  border: 1px dashed var(--graph-frame);
+  padding: 4px 1.5ch;
+  min-width: 10ch;
+  max-width: 40ch;
+  text-align: left;
+  vertical-align: top;
+  white-space: normal;
+  word-break: break-word;
+  outline: none;
+}
+.md-tbl[data-sized="1"] th,
+.md-tbl[data-sized="1"] td {
+  min-width: 40px;
+  max-width: none;
+  overflow-wrap: break-word;
+}
+.md-tbl[data-resize-cursor="col"],
+.md-tbl[data-resize-cursor="col"] th,
+.md-tbl[data-resize-cursor="col"] td {
+  cursor: col-resize !important;
+}
+.md-tbl[data-resize-cursor="row"],
+.md-tbl[data-resize-cursor="row"] th,
+.md-tbl[data-resize-cursor="row"] td {
+  cursor: row-resize !important;
+}
+.md-tbl[data-resize-cursor="both"],
+.md-tbl[data-resize-cursor="both"] th,
+.md-tbl[data-resize-cursor="both"] td {
+  cursor: nwse-resize !important;
+}
+.md-tbl th[data-resize-col="1"]::before,
+.md-tbl td[data-resize-col="1"]::before {
+  content: "";
+  position: absolute;
+  top: 0;
+  bottom: 0;
+  right: -1.5px;
+  width: 2px;
+  background-color: var(--graph-accent);
+  pointer-events: none;
+  z-index: 2;
+}
+.md-tbl th[data-resize-row="1"]::after,
+.md-tbl td[data-resize-row="1"]::after {
+  content: "";
+  position: absolute;
+  left: 0;
+  right: 0;
+  bottom: -1.5px;
+  height: 2px;
+  background-color: var(--graph-accent);
+  pointer-events: none;
+  z-index: 2;
+}
+.md-tbl th {
+  font-weight: 700;
+  color: var(--graph-accent);
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+  font-size: 0.92em;
+}
+.md-tbl :is(th, td):focus {
+  background: var(--hover);
+}
+.md-img {
+  display: inline-block;
+  max-width: 100%;
+  height: auto;
+  vertical-align: middle;
+  margin: 6px 0;
+  outline: 1px solid var(--graph-frame);
+  outline-offset: 3px;
+  image-rendering: -webkit-optimize-contrast;
+  transform: translateZ(0);
+  cursor: pointer;
+}
+.md-img:hover {
+  outline-color: var(--graph-accent);
+}
+
+/* ---- Task lines (`- [ ]` / `- [x]`), drawn as [ ] and [x] ---- */
+.md-task {
+  position: relative;
+  display: block;
+  padding-left: 4ch;
+  min-height: 1.6em;
+}
+.md-cb {
+  position: absolute;
+  left: 0;
+  top: 0;
+  display: block;
+  width: 3ch;
+  cursor: pointer;
+  user-select: none;
+  color: var(--graph-muted);
+}
+.md-cb::before {
+  content: "[ ]";
+}
+.md-cb:hover {
+  color: var(--graph-accent);
+}
+.md-task-done .md-cb {
+  color: var(--graph-accent);
+}
+.md-task-done .md-cb::before {
+  content: "[x]";
+}
+.md-task-done {
+  color: var(--graph-muted);
+  text-decoration: line-through;
+  text-decoration-color: var(--graph-frame);
+}
+
+/* ---- Card previews: the same rendering as the open note, read-only and clamped ---- */
+.md-preview {
+  font-size: 13px;
+  line-height: 1.65;
+  overflow: hidden;
+  user-select: none;
+  cursor: inherit;
+  word-break: break-word;
+  color: color-mix(in oklab, var(--foreground) 82%, var(--background));
+}
+.md-preview > div {
+  min-height: 1.2em;
+  white-space: pre-wrap;
+  tab-size: 4;
+}
+.md-preview :is(.md-h1, .md-h2, .md-h3) {
+  font-size: 1.02em;
+  margin: 0.2em 0 0;
+}
+.md-preview .md-tablewrap {
+  overflow: hidden;
+  margin: 0.35em 0;
+  padding: 0;
+}
+.md-preview .md-tbl {
+  width: 100%;
+  min-width: 0;
+}
+.md-preview .md-tbl :is(th, td) {
+  min-width: 0;
+  max-width: none;
+  padding: 2px 1ch;
+}
+.md-preview .md-tbl[data-sized="1"] {
+  table-layout: fixed;
+  width: 100%;
+  max-width: var(--tbl-w);
+  min-width: 0;
+}
+.md-preview .md-tbl[data-sized="1"] :is(th, td) {
+  width: var(--col-pct) !important;
+  min-width: 0;
+  max-width: none;
+  overflow-wrap: break-word;
+}
+.md-preview .md-tbl tr[data-h] {
+  height: calc(var(--row-h) * 0.82) !important;
+}
+.md-preview .md-img {
+  max-height: 110px;
+  width: auto;
+}
+.md-preview .md-pre {
+  margin: 0.3em 0;
+  padding: 0.3em 1ch;
+  min-height: 0;
+}
+.md-preview-raw {
+  margin: 0;
+  overflow: hidden;
+  font-size: 12.5px;
+  line-height: 1.6;
+  white-space: pre-wrap;
+  word-break: break-word;
+  color: var(--graph-muted);
+  user-select: none;
+}
+
+/* ---- Figures (`::tag … ::` blocks), drawn by figures/mount ---- */
+.md-figure {
+  display: block;
+  margin: 1.25em 0;
+  font-size: 14px;
+  white-space: normal;
+  cursor: pointer;
+  user-select: none;
+  --graph-surface: var(--background);
+}
+.md-figure:hover {
+  outline: 1px dashed var(--graph-accent);
+  outline-offset: 6px;
+}
+.md-figure-src {
+  margin: 1.25em 0;
+  background-image: repeating-linear-gradient(to bottom, var(--graph-accent) 0 2px, transparent 2px 5px);
+}
+.md-preview .md-figure {
+  --figure-zoom: 0.8;
+  --figure-line: calc(1px / var(--figure-zoom));
+  margin: 0.5em 0;
+  zoom: var(--figure-zoom);
+  pointer-events: none;
+  --graph-surface: inherit;
+}
+.md-preview .md-figure:hover {
+  outline: none;
+}
+/* Zoomed, the dotted 1px lines would be 0.8 screen px, and WebKit drops the bottom one at a
+   fractional height: draw them a full screen pixel wide instead. */
+.md-preview .md-figure .graph-frame {
+  background-size: 100% var(--figure-line), var(--figure-line) 100%, 100% var(--figure-line), var(--figure-line) 100%;
+}
+.md-preview .md-figure .graph-rule {
+  height: var(--figure-line);
+}
+.md-preview .md-figure .graph-rule-y {
+  width: var(--figure-line);
+}

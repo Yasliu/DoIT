@@ -19,6 +19,7 @@ import {
   previewMarkup,
   scrollCaretIntoView,
 } from "./format";
+import { enableFigureBlocks } from "../markdown/figures";
 import { densityOf, plainPreview, previewLine } from "./text";
 
 const image = (attrs: Record<string, string>) => ({ getAttribute: (name: string) => attrs[name] ?? null }) as unknown as HTMLImageElement;
@@ -417,5 +418,23 @@ describe("list nesting and moving lines", () => {
     expect(leadingHtml).toContain('data-widths="240,120"');
 
     editor.remove();
+  });
+});
+
+describe("figure blocks", () => {
+  enableFigureBlocks();
+  const note = ["Before", '::graph-check{title="launch"}', "- [x] write notes", "- [ ] ship", "::", "- [ ] my own task"].join("\n");
+
+  it("survive the editor unchanged, drawn as one block", () => {
+    const editor = document.createElement("div");
+    editor.innerHTML = markdownToHtml(note);
+    expect(editor.querySelectorAll(".md-figure")).toHaveLength(1);
+    expect(htmlToMarkdown(editor)).toBe(note);
+  });
+
+  it("keep their checkboxes out of the card's task map", () => {
+    const content = markdownToContent(note, [], () => Math.random().toString(36));
+    const own = content.find((item) => item.text === "my own task")!;
+    expect(previewMarkup(content).taskIds).toEqual([own.id]);
   });
 });
