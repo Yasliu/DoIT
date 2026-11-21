@@ -241,7 +241,18 @@ export function Settings({ onStoragePathChanged }: SettingsProps) {
           <Keys title="markdown as you type" bindings={TYPING_SHORTCUTS} />
 
           <Section title="experimental">
-            <Row label="ILOVEMARKDOWN" hint={markdownFlag.pending ? "Restart DoIT to switch." : "Turn off to go back to the default look. Takes effect after a restart."}>
+            <Row
+              label={
+                <>
+                  ILOVEMARKDOWN <span className="ml-[1ch] text-[11px] tracking-wide text-destructive">[ may break ]</span>
+                </>
+              }
+              hint={
+                markdownFlag.pending
+                  ? "Restart DoIT to switch."
+                  : "Turn off to go back to the default look. Takes effect after a restart."
+              }
+            >
               {markdownFlag.pending && (
                 <Btn variant="primary" onClick={markdownFlag.restart}>
                   restart now
