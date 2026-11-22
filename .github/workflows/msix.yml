@@ -1,0 +1,86 @@
+name: Microsoft Store MSIX Build (x64)
+
+# Builds an unsigned x64 MSIX package for Microsoft Partner Center submission (Microsoft signs it
+# on upload). Output is uploaded solely as a GitHub Actions run artifact.
+on:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  msix-x64:
+    name: Build Unsigned MSIX (x64)
+    runs-on: windows-latest
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: lts/*
+          cache: npm
+
+      - name: Setup Rust toolchain
+        uses: dtolnay/rust-toolchain@stable
+
+      - name: Rust cache
+        uses: Swatinem/rust-cache@v2
+        with:
+          workspaces: src-tauri
+
+      - name: Install frontend dependencies
+        run: npm ci
+
+      - name: Build DoIT binary (no NSIS/MSI bundle)
+        run: npx tauri build --no-bundle
+
+      - name: Stage and pack unsigned MSIX
+        id: pack
+        shell: pwsh
+        run: |
+          $ErrorActionPreference = 'Stop'
+          $conf = Get-Content 'src-tauri/tauri.conf.json' -Raw | ConvertFrom-Json
+          $msixVersion = "$($conf.version).0"
+
+          $stage = Join-Path $PWD 'msix-stage'
+          $assets = Join-Path $stage 'Assets'
+          New-Item -ItemType Directory -Force -Path $assets | Out-Null
+
+          Copy-Item 'src-tauri/target/release/doit.exe' -Destination $stage
+          if (Test-Path 'src-tauri/target/release/WebView2Loader.dll') {
+            Copy-Item 'src-tauri/target/release/WebView2Loader.dll' -Destination $stage
+          }
+
+          $manifest = Get-Content 'src-tauri/msix/AppxManifest.xml' -Raw
+          $manifest = $manifest -replace 'Version="[0-9]+\.[0-9]+\.[0-9]+\.[0-9]+"', "Version=`"$msixVersion`""
+          [System.IO.File]::WriteAllText((Join-Path $stage 'AppxManifest.xml'), $manifest, [System.Text.UTF8Encoding]::new($false))
+
+          foreach ($icon in @('Square44x44Logo.png', 'Square71x71Logo.png', 'Square150x150Logo.png', 'Square310x310Logo.png', 'StoreLogo.png')) {
+            Copy-Item (Join-Path 'src-tauri/icons' $icon) -Destination $assets
+          }
+          Copy-Item 'src-tauri/msix/Assets/Wide310x150Logo.png' -Destination $assets
+
+          $makeappx = Get-ChildItem 'C:\Program Files (x86)\Windows Kits\10\bin' -Recurse -Filter 'makeappx.exe' |
+            Where-Object { $_.FullName -match '\\x64\\makeappx\.exe$' } |
+            Sort-Object FullName -Descending |
+            Select-Object -First 1 -ExpandProperty FullName
+          if (-not $makeappx) {
+            throw 'makeappx.exe (x64) not found in Windows Kits 10.'
+          }
+
+          $outFile = "DoITNotes_${msixVersion}_x64.msix"
+          & $makeappx pack /d $stage /p $outFile /o
+          if ($LASTEXITCODE -ne 0) {
+            throw "makeappx.exe failed with exit code $LASTEXITCODE"
+          }
+          Write-Output "msix_file=$outFile" >> $env:GITHUB_OUTPUT
+
+      - name: Upload MSIX artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: DoITNotes-msix-x64
+          path: ${{ steps.pack.outputs.msix_file }}
+          if-no-files-found: error
+          retention-days: 14
