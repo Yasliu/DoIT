@@ -53,9 +53,9 @@ jobs:
             Copy-Item 'src-tauri/target/release/WebView2Loader.dll' -Destination $stage
           }
 
-          $manifest = Get-Content 'src-tauri/msix/AppxManifest.xml' -Raw
-          $manifest = $manifest -replace 'Version="[0-9]+\.[0-9]+\.[0-9]+\.[0-9]+"', "Version=`"$msixVersion`""
-          [System.IO.File]::WriteAllText((Join-Path $stage 'AppxManifest.xml'), $manifest, [System.Text.UTF8Encoding]::new($false))
+          [xml]$manifest = Get-Content 'src-tauri/msix/AppxManifest.xml' -Raw
+          $manifest.Package.Identity.Version = $msixVersion
+          $manifest.Save((Join-Path $stage 'AppxManifest.xml'))
 
           foreach ($icon in @('Square44x44Logo.png', 'Square71x71Logo.png', 'Square150x150Logo.png', 'Square310x310Logo.png', 'StoreLogo.png')) {
             Copy-Item (Join-Path 'src-tauri/icons' $icon) -Destination $assets
