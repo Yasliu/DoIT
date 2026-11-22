@@ -83,12 +83,12 @@ Drop any `.md` or `.txt` files into your note repository folder, hit **Sync Repo
   <img src="docs/shot-save.jpg" width="700" alt="The Save button for externally opened files">
 </p>
 
-## What's new in v1.2.3.1
+## What's new in v1.2.4
 
-- **Instant dock pill & reliable Windows quick-note shortcut**: Fixed the dock panel flash-collapse race, allowed pre-warming on pill hover while keeping the canvas briefly warm for instant switching, and improved Win32 focus & toggle behavior when pressing the global shortcut a second time
-- **Zero-lag emoji picker**: Pre-warmed the emoji picker portal DOM so opening it is instant instead of re-creating hundreds of buttons every time
-- **Window-centered category & shelf pickers**: Category, shelf, and command pickers stay centered across the window even when the sidebar is open
-- **Theme-aware shortcuts & Settings "What's new" button**: Shortcut boxes follow light, dark, and boxy themes seamlessly, and Settings now includes a **What's new** button in the About section
+- **Global dock & quick-note shortcuts + persistent dock note**: Added a global dock toggle shortcut (`Ctrl+Alt+J`), remembered the active note when collapsing the dock panel into the pill, and optimized Windows 10 & 11 DWM frame rendering and foreground focus
+- **Reliable image attachments, caret placement & zoomable lightbox**: Fixed image attachment and clipboard pasting across Linux and Windows, moved the caret directly below inserted images, and made images clickable and zoomable across both Canvas cards and the note editor
+- **Zero-lag emoji picker & centered pickers**: Pre-warmed the emoji picker portal DOM so opening it is instant, and kept category/shelf pickers centered across the window even when the sidebar is open
+- **Theme-aware shortcuts, Settings "What's new" button & experimental ILOVEMARKDOWN**: Shortcut boxes follow light, dark, and boxy themes, Settings includes a **What's new** button, and an opt-in monospace design (`ILOVEMARKDOWN`) is available under Settings → Experimental
 - **Fedora `.rpm` self-updater**: Official `.rpm` releases now install in-app updates automatically on Fedora
 
 The full history lives in the release log below.
@@ -97,12 +97,12 @@ The full history lives in the release log below.
 <summary><strong>Release log</strong> (click to expand)</summary>
 
 <details>
-<summary><strong>v1.2.3.1</strong> — November 21, 2026</summary>
+<summary><strong>v1.2.4</strong> — November 22, 2026</summary>
 
-- Windows global quick-note toggle & dock pill reliability: removed `TrayCompanion` rAF fade race (`closingRef`), serialized dock webview builds (`dock_page_building`), enabled hover pre-warming during canvas keepalive, deferred synchronous canvas teardown off the pill-click path, toggled `quick_note` reliably on `is_visible()`, and added Win32 `BringWindowToTop` / `SetForegroundWindow` focus calls
-- Instant emoji picker: kept the emoji picker portal warm in the DOM (`display: none` when closed) and removed `backdrop-blur-2xl` stalls
-- Centered category pickers: centered `ModernPalette` / `useDialogPlacement` on the window (`50%`) with resize listeners so the category picker stays centered when the sidebar is open
-- Theme-aware shortcut boxes & Settings release log button: themed `[data-slot="shortcut-field"]`, `[data-slot="release-modal"]`, and `[data-slot="emoji-picker"]` in `modern.css`, added a **What's new** button in Settings, and added Fedora `.rpm` in-app updater support
+- Global dock shortcut (`Ctrl+Alt+J` / `--toggle-panel`), persistent active note across dock pill keep-alive retirement, and directional `clip-path` dock open/close animation
+- Reliable image attachment (`InvokeBody::Raw` + `InvokeBody::Json` IPC support, immediate data-URL preview cache, Windows path separator handling), caret placement directly below inserted images, and portaled zoomable `ImageLightbox` from both Canvas cards and the note editor
+- Windows 10 & 11 DWM optimizations: `AttachThreadInput` foreground activation, `DWMWA_CLOAK` startup/maximize flash elimination, `DWMWA_USE_IMMERSIVE_DARK_MODE` + 1px unmaximized frame border, app-clamped pill dragging with `WM_CAPTURECHANGED` recovery, and cached `system_fonts()`
+- Instant pre-warmed emoji picker, window-centered category/shelf pickers, theme-aware shortcut controls, Settings **What's new** button, experimental `ILOVEMARKDOWN` monospace design, and Fedora `.rpm` in-app updater support
 
 </details>
 

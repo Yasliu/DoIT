@@ -1,6 +1,6 @@
 # DoIT Developer Architecture & Engineering Changelog
 
-## [2026-11-22] - Version 1.2.3.1: Dock Shortcut, Image Attachment & Lightbox Fixes, Windows 10/11 DWM & Quick-Note Reliability, Smooth Animations, Instant Emoji Picker & Settings Release Log
+## [2026-11-22] - Version 1.2.4: Dock Shortcut, Image Attachment & Lightbox Fixes, Windows 10/11 DWM & Quick-Note Reliability, Smooth Animations, Instant Emoji Picker & Settings Release Log
 
 ### 25. Dock Shortcut, Image Attachment & Caret Fixes, Windows 10 DWM & Foreground Optimization, Smooth Animations and Dock Search (`src-tauri/src/`, `src/`)
 - **Global dock shortcut (`actions/shortcut.rs`, `actions/mod.rs`, `platform/unix.rs`, `commands/settings.rs`)**: new `dock_shortcut` setting (default `Ctrl+Alt+J`, the in-app dock toggle plus Alt) and `--toggle-panel` flag: the pill opens into the panel, the panel goes back into the pill, nothing in the canvas. `shortcut.rs` now holds two slots (quick note, dock). Where apps can register keys (Windows, X11) it registers them; under Wayland on GNOME it writes a custom shortcut through `gsettings` (`platform::set_desktop_shortcut`, removed again when turned off), so it works from other apps there too. Elsewhere Settings shows the flag to bind by hand. Both Settings screens gained the row.

@@ -39,26 +39,26 @@ export function ReleaseLogModal({ onClose }: ReleaseLogModalProps) {
             <Sparkles size={14} />
           </div>
           <span className="font-mono text-[10px] uppercase tracking-[0.14em] text-ink-4">
-            Version 1.2.3.1 Update
+            Version 1.2.4 Update
           </span>
         </div>
 
         <h2 className="text-[17px] font-semibold text-white tracking-tight mb-3">
-          What&apos;s New in v1.2.3.1
+          What&apos;s New in v1.2.4
         </h2>
 
         <ul className="space-y-2 mb-5 text-[12px] text-ink-2 leading-relaxed">
           <li className="flex items-start gap-2">
             <span className="size-1.5 rounded-full bg-white/60 mt-2 shrink-0" />
-            <span>Instant Dock Pill &amp; Windows Quick-Note Reliability: Fixed Windows global shortcut toggling and dock pill flash-collapse races, pre-warmed the dock panel on hover even while the canvas stays cached, and restored crisp Win32 foreground focus.</span>
+            <span>Global Dock &amp; Quick-Note Shortcuts + Persistent Dock Note: Added a global dock toggle shortcut (<code>Ctrl+Alt+J</code>), preserved the last open note when collapsing the dock to the pill, and improved Windows 10 &amp; 11 foreground focus and DWM frame rendering.</span>
           </li>
           <li className="flex items-start gap-2">
             <span className="size-1.5 rounded-full bg-white/60 mt-2 shrink-0" />
-            <span>Instant Emoji Picker &amp; Centered Pickers: Kept the emoji picker warm in the DOM for zero-lag opening and kept category/shelf pickers centered cleanly across the window regardless of sidebar state.</span>
+            <span>Image Attachment, Caret Placement &amp; Zoomable Lightbox: Fixed image pasting/attaching across Linux and Windows, placed the caret immediately below inserted images, and made images clickable and zoomable on Canvas cards as well as inside the note editor.</span>
           </li>
           <li className="flex items-start gap-2">
             <span className="size-1.5 rounded-full bg-white/60 mt-2 shrink-0" />
-            <span>Theme-Aware Shortcuts &amp; Settings Release Log: Styled shortcut controls to match light, dark, and boxy themes, and added a What&apos;s new button directly inside Settings.</span>
+            <span>Instant Emoji Picker, Centered Pickers &amp; Smoother Scrolling: Pre-warmed the emoji picker DOM, kept category/shelf pickers centered with the sidebar open, and added an opt-in experimental <code>ILOVEMARKDOWN</code> design in Settings.</span>
           </li>
           <li className="flex items-start gap-2">
             <span className="size-1.5 rounded-full bg-white/60 mt-2 shrink-0" />
