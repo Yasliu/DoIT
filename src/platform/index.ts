@@ -4,21 +4,22 @@
  *
  * - Which OS (`platform`, `isLinux`): only for real OS behaviour, such as GNOME wording, the window
  *   frame Linux draws itself and WebKitGTK workarounds.
- * - Which design (`design`, `isModern`, `pick`, `text`): "classic" is DoIT's original look;
- *   "modern" is the layer in `./modern/`. Linux always uses modern; Windows uses it only when the
- *   experimental `design` setting says so.
+ * - Which design (`design`, `isMarkdown`, `isModern`, `pick`, `text`): "modern" is the default
+ *   look, in `./modern/` and `src/components`; "markdown" is the ILOVEMARKDOWN feature flag, a
+ *   separate UI in `src/markdown`. The flag is the `design` setting; switching it takes a restart.
+ *   "classic" is the original look, still in the tree but unreachable.
  *
  * `markPlatform` writes both on <html> as `data-platform` and `data-design` before React renders.
- * Modern styles hang off `html[data-design="modern"]`, so the classic design never matches them.
  */
 
-import { listen } from "@tauri-apps/api/event";
+import { tauriApi } from "../api/tauriBridge";
 import { trackWindowFrame } from "./modern/frame";
 import { trackPillLook } from "./pillLook";
 import { applyModernTheme, restoreModernTheme, themeFromSettings, type ThemeSettings } from "./modern/theme";
+import { applyTheme, restoreTheme, themeFromSettings as markdownThemeFrom } from "../markdown/ui/theme";
 
 export type Platform = "windows" | "linux" | "macos" | "other";
-export type Design = "classic" | "modern";
+export type Design = "classic" | "modern" | "markdown";
 
 function detect(): Platform {
   if (typeof navigator === "undefined") return "other";
@@ -43,19 +44,21 @@ const devPlatform = import.meta.env.DEV ? (readStorage("doit.dev-platform") as P
 export const platform: Platform = devPlatform ?? detect();
 export const isLinux = platform === "linux";
 
-/** Modern is now the official and only design across all platforms. */
-export const designIsOptional = false;
+/** The ILOVEMARKDOWN flag can be turned on in Settings; modern is the default everywhere. */
+export const designIsOptional = true;
 
-export function designFor(_os: Platform, _setting: string | null | undefined): Design {
-  return "modern";
+export function designFor(_os: Platform, setting: string | null | undefined): Design {
+  return setting === "markdown" ? "markdown" : "modern";
 }
 
 /** The saved `design` setting, cached so the first paint knows it before settings load. */
 export const DESIGN_CACHE_KEY = "doit.design";
-export const DESIGN_CHANGED_EVENT = "doit://design-changed";
 
-export const design: Design = "modern";
+export const design: Design = designFor(platform, readStorage(DESIGN_CACHE_KEY));
+/** The default design's components ask this; they never render under ILOVEMARKDOWN. */
 export const isModern = true;
+/** The ILOVEMARKDOWN feature flag is on for this run. */
+export const isMarkdown = design === "markdown";
 
 /** The classic value, or the modern one when this window uses the modern design. */
 export function pick<T>(_classic: T, modern: T): T {
@@ -67,38 +70,44 @@ export function markPlatform(): void {
   const root = document.documentElement;
   root.dataset.platform = platform;
   root.dataset.design = design;
-  // The canvas and the dock are separate windows; a design switch in one reloads both.
-  if ("__TAURI_INTERNALS__" in window) {
-    void listen(DESIGN_CHANGED_EVENT, () => window.location.reload());
-    trackPillLook();
-  }
-  if (!isModern) return;
-  restoreModernTheme();
+  if ("__TAURI_INTERNALS__" in window) trackPillLook(isMarkdown);
+  if (isMarkdown) restoreTheme();
+  else restoreModernTheme();
   if (isLinux && !window.location.search.includes("window=tray")) trackWindowFrame();
+}
+
+/** Which run of DoIT last settled the design cache (see `settleDesign`). */
+const DESIGN_RUN_KEY = "doit.design-run";
+
+/**
+ * One design per run: the first window of a launch copies the saved `design` setting into the
+ * cache, and every window of that run, opened before or after, loads the cached design. A setting
+ * changed mid-run waits for the next launch.
+ */
+function settleDesign(saved: Design): void {
+  void tauriApi.launchId().then((run) => {
+    if (!run) return;
+    if (readStorage(DESIGN_RUN_KEY) !== run) {
+      try {
+        localStorage.setItem(DESIGN_CACHE_KEY, saved);
+        localStorage.setItem(DESIGN_RUN_KEY, run);
+      } catch {
+        /* without storage this window keeps the design it loaded */
+      }
+    }
+    // Compared with what is stored, not what was written, so broken storage never loops.
+    if (designFor(platform, readStorage(DESIGN_CACHE_KEY)) !== design) window.location.reload();
+  });
 }
 
 /**
  * Applies the saved look once settings load. The classic design themes itself through
  * `theme_mode`; the modern one through `palette`, `appearance`, `glass` and `boxy`.
- * If the cached design disagrees with the saved one (a cleared WebView profile), the cache is
- * corrected and the window reloads once.
  */
 export function applyThemeSettings(settings: ThemeSettings & { design?: string | null }): void {
-  if (designIsOptional) {
-    const saved = settings.design === "modern" ? "modern" : "classic";
-    if (readStorage(DESIGN_CACHE_KEY) !== saved) {
-      try {
-        localStorage.setItem(DESIGN_CACHE_KEY, saved);
-      } catch {
-        /* without storage the cache cannot settle, so never reload over it */
-      }
-      if (readStorage(DESIGN_CACHE_KEY) === saved && designFor(platform, saved) !== design) {
-        window.location.reload();
-        return;
-      }
-    }
-  }
-  if (isModern) applyModernTheme(themeFromSettings(settings));
+  if (designIsOptional) settleDesign(designFor(platform, settings.design));
+  if (isMarkdown) applyTheme(markdownThemeFrom(settings));
+  else applyModernTheme(themeFromSettings(settings));
 }
 
 /** UI copy that the modern design words differently. */

@@ -1,0 +1,127 @@
+/* The ILOVEMARKDOWN stylesheet: Tailwind and the figure tokens (figures.css, kept as the shadcn CLI
+   writes it), the type, then this design's own layers. */
+@import "./figures.css";
+@import "@fontsource-variable/geist-mono";
+@import "../ui/ui.css";
+@import "../editor/markdown.css";
+@import "../canvas/canvas.css";
+
+@theme inline {
+  --font-mono: "Geist Mono Variable", "Geist Mono", "JetBrains Mono", ui-monospace, monospace;
+  --font-sans: var(--font-mono);
+  --color-background: var(--background);
+  --color-foreground: var(--foreground);
+  --color-destructive: var(--destructive);
+  --color-surface: var(--surface);
+  --color-hover: var(--hover);
+  --color-select: var(--select);
+  --color-invert: var(--invert);
+}
+
+@layer base {
+  :root {
+    --background: oklch(0.99 0 0);
+    --foreground: oklch(0.2 0 0);
+    --destructive: oklch(0.55 0.2 25);
+    --surface: color-mix(in oklab, var(--foreground) 3%, var(--background));
+    --hover: color-mix(in oklab, var(--foreground) 7%, var(--background));
+    --select: color-mix(in oklab, var(--graph-accent) 22%, var(--background));
+    /* The solid fill of whatever is active, selected or primary, with text-background on it. It
+       follows the accent; with mono that accent is the near-foreground grey. */
+    --invert: var(--graph-accent);
+    --graph-surface: var(--background);
+    --ease: cubic-bezier(0.215, 0.61, 0.355, 1);
+    /* Set by ui/theme from the accent. */
+    --tint-hue: 0;
+    --tint-chroma: 0;
+  }
+  .dark {
+    /* A lifted charcoal with a trace of the accent: near-black fought the coloured accents.
+       ui/theme repeats this colour for the launch screen. */
+    --background: oklch(0.24 var(--tint-chroma) var(--tint-hue));
+    --foreground: oklch(0.92 0 0);
+    --destructive: oklch(0.7 0.18 25);
+  }
+
+  html,
+  body {
+    height: 100%;
+    font-family: var(--font-mono);
+    font-size: 14px;
+    font-feature-settings: "liga" 0, "calt" 0;
+    color: var(--foreground);
+    -webkit-font-smoothing: antialiased;
+    text-rendering: optimizeLegibility;
+  }
+  body {
+    margin: 0;
+    overflow: hidden;
+    user-select: none;
+    -webkit-user-select: none;
+  }
+  #root {
+    height: 100%;
+  }
+  :is(input, textarea, [contenteditable="true"], [contenteditable=""], .md-tablewrap) {
+    user-select: text;
+    -webkit-user-select: text;
+  }
+  input,
+  textarea,
+  button,
+  select {
+    font: inherit;
+    color: inherit;
+    background: transparent;
+    border: 0;
+    outline: none;
+  }
+  button {
+    cursor: pointer;
+  }
+  button:disabled {
+    cursor: default;
+  }
+  ::placeholder {
+    color: var(--graph-muted);
+    opacity: 1;
+  }
+  ::selection {
+    background: var(--select);
+    color: var(--foreground);
+  }
+  :focus-visible {
+    outline: 1px dashed var(--graph-accent);
+    outline-offset: 2px;
+  }
+  :is(input, textarea, [contenteditable="true"], [contenteditable=""]):focus-visible {
+    outline: none;
+  }
+  /* Scrollbars are a thin mono rail, not the platform's. */
+  * {
+    scrollbar-width: thin;
+    scrollbar-color: var(--graph-faint) transparent;
+  }
+  *::-webkit-scrollbar {
+    width: 6px;
+    height: 6px;
+  }
+  *::-webkit-scrollbar-thumb {
+    background: var(--graph-faint);
+  }
+  *::-webkit-scrollbar-track {
+    background: transparent;
+  }
+  img {
+    -webkit-user-drag: none;
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  *,
+  *::before,
+  *::after {
+    animation-duration: 1ms !important;
+    transition-duration: 1ms !important;
+  }
+}

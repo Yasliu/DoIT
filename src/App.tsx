@@ -18,6 +18,7 @@ import { UpdateInfo, UpdateModal } from "./components/UpdateModal";
 import { ReleaseLogModal } from "./components/ReleaseLogModal";
 import { useWorkspace } from "./hooks/useWorkspace";
 import { dismissBootScreen } from "./lib/bootScreen";
+import { APP_VERSION } from "./lib/version";
 import { accentFor, cleanText, cx } from "./lib/text";
 import { applyThemeSettings, isLinux, isModern } from "./platform";
 import { ModernSettings } from "./platform/modern/ModernSettings";
@@ -43,7 +44,7 @@ interface Toast {
 /** The Settled view shows every note whatever the shelves' collapsed state. */
 const NOTHING_COLLAPSED: Record<string, boolean> = {};
 
-export const CURRENT_VERSION = "1.2.3.1";
+export const CURRENT_VERSION = APP_VERSION;
 const VERSION_TRACKER_KEY = "doit.release_notes_version";
 
 function isVersionLower(current: string | null, target: string): boolean {

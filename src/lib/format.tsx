@@ -4,6 +4,7 @@ import type { ContentItem } from "../api/tauriBridge";
 import { getMarkdownShortcuts, matchesCombo } from "./shortcuts";
 import { EMOJI_MAP } from "./emoji";
 import { INDENT_STEP, indentWidth, layoutLists, type ListLine, type ListPlace } from "./listLayout";
+import { figureOpening, isFigureClosing } from "../markdown/figures/catalog";
 
 /**
  * Renders inline markdown bold and italic formatting without raw asterisks.
@@ -492,6 +493,108 @@ function preHtml(code: string, lang: string, fence: string): string {
   return `<pre class="md-pre" data-lang="${escapeAttr(lang)}" data-fence="${fence}" contenteditable="plaintext-only" spellcheck="false">${body}</pre>`;
 }
 
+/** A figure's placeholder: its source rides in `data-raw` (read back verbatim) and figures/mount draws it. */
+function figureHtml(source: string, tag: string): string {
+  return `<div class="md-figure" data-figure="${escapeAttr(tag)}" data-raw="${escapeAttr(source)}" contenteditable="false"></div>`;
+}
+
+/** A figure opened for editing: its source as a plain-text block, read back without fences. */
+function figureSourceHtml(source: string): string {
+  return `<pre class="md-pre md-figure-src" data-figure-src="1" contenteditable="plaintext-only" spellcheck="false">${escapeHtml(source)}</pre>`;
+}
+
+/** Swaps a drawn figure for its source, with the caret at the end of the source. */
+export function editFigure(figure: HTMLElement): HTMLElement {
+  const pre = firstElement(figureSourceHtml(figure.getAttribute("data-raw") || ""));
+  figure.replaceWith(pre);
+  ensureTrailingLine(pre);
+  pre.focus();
+  const range = document.createRange();
+  range.selectNodeContents(pre);
+  range.collapse(false);
+  const sel = window.getSelection();
+  sel?.removeAllRanges();
+  sel?.addRange(range);
+  return pre;
+}
+
+/** Draws a figure's edited source again (or, if it no longer reads as a figure, as plain lines). */
+export function closeFigureSource(pre: HTMLElement): void {
+  const source = (pre.textContent || "").replace(/\u00a0/g, " ").replace(/\n$/, "");
+  const template = document.createElement("template");
+  template.innerHTML = source.trim() ? markdownToHtml(source) : "<div><br></div>";
+  pre.replaceWith(template.content);
+}
+
+/** Every figure source in `editor` the caret has left, drawn again. */
+export function closeFigureSourcesAwayFromCaret(editor: HTMLElement): void {
+  const anchor = window.getSelection()?.anchorNode ?? null;
+  // Some edits (a pasted line break) split one source into two blocks: join them back first.
+  editor.querySelectorAll<HTMLElement>("pre[data-figure-src]").forEach((pre) => {
+    const next = pre.nextElementSibling;
+    if (!pre.isConnected || !(next instanceof HTMLElement) || !next.hasAttribute("data-figure-src")) return;
+    const caretInNext = !!anchor && next.contains(anchor);
+    const offset = (pre.textContent || "").length + 1;
+    const tail = caretInNext && anchor ? caretOffsetInText(next, anchor, window.getSelection()!.anchorOffset) : -1;
+    pre.textContent = `${pre.textContent || ""}\n${next.textContent || ""}`;
+    next.remove();
+    if (tail >= 0 && pre.firstChild) window.getSelection()?.collapse(pre.firstChild, offset + tail);
+  });
+  editor.querySelectorAll<HTMLElement>("pre[data-figure-src]").forEach((pre) => {
+    if (!anchor || !pre.contains(anchor)) closeFigureSource(pre);
+  });
+}
+
+/** The text offset of (`node`, `offset`) inside `root`. */
+function caretOffsetInText(root: HTMLElement, node: Node, offset: number): number {
+  const range = document.createRange();
+  range.selectNodeContents(root);
+  range.setEnd(node, offset);
+  return range.toString().length;
+}
+
+/** Puts `source` (a figure block) at the caret as a drawn figure. */
+export function insertFigureAtCaret(editor: HTMLElement, source: string): void {
+  const tag = figureOpening(source.split("\n")[0]) ?? "";
+  const figure = firstElement(figureHtml(source, tag));
+  const block = currentBlock(editor);
+  if (block) {
+    if (!block.textContent?.trim() && block.tagName === "DIV" && !isSpecialBlock(block)) block.replaceWith(figure);
+    else block.after(figure);
+  } else {
+    editor.appendChild(figure);
+  }
+  ensureTrailingLine(figure);
+  const next = figure.nextElementSibling as HTMLElement | null;
+  if (next) placeCaretStart(next);
+}
+
+/**
+ * Enter on a line that is just `::` closes a figure typed line by line: the lines from its
+ * `::tag` opener down to here become one figure. True when it did.
+ */
+function closeTypedFigure(editor: HTMLElement, block: HTMLElement): boolean {
+  if ((block.textContent || "").trim() !== "::") return false;
+  const lines: HTMLElement[] = [block];
+  let node = block.previousElementSibling as HTMLElement | null;
+  while (node && !node.hasAttribute("data-raw") && !node.hasAttribute("data-figure-src")) {
+    lines.unshift(node);
+    if (figureOpening(node.textContent || "")) break;
+    node = node.previousElementSibling as HTMLElement | null;
+  }
+  if (!node || !figureOpening(node.textContent || "")) return false;
+  const source = joinMarkdown([readMarkdown(editor, lines)]);
+  const tag = figureOpening(source.split("\n")[0]);
+  if (!tag) return false;
+  const figure = firstElement(figureHtml(source, tag));
+  lines[0].before(figure);
+  lines.forEach((line) => line.remove());
+  ensureTrailingLine(figure);
+  const next = figure.nextElementSibling as HTMLElement | null;
+  if (next) placeCaretStart(next);
+  return true;
+}
+
 export function insertCodeBlockAtCaret(editor: HTMLElement, lang = ""): void {
   const pre = firstElement(preHtml("", lang, "```"));
   if (!pre) return;
@@ -544,6 +647,19 @@ export function markdownToHtml(md: string): string {
     if (!t) {
       other("<div><br></div>");
       continue;
+    }
+
+    const figureTag = figureOpening(line);
+    if (figureTag) {
+      let j = i + 1;
+      while (j < lines.length && !isFigureClosing(lines[j])) j++;
+      // Unclosed, it is still being typed: the lines stay lines until `::` closes it.
+      if (j < lines.length) {
+        pendingTableMeta = null;
+        other(figureHtml(lines.slice(i, j + 1).join("\n"), figureTag));
+        i = j;
+        continue;
+      }
     }
 
     const fence = t.match(/^(`{3,}|~{3,})\s*([^\s`]*)\s*$/);
@@ -804,6 +920,7 @@ function convertInlineInTextNodes(container: HTMLElement): void {
     if (
       parent &&
       !parent.closest("pre") &&
+      !parent.closest(".md-figure") &&
       !parent.closest("code.md-code") &&
       !parent.closest("a.md-link") &&
       !parent.classList.contains("md-cb") &&
@@ -1318,6 +1435,13 @@ export function readMarkdown(container: HTMLElement, nodes: Node[]): MarkdownPie
     if (el.classList.contains("md-tablewrap")) {
       if (cur !== "") flush();
       tableToLines(el).forEach((l) => lines.push(l));
+      return;
+    }
+
+    if (el.hasAttribute("data-figure-src")) {
+      if (cur !== "") flush();
+      const body = (el.textContent || "").replace(/\u00a0/g, " ").replace(/\n$/, "");
+      body.split("\n").forEach((l) => lines.push(l));
       return;
     }
 
@@ -1946,7 +2070,8 @@ export function handleRichEditorKeyDown(
     if (e.key === "Enter") {
       const text = (preBlock.textContent || "").replace(/\u00a0/g, " ");
       const isShift = e.shiftKey;
-      const endsWithFence = /(?:^|\n)(`{3,}|~{3,})\s*$/.test(text);
+      // A figure's source may hold a fenced block of its own: there a fence is content.
+      const endsWithFence = !preBlock.hasAttribute("data-figure-src") && /(?:^|\n)(`{3,}|~{3,})\s*$/.test(text);
       if (isShift || endsWithFence) {
         e.preventDefault();
         if (endsWithFence) {
@@ -2075,6 +2200,13 @@ export function handleRichEditorKeyDown(
       onInput();
       return true;
     }
+  }
+
+  if (e.key === "Enter" && closeTypedFigure(editor, block)) {
+    e.preventDefault();
+    scrollCaretIntoView(editor);
+    onInput();
+    return true;
   }
 
   const fenceMatch = (block.textContent || "").trim().match(/^(`{3,}|~{3,})\s*([^\s`]*)\s*$/);
@@ -3187,6 +3319,11 @@ const IMAGE_REFERENCE_LINE = /^\s*\[[a-zA-Z0-9_\-]+\]:\s*\S+\s*$/;
 function previewContent(content: ContentItem[]): ContentItem[] {
   if (content.length <= PREVIEW_LINES) return content;
   let end = PREVIEW_LINES;
+  const open = content.slice(0, end).reduce((inFigure, item) => (inFigure ? !isFigureClosing(item.text) : !!figureOpening(item.text)), false);
+  if (open) {
+    while (end < content.length && !isFigureClosing(content[end].text)) end++;
+    end = Math.min(content.length, end + 1);
+  }
   if (isTableRow(content[end - 1]?.text ?? "")) {
     while (end < content.length && isTableRow(content[end].text)) end++;
   }
@@ -3209,8 +3346,18 @@ export function previewMarkup(fullContent: ContentItem[]): { html: string; taskI
 
   const taskIds: string[] = [];
   let fence: string | null = null;
-  for (const item of content) {
+  let figureEnd = -1;
+  for (const [index, item] of content.entries()) {
     const line = item.is_todo ? `- [${item.completed ? "x" : " "}] ${item.text}` : item.text;
+    // A closed figure draws its own checkboxes; only the note's own task lines map to card checkboxes.
+    if (index <= figureEnd) continue;
+    if (!fence && figureOpening(line)) {
+      const close = content.findIndex((next, at) => at > index && isFigureClosing(next.text));
+      if (close > index) {
+        figureEnd = close;
+        continue;
+      }
+    }
     const t = line.trim();
     const m = t.match(/^(`{3,}|~{3,})/);
     if (fence) {

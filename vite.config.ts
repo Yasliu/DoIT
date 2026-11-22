@@ -8,6 +8,7 @@ const host = process.env.TAURI_DEV_HOST;
 // https://vite.dev/config/
 export default defineConfig(() => ({
   plugins: [react(), tailwindcss()],
+  resolve: { alias: { "@": new URL("./src", import.meta.url).pathname } },
 
   // Lean production bundle for WebView2: no sourcemaps, no module-preload polyfill, no dev logging
   build: {

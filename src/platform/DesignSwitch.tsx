@@ -1,23 +1,49 @@
-import { emit } from "@tauri-apps/api/event";
+import { useEffect, useState } from "react";
 import { FlaskConical } from "lucide-react";
 import { tauriApi } from "../api/tauriBridge";
-import { DESIGN_CACHE_KEY, DESIGN_CHANGED_EVENT, type Design, designIsOptional } from ".";
+import { DESIGN_CACHE_KEY, type Design, design, isMarkdown } from ".";
 
-/** Saves the design choice and reloads every DoIT window (canvas and dock) into it. */
+/**
+ * Saves the design choice. It takes effect the next time DoIT starts: windows opened before then
+ * keep this run's design (platform/settleDesign).
+ */
 export async function setDesign(next: Design): Promise<void> {
   await tauriApi.patchSettings({ design: next });
+}
+
+/** Restarts into `next`, cached up front so the new run's first window paints it straight away. */
+function restartInto(next: Design): void {
   try {
     localStorage.setItem(DESIGN_CACHE_KEY, next);
   } catch {
-    /* the setting is saved; the next load corrects the cache */
+    /* the new run's first window corrects the cache and reloads once */
   }
-  await emit(DESIGN_CHANGED_EVENT).catch(() => undefined);
-  window.location.reload();
+  void tauriApi.restartApp();
+}
+
+/**
+ * The ILOVEMARKDOWN feature flag, as Settings shows it: whether it is on, and whether DoIT has to
+ * restart before the windows match it.
+ */
+export function useMarkdownFlag(): { on: boolean; pending: boolean; set: (on: boolean) => void; restart: () => void } {
+  const [saved, setSaved] = useState<boolean | null>(null);
+  useEffect(() => {
+    void tauriApi.getSettings().then((s) => setSaved(s.design === "markdown"));
+  }, []);
+  return {
+    on: saved ?? isMarkdown,
+    pending: saved !== null && saved !== isMarkdown,
+    set: (on) => {
+      setSaved(on);
+      void setDesign(on ? "markdown" : "modern");
+    },
+    restart: () => restartInto((saved ?? isMarkdown) ? "markdown" : "modern"),
+  };
 }
 
 /** The opt-in card in the classic Settings, drawn in the classic style. */
 export function NewDesignOptIn() {
-  if (!designIsOptional) return null;
+  if (design !== "classic") return null;
   return (
     <section className="glass rounded-[20px] p-5 shadow-[0_20px_50px_-20px_rgba(0,0,0,0.8)] border border-white/10">
       <div className="flex items-start gap-3">

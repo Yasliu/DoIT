@@ -1,11 +1,7 @@
 import React from "react";
 import ReactDOM from "react-dom/client";
-import App from "./App";
-import { TrayCompanion } from "./components/TrayCompanion";
-import "./styles/globals.css";
-import "./platform/modern/modern.css";
 import { MotionConfig } from "motion/react";
-import { markPlatform, pick } from "./platform";
+import { isMarkdown, markPlatform, pick } from "./platform";
 
 markPlatform();
 
@@ -35,11 +31,19 @@ if (rootEl) {
 
 const isTrayWindow = window.location.search.includes("window=tray");
 
-ReactDOM.createRoot(document.getElementById("root") as HTMLElement).render(
-  <React.StrictMode>
-    {/* The modern design honours the system's reduced-motion setting for spring animations too. */}
-    <MotionConfig reducedMotion={pick("never", "user")}>
-      {isTrayWindow ? <TrayCompanion /> : <App />}
-    </MotionConfig>
-  </React.StrictMode>,
-);
+// One design per run: each module brings its own styles, so the other's never reach the page.
+// One loader per design: an if/else or ternary over two imports gets merged into one preload with
+// a single (wrong) stylesheet, so they stay separate functions.
+const designs = {
+  markdown: () => import("./markdown"),
+  modern: () => import("./defaultDesign"),
+};
+
+void designs[isMarkdown ? "markdown" : "modern"]().then(({ Canvas, Dock }) => {
+  ReactDOM.createRoot(document.getElementById("root") as HTMLElement).render(
+    <React.StrictMode>
+      {/* The modern design honours the system's reduced-motion setting for spring animations too. */}
+      <MotionConfig reducedMotion={pick("never", "user")}>{isTrayWindow ? <Dock /> : <Canvas />}</MotionConfig>
+    </React.StrictMode>,
+  );
+});

@@ -168,6 +168,7 @@ pub fn run() {
             commands::window::save_tray_position,
             commands::window::ensure_dock_topmost,
             commands::window::restart_app,
+            commands::window::launch_id,
             commands::window::install_update,
             commands::window::quit_app,
             commands::window::flush_done,

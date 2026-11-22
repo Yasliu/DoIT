@@ -77,6 +77,8 @@ export interface PillLook {
   border_width: number;
   text: [number, number, number, number];
   letter_spacing: number;
+  /** Dash and gap lengths for a dotted edge; a solid edge when absent. */
+  dash?: [number, number];
 }
 
 export interface QuadrantInfo {
@@ -120,8 +122,8 @@ export interface AppSettings {
   glass?: boolean;
   /** Modern design only: near-square corners and hairline edges. */
   boxy?: boolean;
-  /** Windows: "modern" opts into the new design (Linux always has it). */
-  design?: "classic" | "modern";
+  /** "markdown" turns on the ILOVEMARKDOWN feature flag; anything else is the default design. */
+  design?: "classic" | "modern" | "markdown";
 }
 
 export const DEFAULT_SETTINGS: AppSettings = {
@@ -618,6 +620,16 @@ export const tauriApi = {
     const channel = new Channel<{ received: number; total: number | null }>();
     channel.onmessage = ({ received, total }) => onProgress(total ? Math.min(100, Math.round((received / total) * 100)) : null);
     await invoke("install_update", { rid, onProgress: channel });
+  },
+
+  /** Names this run of DoIT: the same in every window until the next launch. Null outside Tauri. */
+  async launchId(): Promise<string | null> {
+    if (!isTauri()) return null;
+    try {
+      return await invoke<string>("launch_id");
+    } catch {
+      return null;
+    }
   },
 
   async restartApp(): Promise<void> {
