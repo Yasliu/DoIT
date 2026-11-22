@@ -38,6 +38,8 @@ pub struct Actions {
 enum Msg {
     Input(PillInput),
     Redraw,
+    /// Answers once the frame that is due has been drawn.
+    Sync(Sender<()>),
     /// The window is being given this size (physical px); draw frames for it.
     Size(u32, u32),
 }
@@ -67,6 +69,14 @@ pub fn show(app: &AppHandle, rect: Rect, actions: Actions) -> Result<(), String>
         Some(existing) => existing,
         None => build(app, actions)?,
     };
+    // A pill coming back on screen has its first frame drawn before it is shown, so it never
+    // appears empty for a moment.
+    if !window.is_visible().unwrap_or(false) {
+        let (drawn, done) = mpsc::channel();
+        send(Msg::Size(rect.w as u32, rect.h as u32));
+        send(Msg::Sync(drawn));
+        let _ = done.recv_timeout(Duration::from_millis(40));
+    }
     platform::set_window_bounds(&window, rect.x, rect.y, rect.w as u32, rect.h as u32);
     send(Msg::Size(rect.w as u32, rect.h as u32));
     send(Msg::Redraw);
@@ -85,7 +95,7 @@ pub fn resized(w: u32, h: u32) {
 
 pub fn hide(app: &AppHandle) {
     if let Some(window) = window(app) {
-        let _ = window.hide();
+        platform::hide_quietly(&window);
     }
 }
 
@@ -147,6 +157,7 @@ impl Pill {
 
     fn run(mut self, rx: Receiver<Msg>) {
         let mut dirty = true;
+        let mut sync: Option<Sender<()>> = None;
         loop {
             let animating = (self.zoom - self.target_zoom()).abs() > 0.001;
             let msg = if animating || dirty {
@@ -164,6 +175,10 @@ impl Pill {
             match msg {
                 Some(Msg::Input(input)) => self.handle(input),
                 Some(Msg::Redraw) => dirty = true,
+                Some(Msg::Sync(done)) => {
+                    dirty = true;
+                    sync = Some(done);
+                }
                 Some(Msg::Size(w, h)) => {
                     self.size = Some((w.max(1), h.max(1)));
                     dirty = true;
@@ -182,6 +197,9 @@ impl Pill {
             if dirty {
                 self.draw();
                 dirty = false;
+            }
+            if let Some(done) = sync.take() {
+                let _ = done.send(());
             }
         }
     }

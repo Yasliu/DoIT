@@ -75,6 +75,13 @@ pub fn quick_note(app: &AppHandle, note: Option<String>) {
     std::thread::spawn(move || lifecycle::quick_note(&app, note));
 }
 
+/// The dock shortcut: the pill opens into the panel, or the panel goes back into the pill. While the
+/// canvas is showing it does nothing.
+pub fn toggle_panel(app: &AppHandle) {
+    let app = app.clone();
+    std::thread::spawn(move || lifecycle::toggle_panel(&app));
+}
+
 /// The canvas's page started loading; its window can be mapped, unseen, so the page can paint.
 pub fn canvas_loading(app: &AppHandle) {
     lifecycle::canvas_loading(app);
@@ -109,6 +116,12 @@ pub fn dock_menu(app: &AppHandle) -> tauri::Result<tauri::menu::Menu<tauri::Wry>
 /// Changes the dock between pill and panel, returning which way it grew.
 pub fn reshape_dock(app: &AppHandle, shape: DockShape) -> Result<Growth, String> {
     lifecycle::reshape_dock(app, shape)
+}
+
+/// Remembers which note the dock panel had open (or `None` when on the note list) so a panel
+/// rebuilt after `PANEL_KEEPALIVE` reopens on that same note.
+pub fn set_dock_note(note: Option<String>) {
+    engine().dock_note = note;
 }
 
 /// Starts dragging the dock, grabbed at `grab` (logical px from its top-left). `true` means the app

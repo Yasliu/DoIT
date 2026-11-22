@@ -1,4 +1,4 @@
-//! Mode switches that arrive from outside the UI: a tray-icon click, the quick-note shortcut, or a
+//! Mode switches that arrive from outside the UI: a tray-icon click, the global shortcuts, or a
 //! second launch such as `doit --dock` from a desktop shortcut, dock menu or keyboard binding
 //! (forwarded to the running instance by the single-instance plugin). Many Linux desktops have no
 //! tray, so these flags are how the shell drives DoIT there.
@@ -7,7 +7,7 @@ mod shortcut;
 
 use tauri::{AppHandle, Manager};
 
-pub use shortcut::{restore_quick_note_shortcut, set_quick_note_shortcut, startup_error as quick_note_shortcut_error};
+pub use shortcut::{restore_shortcuts, set_shortcut, startup_error as shortcut_error, Slot};
 
 use crate::storage::StorageManager;
 use crate::window::{self, DockOpen};
@@ -19,6 +19,8 @@ pub enum Action {
     Toggle,
     /// The dock panel on the most recently edited note, or put away if it is already in front.
     QuickNote,
+    /// The dock panel opens from the pill, or goes back into it. Nothing while the canvas is showing.
+    TogglePanel,
     Quit,
 }
 
@@ -30,6 +32,7 @@ impl Action {
             "--dock" => Some(Self::Dock),
             "--toggle" => Some(Self::Toggle),
             "--quick-note" => Some(Self::QuickNote),
+            "--toggle-panel" => Some(Self::TogglePanel),
             "--quit" => Some(Self::Quit),
             _ => None,
         })
@@ -42,6 +45,7 @@ impl Action {
             Self::Toggle | Self::Canvas => window::show_canvas(app),
             Self::Dock => window::show_dock(app, DockOpen::default()),
             Self::QuickNote => window::quick_note(app, app.state::<StorageManager>().latest_note_id()),
+            Self::TogglePanel => window::toggle_panel(app),
             Self::Quit => window::quit(app),
         }
     }
@@ -60,5 +64,6 @@ mod tests {
         assert_eq!(Action::from_args(&argv(&["notes.md", "--dock", "--quit"])), Some(Action::Dock));
         assert_eq!(Action::from_args(&argv(&["notes.md"])), None);
         assert_eq!(Action::from_args(&["--quit".to_string()]), None);
+        assert_eq!(Action::from_args(&argv(&["--toggle-panel"])), Some(Action::TogglePanel));
     }
 }

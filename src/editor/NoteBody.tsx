@@ -88,7 +88,7 @@ export function NoteBody({ editor, variant, maximized = false }: { editor: NoteE
       }}
       onMouseLeave={() => clearTableResizeHover(editor.bodyRef.current)}
       onMouseDown={(e) => {
-        if ((e.target as HTMLElement).closest(".md-cb")) {
+        if ((e.target as HTMLElement).closest(".md-cb, img.md-img")) {
           e.preventDefault();
           return;
         }
@@ -100,6 +100,7 @@ export function NoteBody({ editor, variant, maximized = false }: { editor: NoteE
         const img = (e.target as HTMLElement).closest("img.md-img") as HTMLImageElement | null;
         if (img) {
           e.preventDefault();
+          e.stopPropagation();
           editor.setPreviewImage(img.src);
           return;
         }

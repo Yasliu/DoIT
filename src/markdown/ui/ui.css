@@ -7,7 +7,8 @@
     background: var(--background);
     color: var(--foreground);
   }
-  html[data-platform="linux"]:not([data-maximized]) .tm-shell {
+  html[data-platform="linux"]:not([data-maximized]) .tm-shell,
+  html[data-platform="windows"]:not([data-maximized]) .tm-shell {
     box-shadow: inset 0 0 0 1px var(--graph-frame);
   }
 
@@ -355,6 +356,62 @@
 
 @keyframes tm-blink {
   50% {
+    opacity: 0;
+  }
+}
+/* The dock panel grows out of the pill without the pill moving: first sideways, into the emptier
+   side of the screen, then up or down, by revealing the panel through a window that starts as the
+   pill's footprint (Dock sets its insets from the way the panel grows). It shrinks back onto the pill
+   the same way round. The panel paints its own background, so the window is clear around it while
+   this runs, and nothing is laid out. */
+[data-slot="dock-panel"][data-state="in"] {
+  animation: tm-dock-in 280ms linear backwards;
+}
+[data-slot="dock-panel"][data-state="out"] {
+  animation: tm-dock-out 340ms linear forwards;
+}
+@keyframes tm-dock-in {
+  0% {
+    opacity: 0;
+    clip-path: inset(var(--dock-it, 0) var(--dock-ir, 0) var(--dock-ib, 0) var(--dock-il, 0));
+    animation-timing-function: var(--ease);
+  }
+  12% {
+    opacity: 1;
+  }
+  48% {
+    clip-path: inset(var(--dock-it, 0) 0 var(--dock-ib, 0) 0);
+    animation-timing-function: var(--ease);
+  }
+  100% {
+    opacity: 1;
+    clip-path: inset(0 0 0 0);
+  }
+}
+@keyframes tm-dock-out {
+  0% {
+    clip-path: inset(0 0 0 0);
+    animation-timing-function: cubic-bezier(0.45, 0, 0.25, 1);
+  }
+  54% {
+    clip-path: inset(var(--dock-it, 0) 0 var(--dock-ib, 0) 0);
+    animation-timing-function: cubic-bezier(0.45, 0, 0.25, 1);
+  }
+  100% {
+    clip-path: inset(var(--dock-it, 0) var(--dock-ir, 0) var(--dock-ib, 0) var(--dock-il, 0));
+  }
+}
+/* What is inside has gone by the time the panel is pill-sized. */
+[data-slot="dock-panel"][data-state="out"] > * {
+  animation: tm-dock-content-out 340ms linear forwards;
+}
+@keyframes tm-dock-content-out {
+  0%,
+  20% {
+    opacity: 1;
+  }
+  62%,
+  100% {
     opacity: 0;
   }
 }

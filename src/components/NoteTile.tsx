@@ -1,12 +1,13 @@
 import type { PointerEvent as ReactPointerEvent } from "react";
 import React, { useMemo, useRef, useState } from "react";
 import { motion } from "motion/react";
-import { Check, CircleCheck, Maximize2, Undo2 } from "lucide-react";
+import { CircleCheck, Maximize2, Undo2 } from "lucide-react";
 import type { NoteItem } from "../api/tauriBridge";
 import { fontStack } from "../api/tauriBridge";
 import { accentFor, cleanText, cx, densityOf, edgeOpacity, relativeShort, stripDate } from "../lib/text";
-import { previewMarkup, previewText, openExternalUrl, copyImageToClipboard } from "../lib/format";
+import { previewMarkup, previewText, openExternalUrl } from "../lib/format";
 import { pick, text } from "../platform";
+import { ImageLightbox } from "./ImageLightbox";
 
 interface NoteTileProps {
   note: NoteItem;
@@ -37,7 +38,7 @@ function NoteTileComponent({
   onToggleSettled,
 }: NoteTileProps) {
   const [hovered, setHovered] = useState(false);
-  const [copiedImg, setCopiedImg] = useState(false);
+  const [previewImage, setPreviewImage] = useState<string | null>(null);
   const density = densityOf(note);
   const accent = accentFor(note.category, shelves);
 
@@ -277,12 +278,7 @@ function NoteTileComponent({
               if (img) {
                 event.stopPropagation();
                 event.preventDefault();
-                void copyImageToClipboard(img.src).then((ok) => {
-                  if (ok) {
-                    setCopiedImg(true);
-                    setTimeout(() => setCopiedImg(false), 1600);
-                  }
-                });
+                setPreviewImage(img.src);
                 return;
               }
               const link = (event.target as HTMLElement).closest("a.md-link") as HTMLAnchorElement | null;
@@ -303,12 +299,7 @@ function NoteTileComponent({
             dangerouslySetInnerHTML={{ __html: preview?.html ?? "" }}
           />
         )}
-        {copiedImg && (
-          <div className="absolute top-3 right-3 z-30 flex items-center gap-1.5 rounded-full bg-white/20 border border-white/30 px-2.5 py-1 text-[11px] font-medium text-white shadow-lg backdrop-blur-md animate-in fade-in-0 zoom-in-95 duration-100">
-            <Check size={12} className="text-emerald-400" />
-            <span>Image copied!</span>
-          </div>
-        )}
+        {previewImage && <ImageLightbox src={previewImage} onClose={() => setPreviewImage(null)} />}
         <div data-slot="card-meta" className="mt-auto flex items-center justify-between gap-3 pt-3.5">
           <span className="font-mono text-[9.5px] uppercase tracking-[0.1em] text-ink-4">
             {total > 0

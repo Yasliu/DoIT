@@ -1,6 +1,5 @@
 import { createPortal } from "react-dom";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
-import { motion } from "motion/react";
 import { getCurrentWindow } from "@tauri-apps/api/window";
 import { Mark } from "./Mark";
 import { HeadingSelect } from "./HeadingSelect";
@@ -58,8 +57,30 @@ import { ModernConfirm } from "../platform/modern/ModernConfirm";
 import { ModernDockHome } from "../platform/modern/ModernDockHome";
 import { ModernNoteMenu } from "../platform/modern/ModernNoteMenu";
 import { ModernShelfPicker } from "../platform/modern/ModernShelfPicker";
-import { accentFor, cleanText, cx, relativeShort } from "../lib/text";
+import { accentFor, cleanText, cx, relativeShort, titleMatches } from "../lib/text";
 
+
+/**
+ * The panel's open and close animation: it grows out of the pill's footprint and shrinks back onto
+ * the pill's body (the drawn pill is 172x36 centred in its 200x52 window), in the corner it grows from.
+ */
+function dockGrowth(quadrant: { grow_x: "right" | "left" | "center"; grow_y: "down" | "up" }): React.CSSProperties {
+  const footprint = { w: 200, h: 52, bodyW: 172, bodyH: 36 };
+  const side = (grow: "right" | "left" | "center", w: number, edge: number) => {
+    const far = `calc(100% - ${edge + w}px)`;
+    return grow === "right" ? [`${edge}px`, far] : grow === "left" ? [far, `${edge}px`] : [`calc(50% - ${w / 2}px)`, `calc(50% - ${w / 2}px)`];
+  };
+  const across = side(quadrant.grow_x, footprint.w, 0);
+  const body = side(quadrant.grow_x, footprint.bodyW, (footprint.w - footprint.bodyW) / 2);
+  const up = quadrant.grow_y === "up";
+  const pair = (h: number, edge: number) => (up ? [`calc(100% - ${edge + h}px)`, `${edge}px`] : [`${edge}px`, `calc(100% - ${edge + h}px)`]);
+  const down = pair(footprint.h, 0);
+  const bodyDown = pair(footprint.bodyH, (footprint.h - footprint.bodyH) / 2);
+  return {
+    "--dock-il": across[0], "--dock-ir": across[1], "--dock-it": down[0], "--dock-ib": down[1],
+    "--dock-end-il": body[0], "--dock-end-ir": body[1], "--dock-end-it": bodyDown[0], "--dock-end-ib": bodyDown[1],
+  } as React.CSSProperties;
+}
 
 export function TrayCompanion() {
   const { notes, shelves, patch, create, remove, moveCategory, createCategory } = useWorkspace();
@@ -81,12 +102,22 @@ export function TrayCompanion() {
   const [filter, setFilter] = useState("");
   const [selectedShelf, setSelectedShelf] = useState<string | null>(null);
   const [activeNoteId, setActiveNoteId] = useState<string | null>(null);
+  const activeNoteIdRef = useRef<string | null>(null);
+  activeNoteIdRef.current = activeNoteId;
   const [historyStack, setHistoryStack] = useState<string[]>([]);
   const visibilityLockRef = useRef<number>(0);
   const panelRef = useRef<HTMLDivElement | null>(null);
 
+  const persistDockNote = (id: string | null) => {
+    try {
+      if (id) localStorage.setItem("doit.dock_active_note", id);
+      else localStorage.removeItem("doit.dock_active_note");
+    } catch {}
+  };
+
   // Navigation helpers with proper history stack
   const openNoteById = (id: string) => {
+    persistDockNote(id);
     setActiveNoteId((current) => {
       if (current && current !== id) {
         setHistoryStack((prev) => [...prev, current]);
@@ -97,12 +128,14 @@ export function TrayCompanion() {
 
   const handleBack = () => {
     if (historyStack.length === 0) {
+      persistDockNote(null);
       setActiveNoteId(null);
       return;
     }
     const nextStack = [...historyStack];
     const previousId = nextStack.pop() ?? null;
     setHistoryStack(nextStack);
+    persistDockNote(previousId);
     setActiveNoteId(previousId);
   };
 
@@ -198,14 +231,13 @@ export function TrayCompanion() {
 
   // ONE tray frame for both shapes. Fade the panel out, resize the native frame while nothing is drawn
   // (blank transparent content), then fade the floating bar in - and the reverse on expand.
-  const wait = (ms: number) => new Promise<void>((resolve) => window.setTimeout(resolve, ms));
 
   const collapseToPill = useCallback(async () => {
     if (collapsingRef.current) return;
     collapsingRef.current = true;
-    changeMode("switching");
-    await tauriApi.setTrayMode("pill");
-    await wait(45);
+    // The panel keeps its last frame (the pill's size) on screen until the backend has put the
+    // pill there, so nothing is ever blank in between.
+    await tauriApi.setTrayMode("pill", activeNoteIdRef.current);
     changeMode("pill");
     collapsingRef.current = false;
   }, [changeMode]);
@@ -249,8 +281,22 @@ export function TrayCompanion() {
     shownRef.current = false;
     setShown(false);
     // Fallback in case transitionend never fires
-    hideTimerRef.current = window.setTimeout(hideNow, 180);
+    hideTimerRef.current = window.setTimeout(hideNow, 700);
   }, [hideNow]);
+
+  /** Maximize: the panel shrinks away, then the canvas takes over. */
+  const openCanvas = useCallback(() => {
+    if (collapsingRef.current || closingRef.current) return;
+    collapsingRef.current = true;
+    shownRef.current = false;
+    setShown(false);
+    window.setTimeout(() => void tauriApi.openCanvasMode(), 300);
+    // Should the canvas not come (this page would be gone by then), the panel returns.
+    window.setTimeout(() => {
+      collapsingRef.current = false;
+      openTray();
+    }, 5000);
+  }, [openTray]);
 
   const toggleMinimize = useCallback(() => {
     if (Date.now() < visibilityLockRef.current) return;
@@ -302,6 +348,7 @@ export function TrayCompanion() {
     getCurrentWindow()
       .listen<string>("open-note", (event) => {
         if (event.payload) {
+          persistDockNote(event.payload);
           setActiveNoteId(event.payload);
         }
       })
@@ -383,13 +430,7 @@ export function TrayCompanion() {
       list = list.filter((n) => n.category.toLowerCase() === selectedShelf.toLowerCase());
     }
     if (filter.trim()) {
-      const q = filter.toLowerCase().trim();
-      list = list.filter(
-        (n) =>
-          n.title.toLowerCase().includes(q) ||
-          n.content.some((c) => c.text.toLowerCase().includes(q)) ||
-          n.category.toLowerCase().includes(q),
-      );
+      list = list.filter((n) => titleMatches(n, filter));
     }
     return list;
   }, [notes, selectedShelf, filter]);
@@ -490,24 +531,12 @@ export function TrayCompanion() {
       className="flex h-screen w-screen items-end justify-end p-0 m-0 overflow-hidden bg-transparent select-none"
       style={{ background: "transparent", backgroundColor: "transparent" }}
     >
-      <motion.div
+      <div
         ref={panelRef}
         data-slot="dock-panel"
-        initial={{
-          x: quadrant.grow_x === "right" ? -24 : quadrant.grow_x === "left" ? 24 : 0,
-          y: quadrant.grow_y === "down" ? -24 : 24,
-          opacity: 0
-        }}
-        animate={{
-          x: 0,
-          y: 0,
-          opacity: shown ? 1 : 0
-        }}
-        transition={shown ? { type: "spring", stiffness: 420, damping: 32 } : { duration: 0.12, ease: "easeOut" }}
-        onAnimationComplete={() => {
-          if (!shown && !shownRef.current && closingRef.current) {
-            hideNow();
-          }
+        data-state={shown ? "in" : "out"}
+        onAnimationEnd={(e) => {
+          if (e.target === e.currentTarget && !shown && !shownRef.current && closingRef.current) hideNow();
         }}
         onPaste={editor.onPaste}
         onDragOver={(e) => {
@@ -519,6 +548,7 @@ export function TrayCompanion() {
         onContextMenu={handleContextMenu}
         className="box-border flex h-full w-full flex-col overflow-hidden whitespace-nowrap text-ink-1 rounded-2xl border border-white/10 select-none p-2.5 shadow-none scale-100"
         style={{
+          ...dockGrowth(quadrant),
           pointerEvents: shown ? "auto" : "none",
           backgroundColor: "var(--theme-tray-bg)",
           backdropFilter: "var(--theme-tray-blur)",
@@ -584,7 +614,7 @@ export function TrayCompanion() {
                 onPointerDown={(e) => e.stopPropagation()}
                 onClick={(e) => {
                   e.stopPropagation();
-                  void tauriApi.openCanvasMode();
+                  openCanvas();
                 }}
                 className="grid size-5 place-items-center rounded text-white/50 hover:bg-white/10 hover:text-white transition-colors cursor-pointer"
                 title="Open Canvas"
@@ -911,9 +941,11 @@ export function TrayCompanion() {
                 multiple
                 className="hidden"
                 onChange={(e) => {
-                  const files = e.target.files;
-                  if (files && files.length > 0) editor.insertImages(Array.from(files), "Attached Image");
-                  e.target.value = "";
+                  const selected = e.target.files ? Array.from(e.target.files) : [];
+                  if (selected.length > 0) editor.insertImages(selected, "Attached Image");
+                  requestAnimationFrame(() => {
+                    if (fileInputRef.current) fileInputRef.current.value = "";
+                  });
                 }}
               />
 
@@ -1178,7 +1210,7 @@ export function TrayCompanion() {
 
             <button
               type="button"
-              onClick={() => void tauriApi.openCanvasMode()}
+              onClick={() => openCanvas()}
               className="flex items-center gap-1 text-[11.5px] font-mono text-white/50 hover:text-white transition-colors cursor-pointer shrink-0 whitespace-nowrap"
               title="Maximize back to full canvas"
             >
@@ -1280,7 +1312,7 @@ export function TrayCompanion() {
           </div>
         </div>
       )}
-      </motion.div>
+      </div>
     </div>
   );
 }

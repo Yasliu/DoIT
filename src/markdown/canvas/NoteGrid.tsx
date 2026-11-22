@@ -225,7 +225,7 @@ export function NoteGrid(props: NoteGridProps) {
   const title = settledView ? "Settled" : active ? cleanText(active) : "All notes";
 
   return (
-    <div className="relative h-full overflow-y-auto" style={{ scrollbarGutter: "stable", contain: "layout paint", overscrollBehaviorY: "contain" }}>
+    <div className="relative h-full overflow-y-auto" style={{ scrollbarGutter: "stable", willChange: "scroll-position", contain: "layout paint", overscrollBehaviorY: "contain" }}>
       <div className="mx-auto w-full max-w-[1180px] px-12 pb-40 pt-12">
         <header className="flex flex-wrap items-center justify-between gap-6">
           <h1 className="truncate text-[24px] font-semibold leading-tight">{title}</h1>

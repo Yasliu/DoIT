@@ -4,7 +4,7 @@ import type { NoteItem } from "../api/tauriBridge";
 import { tauriApi } from "../api/tauriBridge";
 import { Mark } from "./Mark";
 import { springTo } from "../lib/spring";
-import { accentFor, cx, relativeShort } from "../lib/text";
+import { accentFor, cx, relativeShort, titleMatches } from "../lib/text";
 
 interface DeskWidgetProps {
   notes: NoteItem[];
@@ -165,15 +165,7 @@ export function DeskWidget({
 
   const recent = [...notes].sort((a, b) => b.last_edited - a.last_edited).slice(0, 3);
   const matches = notes
-    .filter((note) => {
-      const q = filter.trim().toLowerCase();
-      if (!q) return true;
-      return (
-        note.title.toLowerCase().includes(q) ||
-        note.category.toLowerCase().includes(q) ||
-        note.content.some((item) => item.text.toLowerCase().includes(q))
-      );
-    })
+    .filter((note) => titleMatches(note, filter))
     .sort((a, b) => b.last_edited - a.last_edited)
     .slice(0, 6);
 

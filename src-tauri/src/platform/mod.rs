@@ -22,6 +22,8 @@
 //!   flicker. The user cannot resize it afterwards.
 //! - `dock_drag_by_app(window)`: whether the app moves the dock window itself during a drag
 //!   (clamped to the screens every step, see `window::drag`) instead of the OS move loop.
+//! - `hide_quietly(window)`: hide a dock window without the desktop's hide effect (GNOME fades and
+//!   shrinks it, which left a ghost of the panel's last frame above the pill).
 //! - `keep_wm_from_moving(window)`: stop the window manager's own move gestures on the dock
 //!   window, which could carry it off-screen. Call once it is shown.
 //! - `map_invisibly(window)`: map a window that must not be seen yet, so its page can paint (a
@@ -39,6 +41,9 @@
 //!   itself (so the built-in updater stays out of the way).
 //! - `global_shortcuts_work()`: whether a shortcut DoIT registers reaches it while another app has
 //!   focus (not under Wayland, where the desktop's own shortcut settings run `--quick-note`).
+//! - `desktop_shortcuts_work()`: whether the desktop can run DoIT on keys DoIT asks it to bind, where
+//!   `global_shortcuts_work` is false (GNOME under Wayland). `set_desktop_shortcut(id, label, keys,
+//!   flag)` binds `keys` (None removes it) to run `doit <flag>`.
 //! - `install_rpm(bytes)`: install a verified rpm update (Linux; one password prompt).
 //! - `documents_dir()`: the user's Documents folder (default parent of the notes folder).
 //! - `system_fonts()`: installed font family names, sorted and deduplicated.
@@ -85,8 +90,8 @@ pub type PillInputHandler = Box<dyn Fn(PillInput) + Send + Sync>;
 
 pub use os::{
     attach_pill, present_pill, ensure_always_on_top,
-    config_dir, dock_drag_by_app, documents_dir, focus_window, global_shortcuts_work, has_tray, init, install_rpm, is_store_package, keep_wm_from_moving, monitor_of_window, prepare_webview, release_webview,
-    make_visible, map_invisibly, set_webview_memory_level, set_window_bounds,
+    config_dir, desktop_shortcuts_work, dock_drag_by_app, documents_dir, focus_window, global_shortcuts_work, has_tray, init, install_rpm, is_store_package, hide_quietly, keep_wm_from_moving, monitor_of_window, prepare_webview, release_webview,
+    make_visible, map_invisibly, set_desktop_shortcut, set_webview_memory_level, set_window_bounds,
     system_fonts, trim_memory, work_area,
     BROWSER_ARGS, DOCK_WINDOW_RESIZABLE, TRAY_SKIPS_TASKBAR,
 };

@@ -73,7 +73,7 @@ export function markPlatform(): void {
   if ("__TAURI_INTERNALS__" in window) trackPillLook(isMarkdown);
   if (isMarkdown) restoreTheme();
   else restoreModernTheme();
-  if (isLinux && !window.location.search.includes("window=tray")) trackWindowFrame();
+  if (!window.location.search.includes("window=tray")) trackWindowFrame();
 }
 
 /** Which run of DoIT last settled the design cache (see `settleDesign`). */

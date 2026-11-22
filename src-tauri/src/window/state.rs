@@ -113,7 +113,9 @@ impl Engine {
         self.mode = Mode::Dock(DockShape::Panel);
         self.dock_anchor = anchor;
         self.dock_screen = None;
-        self.dock_note = note;
+        if note.is_some() {
+            self.dock_note = note;
+        }
         self.dock_generation += 1;
         if page_exists || self.dock_page_building { PillClick::AwaitPage } else { PillClick::BuildPage }
     }
@@ -123,7 +125,7 @@ impl Engine {
     pub fn dock_page_mounted(&mut self) -> Option<PanelOpening> {
         self.dock_page_ready = true;
         self.dock_page_building = false;
-        let opening = PanelOpening { screen: self.dock_screen.take(), anchor: self.dock_anchor.take(), note: self.dock_note.take() };
+        let opening = PanelOpening { screen: self.dock_screen.take(), anchor: self.dock_anchor.take(), note: self.dock_note.clone() };
         (self.mode == Mode::Dock(DockShape::Panel)).then_some(opening)
     }
 
@@ -173,5 +175,17 @@ mod tests {
         assert_eq!(opening.note.as_deref(), Some("quick"));
         assert!(!engine.dock_page_building);
         assert!(engine.dock_page_ready);
+    }
+
+    #[test]
+    fn the_pill_reopens_the_last_note_after_the_panel_page_was_retired() {
+        let mut engine = Engine {
+            mode: Mode::Dock(DockShape::Pill),
+            dock_note: Some("note-42".into()),
+            ..Engine::new()
+        };
+        assert_eq!(engine.click_pill(false, None, None), PillClick::BuildPage);
+        let opening = engine.dock_page_mounted().expect("rebuilt page opens as panel");
+        assert_eq!(opening.note.as_deref(), Some("note-42"));
     }
 }

@@ -51,7 +51,6 @@
     font-feature-settings: "liga" 0, "calt" 0;
     color: var(--foreground);
     -webkit-font-smoothing: antialiased;
-    text-rendering: optimizeLegibility;
   }
   body {
     margin: 0;

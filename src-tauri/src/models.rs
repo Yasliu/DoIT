@@ -145,6 +145,9 @@ pub struct AppSettings {
     /// Keys that open the dock panel on the latest note from any app ("Ctrl+Alt+N"); empty is off.
     #[serde(default)]
     pub quick_note_shortcut: String,
+    /// Keys that show or hide the dock panel from any app; empty is off.
+    #[serde(default = "default_dock_shortcut")]
+    pub dock_shortcut: String,
     #[serde(default)]
     pub last_seen_version: Option<String>,
     #[serde(default)]
@@ -174,6 +177,15 @@ pub struct AppSettings {
 
 fn default_dock_on_close() -> bool {
     true
+}
+
+/// Matches the in-app Ctrl+J that already folds the dock away.
+pub const DEFAULT_DOCK_SHORTCUT: &str = "Ctrl+Alt+J";
+/// The first default, replaced when settings are read (it was never a choice anyone made).
+pub const RETIRED_DOCK_SHORTCUT: &str = "Ctrl+Alt+D";
+
+fn default_dock_shortcut() -> String {
+    DEFAULT_DOCK_SHORTCUT.to_string()
 }
 
 fn default_hotkey_open_file() -> String {
@@ -249,6 +261,7 @@ impl Default for AppSettings {
             is_maximized: false,
             dock_on_close: true,
             quick_note_shortcut: String::new(),
+            dock_shortcut: default_dock_shortcut(),
             last_seen_version: None,
             category_icons: Some(HashMap::new()),
             palette: None,

@@ -202,6 +202,9 @@ html[data-design="modern"][data-platform="linux"]:not([data-maximized]) .chassis
   border: 1px solid var(--line-strong);
   overflow: visible;
 }
+html[data-design="modern"][data-platform="windows"]:not([data-maximized]) .chassis {
+  box-shadow: inset 0 0 0 1px var(--line-strong);
+}
 html[data-design="modern"][data-platform="linux"]:not([data-maximized]) .ui-sidebar {
   border-radius: calc(var(--r-xl) - 1px) 0 0 calc(var(--r-xl) - 1px);
 }

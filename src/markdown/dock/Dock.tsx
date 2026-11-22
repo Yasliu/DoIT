@@ -1,5 +1,4 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
-import { motion } from "motion/react";
 import { getCurrentWindow } from "@tauri-apps/api/window";
 import { type NoteItem, tauriApi } from "../../api/tauriBridge";
 import { fontStack } from "../editor/fonts";
@@ -10,12 +9,33 @@ import { useWorkspace } from "../../hooks/useWorkspace";
 import { placeCaretAtEditorStart, setMarkdownBaseDir } from "../../lib/format";
 import { shelfMark } from "../../lib/shelfMarks";
 import { applyShortcutSettings } from "../../lib/shortcuts";
-import { cleanText } from "../../lib/text";
+import { cleanText, titleMatches } from "../../lib/text";
 import { applyThemeSettings } from "../../platform";
 import { Confirm, Frame, Glyph, Menu, type MenuItem } from "../ui";
 import { DockList } from "./DockList";
 
 type Mode = "switching" | "panel" | "pill";
+
+/**
+ * The panel's open and close animation: it grows out of the pill and shrinks back onto it, in the
+ * corner it grows from. The drawn pill here is a 150x34 tag centred in its 200x52 window.
+ */
+function dockGrowth(quadrant: { grow_x: "right" | "left" | "center"; grow_y: "down" | "up" }): React.CSSProperties {
+  const [window_w, window_h, pill_w, pill_h] = [200, 52, 150, 34];
+  const across = (w: number) => {
+    const edge = (window_w - w) / 2;
+    const far = `calc(100% - ${edge + w}px)`;
+    return quadrant.grow_x === "right" ? [`${edge}px`, far] : quadrant.grow_x === "left" ? [far, `${edge}px`] : [`calc(50% - ${w / 2}px)`, `calc(50% - ${w / 2}px)`];
+  };
+  const down = (h: number) => {
+    const edge = (window_h - h) / 2;
+    const far = `calc(100% - ${edge + h}px)`;
+    return quadrant.grow_y === "up" ? [far, `${edge}px`] : [`${edge}px`, far];
+  };
+  const [il, ir] = across(pill_w);
+  const [it, ib] = down(pill_h);
+  return { "--dock-il": il, "--dock-ir": ir, "--dock-it": it, "--dock-ib": ib } as React.CSSProperties;
+}
 
 /**
  * The dock window. Collapsed it is the pill, which the backend draws natively (this page shows
@@ -42,21 +62,35 @@ export function Dock() {
   const [filter, setFilter] = useState("");
   const [selectedShelf, setSelectedShelf] = useState<string | null>(null);
   const [activeNoteId, setActiveNoteId] = useState<string | null>(null);
+  const activeNoteIdRef = useRef<string | null>(null);
+  activeNoteIdRef.current = activeNoteId;
   const [history, setHistory] = useState<string[]>([]);
   const visibilityLockRef = useRef(0);
   const titleRef = useRef<HTMLInputElement | null>(null);
 
+  const persistDockNote = (id: string | null) => {
+    try {
+      if (id) localStorage.setItem("doit.dock_active_note", id);
+      else localStorage.removeItem("doit.dock_active_note");
+    } catch {}
+  };
+
   const openNoteById = (id: string) => {
+    persistDockNote(id);
     setActiveNoteId((current) => {
       if (current && current !== id) setHistory((prev) => [...prev, current]);
       return id;
     });
   };
   const back = () => {
-    if (history.length === 0) return setActiveNoteId(null);
+    if (history.length === 0) {
+      persistDockNote(null);
+      return setActiveNoteId(null);
+    }
     const next = [...history];
     const previous = next.pop() ?? null;
     setHistory(next);
+    persistDockNote(previous);
     setActiveNoteId(previous);
   };
 
@@ -82,7 +116,7 @@ export function Dock() {
     if (collapsingRef.current) return;
     collapsingRef.current = true;
     changeMode("switching");
-    await tauriApi.setTrayMode("pill");
+    await tauriApi.setTrayMode("pill", activeNoteIdRef.current);
     await wait(45);
     changeMode("pill");
     collapsingRef.current = false;
@@ -124,8 +158,22 @@ export function Dock() {
     shownRef.current = false;
     setShown(false);
     // In case the fade's completion never fires.
-    hideTimerRef.current = window.setTimeout(hideNow, 180);
+    hideTimerRef.current = window.setTimeout(hideNow, 315);
   }, [hideNow]);
+
+  /** Maximize: the panel shrinks away, then the canvas takes over. */
+  const openCanvas = useCallback(() => {
+    if (collapsingRef.current || closingRef.current) return;
+    collapsingRef.current = true;
+    shownRef.current = false;
+    setShown(false);
+    window.setTimeout(() => void tauriApi.openCanvasMode(), 280);
+    // Should the canvas not come (this page would be gone by then), the panel returns.
+    window.setTimeout(() => {
+      collapsingRef.current = false;
+      openTray();
+    }, 5000);
+  }, [openTray]);
 
   const toggleMinimize = useCallback(() => {
     if (Date.now() < visibilityLockRef.current) return;
@@ -170,7 +218,10 @@ export function Dock() {
       });
     getCurrentWindow()
       .listen<string>("open-note", (event) => {
-        if (event.payload) setActiveNoteId(event.payload);
+        if (event.payload) {
+          persistDockNote(event.payload);
+          setActiveNoteId(event.payload);
+        }
       })
       .then((unlisten) => {
         if (disposed) unlisten();
@@ -213,8 +264,7 @@ export function Dock() {
     // Settled notes stay out of the list; searching still finds them.
     let list = notes.filter((n) => !n.is_settled || filter.trim()).sort((a, b) => b.last_edited - a.last_edited);
     if (selectedShelf) list = list.filter((n) => n.category.toLowerCase() === selectedShelf.toLowerCase());
-    const q = filter.trim().toLowerCase();
-    if (q) list = list.filter((n) => n.title.toLowerCase().includes(q) || n.category.toLowerCase().includes(q) || n.content.some((c) => c.text.toLowerCase().includes(q)));
+    if (filter.trim()) list = list.filter((n) => titleMatches(n, filter));
     return list;
   }, [notes, selectedShelf, filter]);
 
@@ -257,14 +307,12 @@ export function Dock() {
     : [];
 
   return (
-    <div className="flex h-screen w-screen overflow-hidden bg-background p-[9px]">
-      <motion.div
+    <div className="flex h-screen w-screen overflow-hidden">
+      <div
         data-slot="dock-panel"
-        initial={{ x: quadrant.grow_x === "right" ? -16 : quadrant.grow_x === "left" ? 16 : 0, y: quadrant.grow_y === "down" ? -16 : 16, opacity: 0 }}
-        animate={{ x: 0, y: 0, opacity: shown ? 1 : 0 }}
-        transition={shown ? { duration: 0.2, ease: [0.215, 0.61, 0.355, 1] } : { duration: 0.12, ease: "easeOut" }}
-        onAnimationComplete={() => {
-          if (!shown && !shownRef.current && closingRef.current) hideNow();
+        data-state={shown ? "in" : "out"}
+        onAnimationEnd={(e) => {
+          if (e.target === e.currentTarget && !shown && !shownRef.current && closingRef.current) hideNow();
         }}
         onPaste={editor.onPaste}
         onDragOver={(e) => {
@@ -278,8 +326,8 @@ export function Dock() {
           e.stopPropagation();
           void tauriApi.showTrayContextMenu();
         }}
-        className="flex h-full w-full"
-        style={{ pointerEvents: shown ? "auto" : "none" }}
+        className="flex h-full w-full bg-background p-[9px]"
+        style={{ ...dockGrowth(quadrant), pointerEvents: shown ? "auto" : "none" }}
       >
         <Frame className="tm-layer flex h-full w-full flex-col pb-2 pt-3" surface="var(--background)">
           <div onPointerDown={onStripDown} title="Click to put away, or drag to move" className="flex h-10 shrink-0 cursor-grab items-center gap-[1ch] px-[1.5ch]">
@@ -297,7 +345,7 @@ export function Dock() {
                   +
                 </Glyph>
               )}
-              <Glyph label="Open the canvas" onClick={() => void tauriApi.openCanvasMode()}>
+              <Glyph label="Open the canvas" onClick={() => openCanvas()}>
                 ↗
               </Glyph>
               <Glyph label="Shrink to the pill" onClick={toggleMinimize}>
@@ -429,7 +477,7 @@ export function Dock() {
             }}
           />
         )}
-      </motion.div>
+      </div>
     </div>
   );
 }

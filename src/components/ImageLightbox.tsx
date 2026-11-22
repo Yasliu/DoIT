@@ -1,4 +1,5 @@
 import { useCallback, useEffect, useRef, useState } from "react";
+import { createPortal } from "react-dom";
 import { Check, Copy, ExternalLink, X } from "lucide-react";
 import { copyImageToClipboard, openExternalUrl } from "../lib/format";
 
@@ -171,17 +172,48 @@ export function ImageLightbox({ src, onClose }: ImageLightboxProps) {
     return () => view.removeEventListener("wheel", onWheel);
   }, [zoomAt]);
 
-  // Escape closes only the viewer
+  // Escape closes only the viewer; Ctrl + / - / 0 and touchpad pinch zoom the image
   useEffect(() => {
     const onKey = (e: KeyboardEvent) => {
-      if (e.key !== "Escape") return;
-      e.preventDefault();
-      e.stopPropagation();
-      onClose();
+      if (e.key === "Escape") {
+        e.preventDefault();
+        e.stopPropagation();
+        onClose();
+        return;
+      }
+      if ((e.ctrlKey || e.metaKey) && !e.altKey) {
+        if (e.key === "=" || e.key === "+" || e.code === "NumpadAdd" || e.code === "Equal") {
+          e.preventDefault();
+          e.stopPropagation();
+          zoomAt(1.25, null, null, true);
+          return;
+        }
+        if (e.key === "-" || e.key === "_" || e.code === "NumpadSubtract" || e.code === "Minus") {
+          e.preventDefault();
+          e.stopPropagation();
+          zoomAt(1 / 1.25, null, null, true);
+          return;
+        }
+        if (e.key === "0" || e.code === "Numpad0" || e.code === "Digit0") {
+          e.preventDefault();
+          e.stopPropagation();
+          reset();
+        }
+      }
+    };
+    const onPinch = (e: Event) => {
+      const detail = (e as CustomEvent<number>).detail;
+      if (typeof detail === "number" && detail !== 0) {
+        zoomAt(detail > 0 ? 1.15 : 1 / 1.15, null, null, false);
+      }
     };
     window.addEventListener("keydown", onKey, true);
-    return () => window.removeEventListener("keydown", onKey, true);
-  }, [onClose]);
+    window.addEventListener("doit:pinch-zoom", onPinch);
+    return () => {
+      window.removeEventListener("keydown", onKey, true);
+      window.removeEventListener("doit:pinch-zoom", onPinch);
+    };
+  }, [onClose, reset, zoomAt]);
 
   useEffect(() => () => cancelAnimationFrame(s.current.raf), []);
 
@@ -232,8 +264,12 @@ export function ImageLightbox({ src, onClose }: ImageLightboxProps) {
   const btn =
     "grid size-6 place-items-center rounded text-[14px] font-bold text-white/70 transition-colors hover:bg-white/10 hover:text-white cursor-pointer";
 
-  return (
-    <div className="fixed inset-0 z-[100] flex select-none flex-col items-center justify-center bg-black/92 p-2">
+  return createPortal(
+    <div
+      className="fixed inset-0 z-[99999] flex select-none flex-col items-center justify-center bg-black/92 p-2"
+      onClick={(e) => e.stopPropagation()}
+      onPointerDown={(e) => e.stopPropagation()}
+    >
       <div
         className="z-20 mb-2 flex items-center gap-1.5 rounded-full border border-white/20 bg-black/85 px-3 py-1.5 shadow-xl backdrop-blur-md"
         onPointerDown={(e) => e.stopPropagation()}
@@ -301,6 +337,7 @@ export function ImageLightbox({ src, onClose }: ImageLightboxProps) {
           title="Drag to pan | click to toggle 2x | scroll to zoom"
         />
       </div>
-    </div>
+    </div>,
+    document.body,
   );
 }

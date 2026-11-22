@@ -122,9 +122,10 @@ export function insertInlineImageAtCaret(editor: HTMLElement, base64OrUrl: strin
   }
   const nextId = `img-${maxN + 1}`;
 
-  const img = createImage(base64OrUrl, alt);
+  const label = safeAlt(alt);
+  const img = createImage(base64OrUrl, label);
   img.setAttribute("data-ref", nextId);
-  img.setAttribute("data-md", `![${alt}][${nextId}]`);
+  img.setAttribute("data-md", `![${label}][${nextId}]`);
   placeImageAtCaret(editor, img);
 }
 
@@ -144,9 +145,17 @@ function safeAlt(alt: string): string {
 }
 
 /** Inserts an image saved next to the notes, linked by its relative `path`. */
-export function insertSavedImageAtCaret(editor: HTMLElement, path: string, alt: string): void {
+export function insertSavedImageAtCaret(editor: HTMLElement, path: string, alt: string, previewSrc?: string): void {
   const label = safeAlt(alt);
-  const img = createImage(resolveImageSrc(path) ?? path, label);
+  if (previewSrc) rememberImageSrc(path, previewSrc);
+  const primarySrc = previewSrc ?? resolveImageSrc(path) ?? path;
+  const img = createImage(primarySrc, label);
+  if (previewSrc && primarySrc !== previewSrc) {
+    img.onerror = () => {
+      img.onerror = null;
+      img.src = previewSrc;
+    };
+  }
   img.setAttribute("data-md", `![${label}](${path})`);
   placeImageAtCaret(editor, img);
 }
@@ -165,48 +174,127 @@ export function imageMarkdownWithAlt(img: HTMLImageElement, alt: string): string
   return `![${safeAlt(alt)}]${target ?? `(${img.getAttribute("src") ?? ""})`}`;
 }
 
+/** A line holding nothing but images: a block to look at, never one to type in. */
+function isImageLine(el: Element | null): el is HTMLElement {
+  if (!(el instanceof HTMLElement) || el.tagName !== "DIV" || el.hasAttribute("data-p") || isSpecialBlock(el)) return false;
+  if (!el.querySelector(":scope > img.md-img")) return false;
+  return (el.textContent || "").replace(/\u200B/g, "").trim() === "";
+}
+
+function gapLine(): HTMLElement {
+  const line = document.createElement("div");
+  line.setAttribute("data-gap", "");
+  line.appendChild(document.createElement("br"));
+  return line;
+}
+
+/**
+ * Keeps images out of the caret's reach: an image alone on its line is locked, so the caret never
+ * stands beside it as a tall bar, and every image has an editable line after it (and before it,
+ * when it opens the note) to move to. Those lines are not saved. With `only`, just that block is looked at.
+ */
+export function settleImageBlocks(editor: HTMLElement, only?: HTMLElement): void {
+  const sel = window.getSelection();
+  const caretIn = (el: Node) => !!sel && sel.rangeCount > 0 && el.contains(sel.getRangeAt(0).startContainer);
+  const lines = only ? [only] : Array.from(editor.children);
+  for (const el of lines) {
+    // The image on a locked line was deleted: the line goes with it, not left as a blank nobody can enter.
+    if (el instanceof HTMLElement && el.classList.contains("md-imgline") && !el.querySelector("img")) {
+      const neighbour = el.nextElementSibling ?? el.previousElementSibling;
+      const hadCaret = caretIn(el);
+      el.remove();
+      if (hadCaret && neighbour instanceof HTMLElement) placeCaretStart(neighbour);
+      continue;
+    }
+    if (el instanceof HTMLElement && el.hasAttribute("data-gap") && !isImageLine(el.previousElementSibling) && !isImageLine(el.nextElementSibling)) {
+      el.removeAttribute("data-gap");
+    }
+    if (!isImageLine(el)) continue;
+    const hadCaret = caretIn(el);
+    if (el.getAttribute("contenteditable") !== "false") {
+      el.setAttribute("contenteditable", "false");
+      el.classList.add("md-imgline");
+      el.querySelectorAll(":scope > br").forEach((br) => br.remove());
+      Array.from(el.childNodes).forEach((n) => {
+        if (n.nodeType === Node.TEXT_NODE) n.remove();
+      });
+    }
+    let next = el.nextElementSibling;
+    if (!next || isImageLine(next)) {
+      next = gapLine();
+      el.after(next);
+    }
+    if (hadCaret) placeCaretStart(next as HTMLElement);
+  }
+  const first = editor.firstElementChild;
+  if (isImageLine(first)) first.before(gapLine());
+}
+
+/** Backspace under an image removes the image alone, leaving the caret on the line it was on. */
+function removeImageAbove(block: HTMLElement, sel: Selection): boolean {
+  const prev = block.previousElementSibling;
+  if (!isImageLine(prev)) return false;
+  prev.remove();
+  const neighbour = block.previousElementSibling ?? block.nextElementSibling;
+  if (block.hasAttribute("data-gap") && !(block.textContent || "").trim() && neighbour instanceof HTMLElement) {
+    const r = document.createRange();
+    r.selectNodeContents(neighbour);
+    r.collapse(neighbour !== block.previousElementSibling);
+    block.remove();
+    sel.removeAllRanges();
+    sel.addRange(r);
+  }
+  return true;
+}
+
 function placeImageAtCaret(editor: HTMLElement, img: HTMLImageElement): void {
   const nextLine = document.createElement("div");
-  const br = document.createElement("br");
-  nextLine.appendChild(br);
+  nextLine.appendChild(document.createElement("br"));
 
   const sel = window.getSelection();
+  let block: HTMLElement | null = null;
   if (sel && sel.rangeCount > 0 && editor.contains(sel.getRangeAt(0).startContainer)) {
     const range = sel.getRangeAt(0);
     range.deleteContents();
 
-    let block: Node | null = range.startContainer;
-    while (block && block.parentNode !== editor && block !== editor) {
-      block = block.parentNode;
+    let node: Node | null = range.startContainer;
+    while (node && node.parentNode !== editor && node !== editor) {
+      node = node.parentNode;
     }
-
-    if (block && block !== editor && block.parentNode === editor) {
-      range.insertNode(img);
-      block.parentNode.insertBefore(nextLine, block.nextSibling);
-    } else {
-      range.insertNode(img);
-      img.after(nextLine);
+    if (node instanceof HTMLElement && node !== editor && node.parentNode === editor) {
+      block = node;
     }
+  }
 
-    const newRange = document.createRange();
-    newRange.setStart(nextLine, 0);
-    newRange.collapse(true);
-    sel.removeAllRanges();
-    sel.addRange(newRange);
+  if (
+    block &&
+    block.tagName === "DIV" &&
+    !isSpecialBlock(block) &&
+    (block.textContent || "").trim() === "" &&
+    !block.querySelector("img, table, pre, hr, .md-figure")
+  ) {
+    block.className = "";
+    block.removeAttribute("data-p");
+    block.removeAttribute("style");
+    block.replaceChildren(img);
+    block.after(nextLine);
+  } else if (block) {
+    const imgDiv = document.createElement("div");
+    imgDiv.appendChild(img);
+    block.after(imgDiv);
+    imgDiv.after(nextLine);
   } else {
     const imgDiv = document.createElement("div");
     imgDiv.appendChild(img);
     editor.appendChild(imgDiv);
     editor.appendChild(nextLine);
-
-    if (sel) {
-      const newRange = document.createRange();
-      newRange.setStart(nextLine, 0);
-      newRange.collapse(true);
-      sel.removeAllRanges();
-      sel.addRange(newRange);
-    }
   }
+
+  settleImageBlocks(editor);
+  placeCaretStart(nextLine);
+  requestAnimationFrame(() => {
+    if (nextLine.isConnected) placeCaretStart(nextLine);
+  });
 }
 
 export function insertInlineImageInMarkdown(
@@ -241,15 +329,41 @@ export function insertInlineImageInMarkdown(
 const escapeHtml = (s: string) => s.replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;");
 const escapeAttr = (s: string) => escapeHtml(s).replace(/"/g, "&quot;");
 
+const imagePreviewCache = new Map<string, string>();
+
+/** Stores an in-memory data-URL preview for a relative attachment path so inserted images show at once. */
+export function rememberImageSrc(path: string, dataUrl: string): void {
+  const key = path.trim().replace(/^\.[\\/]/, "");
+  if (key && dataUrl) imagePreviewCache.set(key, dataUrl);
+}
+
 /** Maps a markdown image path to something the webview can load (Tauri asset protocol for local files). */
 function resolveImageSrc(raw: string): string | null {
   const p = raw.trim().replace(/^<|>$/g, "");
   if (/^(https?:|data:image\/|blob:|asset:)/i.test(p)) return p;
+  const normalized = p.replace(/^\.[\\/]/, "");
+  const cached = imagePreviewCache.get(normalized);
+  if (cached) return cached;
   const isLocal = /^[a-zA-Z]:[\\/]/.test(p) || p.startsWith("/") || /^file:\/\//i.test(p);
   const inTauri = typeof window !== "undefined" && "__TAURI_INTERNALS__" in window;
-  if (inTauri && isLocal) return convertFileSrc(p.replace(/^file:\/\/\/?/i, ""));
+  if (inTauri && isLocal) {
+    const rawFsPath = /^file:\/\/\/[a-zA-Z]:/i.test(p)
+      ? p.replace(/^file:\/\/\//i, "")
+      : p.replace(/^file:\/\//i, "");
+    let fsPath = rawFsPath;
+    if (/^file:\/\//i.test(p)) {
+      try {
+        fsPath = decodeURIComponent(rawFsPath);
+      } catch {
+        fsPath = rawFsPath;
+      }
+    }
+    return convertFileSrc(fsPath);
+  }
   if (inTauri && markdownBaseDir && !/^[a-z][a-z0-9+.-]*:/i.test(p)) {
-    return convertFileSrc(`${markdownBaseDir}/${p.replace(/^\.[\\/]/, "")}`);
+    const sep = markdownBaseDir.includes("\\") ? "\\" : "/";
+    const rel = normalized.replace(/[\\/]+/g, sep);
+    return convertFileSrc(`${markdownBaseDir}${sep}${rel}`);
   }
   return null;
 }
@@ -284,9 +398,9 @@ export function inlineMarkdownToHtml(line: string, refMap?: Map<string, string>)
     return `\u0001${images.length - 1}\u0002`;
   });
 
-  // Pull links out next: [title](url)
+  // Pull links out next: [title](url) (never match unresolved ![alt](url) image syntax)
   const links: string[] = [];
-  work = work.replace(/\[([^\]\n]+)\]\(([^)\n\s]+)\)/g, (_m: string, title: string, url: string) => {
+  work = work.replace(/(?<!!)\[([^\]\n]+)\]\(([^)\n\s]+)\)/g, (_m: string, title: string, url: string) => {
     links.push(
       `<a class="md-link" href="${escapeAttr(url)}" target="_blank" rel="noopener noreferrer" title="Ctrl+Click to open: ${escapeAttr(url)}">${escapeHtml(title)}</a>`,
     );
@@ -1046,8 +1160,41 @@ function convertInlineInTextNodes(container: HTMLElement): void {
       return;
     }
 
-    // 5. Link [title](url)
-    const linkMatch = val.match(/\[([^\]\n]+)\]\((https?:\/\/[^\s)]+)\)/);
+    // 4.5 Inline image ![alt](src)
+    const imgMatch = val.match(/!\[([^\]\n]*)\]\(([^)\n\s]+)\)/);
+    if (imgMatch && imgMatch.index !== undefined) {
+      const rawSrc = imgMatch[2];
+      const resolved = resolveImageSrc(rawSrc);
+      if (resolved) {
+        const startIdx = imgMatch.index;
+        const fullLen = imgMatch[0].length;
+        const alt = imgMatch[1] || "Image";
+        const isCaretAtEnd = anchorNode === node && anchorOffset >= startIdx + fullLen;
+
+        const beforeText = val.slice(0, startIdx);
+        const afterText = val.slice(startIdx + fullLen);
+
+        const imgEl = createImage(resolved, alt);
+        imgEl.setAttribute("data-md", imgMatch[0]);
+
+        const afterNode = document.createTextNode(afterText || "\u200B");
+        node.data = beforeText;
+        node.after(imgEl);
+        imgEl.after(afterNode);
+
+        if (isCaretAtEnd && sel) {
+          const r = document.createRange();
+          r.setStart(afterNode, afterText ? 0 : 1);
+          r.collapse(true);
+          sel.removeAllRanges();
+          sel.addRange(r);
+        }
+        return;
+      }
+    }
+
+    // 5. Link [title](url) (ignore image syntax ![alt](url))
+    const linkMatch = val.match(/(?<!!)\[([^\]\n]+)\]\((https?:\/\/[^\s)]+)\)/);
     if (linkMatch && linkMatch.index !== undefined) {
       const startIdx = linkMatch.index;
       const fullLen = linkMatch[0].length;
@@ -1307,11 +1454,27 @@ function convertInlineInTextNodes(container: HTMLElement): void {
       }
     }
   }
+
+  settleImageBlocks(editor, only);
+}
+
+const IMAGE_EXT_RE = /\.(png|jpe?g|gif|webp|bmp|avif|svg)$/i;
+const CLIPBOARD_IMAGE_TEXT_RE = /^(?:\[image\]|https?:\/\/\S+)?$/i;
+
+function hasClipboardImageFiles(cd: DataTransfer | null | undefined): boolean {
+  const hasItemImage = cd?.items
+    ? Array.from(cd.items).some((i) => i.type.startsWith("image/") || (i.kind === "file" && IMAGE_EXT_RE.test(i.getAsFile()?.name || "")))
+    : false;
+  if (hasItemImage) return true;
+  return cd?.files
+    ? Array.from(cd.files).some((f) => f.type.startsWith("image/") || IMAGE_EXT_RE.test(f.name))
+    : false;
 }
 
 /** Plain-text paste: multi-line text is re-parsed as markdown so headings / tables / lists render at once. */
 /** Pasting a web address over selected text on one line links that text to it. Returns true when handled. */
 export function handleLinkPaste(e: React.ClipboardEvent<HTMLElement>, editor: HTMLElement): boolean {
+  if (hasClipboardImageFiles(e.clipboardData)) return false;
   const url = (e.clipboardData?.getData("text/plain") || "").trim();
   if (!/^https?:\/\/\S+$/i.test(url)) return false;
   const sel = window.getSelection();
@@ -1327,12 +1490,25 @@ export function handleLinkPaste(e: React.ClipboardEvent<HTMLElement>, editor: HT
   return true;
 }
 
+export function extractClipboardHtmlImage(html: string): { src: string; alt: string } | null {
+  if (!html) return null;
+  const doc = new DOMParser().parseFromString(html, "text/html");
+  const img = doc.querySelector("img[src]");
+  const src = img?.getAttribute("src")?.trim() || "";
+  if (!src || !/^(?:data:image\/|blob:|https?:|file:)/i.test(src)) return null;
+  return { src, alt: img?.getAttribute("alt")?.trim() || "" };
+}
+
 export function handleMarkdownPaste(e: React.ClipboardEvent<HTMLElement>): boolean {
-  const items = e.clipboardData?.items;
-  if (items && Array.from(items).some((i) => i.type.startsWith("image/"))) return false;
+  const cd = e.clipboardData;
+  if (hasClipboardImageFiles(cd)) return false;
   const target = e.target as HTMLElement;
   if (target.closest?.("pre.md-pre")) return false;
-  const text = (e.clipboardData?.getData("text/plain") || "").replace(/\r\n?/g, "\n");
+  const text = (cd?.getData("text/plain") || "").replace(/\r\n?/g, "\n");
+  const html = cd?.getData("text/html") || "";
+  if (CLIPBOARD_IMAGE_TEXT_RE.test(text.trim()) && extractClipboardHtmlImage(html)) {
+    return false;
+  }
   if (!text) return false;
   e.preventDefault();
   if (target.closest?.("td,th")) {
@@ -1482,6 +1658,8 @@ export function readMarkdown(container: HTMLElement, nodes: Node[]): MarkdownPie
       if (!isTrailingBr(el)) flush();
       return;
     }
+
+    if (el.hasAttribute("data-gap") && !(el.textContent || "").trim()) return;
 
     if (BLOCK_TAGS.has(tag)) {
       // Block elements always begin on a fresh line (fixes nested <div> merging into the previous line)
@@ -2234,6 +2412,11 @@ export function handleRichEditorKeyDown(
         onInput();
         return true;
       }
+      if (removeImageAbove(block, sel)) {
+        e.preventDefault();
+        onInput();
+        return true;
+      }
     }
     return false;
   }
@@ -2368,6 +2551,11 @@ export function handleRichEditorKeyDown(
     if (prev && prev instanceof HTMLElement && (prev.classList.contains("md-hr") || prev.hasAttribute("data-raw"))) {
       e.preventDefault();
       prev.remove();
+      onInput();
+      return true;
+    }
+    if (removeImageAbove(block, sel)) {
+      e.preventDefault();
       onInput();
       return true;
     }

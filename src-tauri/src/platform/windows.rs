@@ -8,28 +8,91 @@ pub const TRAY_SKIPS_TASKBAR: bool = true;
 
 pub const DOCK_WINDOW_RESIZABLE: bool = false;
 
-/// Windows' own move loop runs the drag; `save_tray_position` clamps the result.
-pub fn dock_drag_by_app(_window: &tauri::Window) -> bool {
-    false
+/// The native pill holds `SetCapture` from button-down to button-up, so the app moves and clamps
+/// it directly; the WebView2 dock panel uses the OS move loop and settles on release.
+pub fn dock_drag_by_app(window: &tauri::Window) -> bool {
+    window.label() == "pill"
 }
 
 pub fn keep_wm_from_moving(_window: &tauri::Window) {}
+
+/// Windows has no effect to dodge here, so this is a plain hide.
+pub fn hide_quietly(window: &tauri::Window) {
+    let _ = window.hide();
+}
 
 /// The notification area is always there.
 pub fn has_tray() -> bool {
     true
 }
 
+#[link(name = "dwmapi")]
+unsafe extern "system" {
+    fn DwmSetWindowAttribute(
+        hwnd: *mut std::ffi::c_void,
+        dw_attribute: u32,
+        pv_attribute: *const std::ffi::c_void,
+        cb_attribute: u32,
+    ) -> i32;
+}
+
+const DWMWA_CLOAK: u32 = 13;
+const DWMWA_USE_IMMERSIVE_DARK_MODE_OLD: u32 = 19;
+const DWMWA_USE_IMMERSIVE_DARK_MODE: u32 = 20;
+
+fn set_cloaked(hwnd: *mut std::ffi::c_void, cloaked: bool) {
+    let val: i32 = if cloaked { 1 } else { 0 };
+    unsafe {
+        let _ = DwmSetWindowAttribute(
+            hwnd,
+            DWMWA_CLOAK,
+            &val as *const i32 as *const std::ffi::c_void,
+            std::mem::size_of::<i32>() as u32,
+        );
+    }
+}
+
+fn enable_dark_non_client_frame(hwnd: *mut std::ffi::c_void) {
+    let dark: i32 = 1;
+    let ptr = &dark as *const i32 as *const std::ffi::c_void;
+    let size = std::mem::size_of::<i32>() as u32;
+    unsafe {
+        if DwmSetWindowAttribute(hwnd, DWMWA_USE_IMMERSIVE_DARK_MODE, ptr, size) != 0 {
+            let _ = DwmSetWindowAttribute(hwnd, DWMWA_USE_IMMERSIVE_DARK_MODE_OLD, ptr, size);
+        }
+    }
+}
+
 pub fn focus_window(window: &tauri::Window) {
     unsafe extern "system" {
+        fn AttachThreadInput(id_attach: u32, id_attach_to: u32, f_attach: i32) -> i32;
         fn BringWindowToTop(hwnd: *mut std::ffi::c_void) -> i32;
+        fn GetCurrentThreadId() -> u32;
+        fn GetForegroundWindow() -> *mut std::ffi::c_void;
+        fn GetWindowThreadProcessId(hwnd: *mut std::ffi::c_void, lpdw_process_id: *mut u32) -> u32;
+        fn IsIconic(hwnd: *mut std::ffi::c_void) -> i32;
+        fn SetFocus(hwnd: *mut std::ffi::c_void) -> *mut std::ffi::c_void;
         fn SetForegroundWindow(hwnd: *mut std::ffi::c_void) -> i32;
+        fn ShowWindow(hwnd: *mut std::ffi::c_void, n_cmd_show: i32) -> i32;
     }
+    const SW_RESTORE: i32 = 9;
 
     if let Ok(hwnd) = window.hwnd() {
+        set_cloaked(hwnd.0, false);
         unsafe {
+            if IsIconic(hwnd.0) != 0 {
+                ShowWindow(hwnd.0, SW_RESTORE);
+            }
+            let fg = GetForegroundWindow();
+            let fg_thread = if fg.is_null() { 0 } else { GetWindowThreadProcessId(fg, std::ptr::null_mut()) };
+            let cur_thread = GetCurrentThreadId();
+            let attached = fg_thread != 0 && fg_thread != cur_thread && AttachThreadInput(fg_thread, cur_thread, 1) != 0;
             BringWindowToTop(hwnd.0);
             SetForegroundWindow(hwnd.0);
+            SetFocus(hwnd.0);
+            if attached {
+                AttachThreadInput(fg_thread, cur_thread, 0);
+            }
         }
     }
     let _ = window.set_focus();
@@ -217,13 +280,30 @@ pub fn set_webview_memory_level(window: &tauri::WebviewWindow, low: bool) {
 /// a page; `--in-process-gpu` folds the GPU process into the browser process.
 pub const BROWSER_ARGS: &str = "--disable-features=msWebOOUI,msPdfOOUI,msSmartScreenProtection --js-flags=--expose-gc --disable-background-networking --disk-cache-size=8388608 --in-process-gpu";
 
-/// WebView2 is tuned at creation through `BROWSER_ARGS`.
-pub fn prepare_webview(_window: &tauri::WebviewWindow) {}
+/// Applies dark DWM non-client frame attributes (prevents Windows 10's white 1px top border on
+/// undecorated shadow windows) and cloaks hidden windows so `SW_MAXIMIZE` never flashes an
+/// unpainted frame before `canvas_ready`.
+pub fn prepare_webview(window: &tauri::WebviewWindow) {
+    if let Ok(hwnd) = window.hwnd() {
+        enable_dark_non_client_frame(hwnd.0);
+        if window.label() == "main" && !window.is_visible().unwrap_or(true) {
+            set_cloaked(hwnd.0, true);
+        }
+    }
+}
 
-/// WebView2 loads in a hidden window, so it simply stays hidden until it is ready.
-pub fn map_invisibly(_window: &tauri::Window) {}
+/// Keeps the window cloaked at the DWM level while WebView2 lays out and paints its first frame.
+pub fn map_invisibly(window: &tauri::Window) {
+    if let Ok(hwnd) = window.hwnd() {
+        set_cloaked(hwnd.0, true);
+    }
+}
 
-pub fn make_visible(_window: &tauri::Window) {}
+pub fn make_visible(window: &tauri::Window) {
+    if let Ok(hwnd) = window.hwnd() {
+        set_cloaked(hwnd.0, false);
+    }
+}
 
 /// Destroying the window already releases WebView2's renderer.
 pub fn release_webview(_window: &tauri::WebviewWindow) {}
@@ -354,6 +434,7 @@ mod pill {
     const WM_LBUTTONDOWN: u32 = 0x0201;
     const WM_LBUTTONUP: u32 = 0x0202;
     const WM_RBUTTONUP: u32 = 0x0205;
+    const WM_CAPTURECHANGED: u32 = 0x0215;
     const WM_EXITSIZEMOVE: u32 = 0x0232;
     const WM_MOUSELEAVE: u32 = 0x02A3;
     const TME_LEAVE: u32 = 0x2;
@@ -364,6 +445,7 @@ mod pill {
     struct Hook {
         on_input: PillInputHandler,
         tracking: Cell<bool>,
+        captured: Cell<bool>,
     }
 
     fn scale(hwnd: Hwnd) -> f64 {
@@ -406,17 +488,33 @@ mod pill {
                 input(PillInput::Leave);
             }
             WM_LBUTTONDOWN => {
+                hook.captured.set(true);
                 unsafe { SetCapture(hwnd) };
                 let (x, y) = point(hwnd, lparam);
                 input(PillInput::Press(x, y));
             }
             WM_LBUTTONUP => {
+                hook.captured.set(false);
                 unsafe { ReleaseCapture() };
                 let (x, y) = point(hwnd, lparam);
                 input(PillInput::Release(x, y));
             }
+            // If another window or the OS steals mouse capture mid-press on Windows 10, end the press/drag cleanly.
+            WM_CAPTURECHANGED => {
+                if hook.captured.replace(false) {
+                    hook.tracking.set(false);
+                    let mut at = Point { x: 0, y: 0 };
+                    unsafe {
+                        GetCursorPos(&mut at);
+                        ScreenToClient(hwnd, &mut at);
+                    }
+                    let s = scale(hwnd);
+                    input(PillInput::Release(at.x as f64 / s, at.y as f64 / s));
+                }
+            }
             // Windows' own move loop swallowed the button release: the drag it ran is over.
             WM_EXITSIZEMOVE => {
+                hook.captured.set(false);
                 let mut at = Point { x: 0, y: 0 };
                 unsafe {
                     GetCursorPos(&mut at);
@@ -463,7 +561,11 @@ mod pill {
         let hwnd = hwnd.0 as isize;
         let _ = window.run_on_main_thread(move || {
             let hwnd = hwnd as Hwnd;
-            let hook = Box::into_raw(Box::new(Hook { on_input, tracking: Cell::new(false) }));
+            let hook = Box::into_raw(Box::new(Hook {
+                on_input,
+                tracking: Cell::new(false),
+                captured: Cell::new(false),
+            }));
             // SAFETY: plain Win32 calls on a window this thread owns; `hook` lives until WM_NCDESTROY.
             unsafe {
                 keep_layered(hwnd);
@@ -550,6 +652,15 @@ pub fn global_shortcuts_work() -> bool {
     true
 }
 
+/// Windows lets apps register their own shortcuts, so DoIT never asks the desktop to.
+pub fn desktop_shortcuts_work() -> bool {
+    false
+}
+
+pub fn set_desktop_shortcut(_id: &str, _label: &str, _keys: Option<&str>, _flag: &str) -> Result<(), String> {
+    Err("Windows registers DoIT's shortcuts itself.".to_string())
+}
+
 /// rpm packages exist only on Linux.
 pub fn install_rpm(_bytes: &[u8]) -> Result<(), String> {
     Err("rpm updates exist only on Linux.".to_string())
@@ -562,68 +673,71 @@ pub fn documents_dir() -> Option<PathBuf> {
 }
 
 pub fn system_fonts() -> Vec<String> {
-    let mut fonts = std::collections::BTreeSet::new();
+    static FONTS: std::sync::OnceLock<Vec<String>> = std::sync::OnceLock::new();
+    FONTS
+        .get_or_init(|| {
+            let mut fonts = std::collections::BTreeSet::new();
 
-{
-    use std::os::windows::process::CommandExt;
-    const CREATE_NO_WINDOW: u32 = 0x08000000;
+            use std::os::windows::process::CommandExt;
+            const CREATE_NO_WINDOW: u32 = 0x08000000;
 
-    let registry_keys = [
-        "HKLM\\SOFTWARE\\Microsoft\\Windows NT\\CurrentVersion\\Fonts",
-        "HKCU\\SOFTWARE\\Microsoft\\Windows NT\\CurrentVersion\\Fonts",
-    ];
+            let registry_keys = [
+                "HKLM\\SOFTWARE\\Microsoft\\Windows NT\\CurrentVersion\\Fonts",
+                "HKCU\\SOFTWARE\\Microsoft\\Windows NT\\CurrentVersion\\Fonts",
+            ];
 
-    for key in registry_keys {
-        if let Ok(output) = std::process::Command::new("reg")
-            .args(["query", key])
-            .creation_flags(CREATE_NO_WINDOW)
-            .output()
-        {
-            if output.status.success() {
-                let text = String::from_utf8_lossy(&output.stdout);
-                for line in text.lines() {
-                    let trimmed = line.trim();
-                    if trimmed.is_empty() || trimmed.starts_with("HKEY_") {
-                        continue;
-                    }
-                    if let Some(pos) = trimmed.find("REG_SZ") {
-                        let raw_name = trimmed[..pos].trim();
-                        let mut name = raw_name;
-                        for suffix in &[" (TrueType)", " (OpenType)", " (Variable)", " (All lanes)", " & "] {
-                            if let Some(idx) = name.find(suffix) {
-                                name = &name[..idx];
+            for key in registry_keys {
+                if let Ok(output) = std::process::Command::new("reg")
+                    .args(["query", key])
+                    .creation_flags(CREATE_NO_WINDOW)
+                    .output()
+                {
+                    if output.status.success() {
+                        let text = String::from_utf8_lossy(&output.stdout);
+                        for line in text.lines() {
+                            let trimmed = line.trim();
+                            if trimmed.is_empty() || trimmed.starts_with("HKEY_") {
+                                continue;
                             }
-                        }
-                        let family = name
-                            .trim_end_matches(" Bold Italic")
-                            .trim_end_matches(" SemiBold Italic")
-                            .trim_end_matches(" ExtraBold Italic")
-                            .trim_end_matches(" Light Italic")
-                            .trim_end_matches(" Semilight Italic")
-                            .trim_end_matches(" Thin Italic")
-                            .trim_end_matches(" Bold")
-                            .trim_end_matches(" Italic")
-                            .trim_end_matches(" Light")
-                            .trim_end_matches(" Semilight")
-                            .trim_end_matches(" Black")
-                            .trim_end_matches(" Thin")
-                            .trim_end_matches(" ExtraBold")
-                            .trim_end_matches(" ExtraLight")
-                            .trim_end_matches(" SemiBold")
-                            .trim_end_matches(" Medium")
-                            .trim_end_matches(" Heavy")
-                            .trim_end_matches(" Regular")
-                            .trim();
+                            if let Some(pos) = trimmed.find("REG_SZ") {
+                                let raw_name = trimmed[..pos].trim();
+                                let mut name = raw_name;
+                                for suffix in &[" (TrueType)", " (OpenType)", " (Variable)", " (All lanes)", " & "] {
+                                    if let Some(idx) = name.find(suffix) {
+                                        name = &name[..idx];
+                                    }
+                                }
+                                let family = name
+                                    .trim_end_matches(" Bold Italic")
+                                    .trim_end_matches(" SemiBold Italic")
+                                    .trim_end_matches(" ExtraBold Italic")
+                                    .trim_end_matches(" Light Italic")
+                                    .trim_end_matches(" Semilight Italic")
+                                    .trim_end_matches(" Thin Italic")
+                                    .trim_end_matches(" Bold")
+                                    .trim_end_matches(" Italic")
+                                    .trim_end_matches(" Light")
+                                    .trim_end_matches(" Semilight")
+                                    .trim_end_matches(" Black")
+                                    .trim_end_matches(" Thin")
+                                    .trim_end_matches(" ExtraBold")
+                                    .trim_end_matches(" ExtraLight")
+                                    .trim_end_matches(" SemiBold")
+                                    .trim_end_matches(" Medium")
+                                    .trim_end_matches(" Heavy")
+                                    .trim_end_matches(" Regular")
+                                    .trim();
 
-                        if !family.is_empty() && !family.starts_with('@') {
-                            fonts.insert(family.to_string());
+                                if !family.is_empty() && !family.starts_with('@') {
+                                    fonts.insert(family.to_string());
+                                }
+                            }
                         }
                     }
                 }
             }
-        }
-    }
-}
 
-    fonts.into_iter().collect()
+            fonts.into_iter().collect()
+        })
+        .clone()
 }

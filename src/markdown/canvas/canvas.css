@@ -67,6 +67,12 @@
     filter: none;
   }
 
+  /* A shelf off screen skips layout and paint: the dashed frames are gradients, and a long canvas
+     of them is what made scrolling stutter. The remembered size keeps the scrollbar steady. */
+  .tm-shelf {
+    content-visibility: auto;
+    contain-intrinsic-size: auto 480px;
+  }
   .tm-shelf[data-drop] {
     background-color: var(--select);
   }

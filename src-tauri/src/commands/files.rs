@@ -21,14 +21,53 @@ pub async fn select_storage_directory() -> Result<Option<String>, String> {
     pick(|d| d.set_title("Select DoIT Notes Markdown Directory").pick_folder()).await
 }
 
-/// Stores a pasted image (raw bytes, MIME type in the `x-mime` header) next to the notes.
+fn parse_byte_array(arr: &[serde_json::Value]) -> Option<Vec<u8>> {
+    arr.iter()
+        .map(|v| v.as_u64().and_then(|n| u8::try_from(n).ok()))
+        .collect()
+}
+
+/// Stores a pasted image (raw bytes or JSON byte array, MIME type in `x-mime` or payload) next to the notes.
 #[tauri::command]
-pub async fn save_attachment(request: tauri::ipc::Request<'_>, storage: State<'_, StorageManager>) -> Result<String, String> {
-    let tauri::ipc::InvokeBody::Raw(bytes) = request.body() else {
-        return Err("Expected image bytes".to_string());
+pub async fn save_attachment(
+    request: tauri::ipc::Request<'_>,
+    storage: State<'_, StorageManager>,
+    app: AppHandle,
+) -> Result<String, String> {
+    let header_mime = request
+        .headers()
+        .get("x-mime")
+        .and_then(|v| v.to_str().ok())
+        .map(str::to_owned);
+
+    let (bytes, mime): (std::borrow::Cow<'_, [u8]>, String) = match request.body() {
+        tauri::ipc::InvokeBody::Raw(bytes) => (
+            std::borrow::Cow::Borrowed(bytes.as_slice()),
+            header_mime.unwrap_or_default(),
+        ),
+        tauri::ipc::InvokeBody::Json(serde_json::Value::Array(arr)) => {
+            let bytes = parse_byte_array(arr).ok_or_else(|| "Expected image bytes".to_string())?;
+            (std::borrow::Cow::Owned(bytes), header_mime.unwrap_or_default())
+        }
+        tauri::ipc::InvokeBody::Json(serde_json::Value::Object(map)) => {
+            let arr = map
+                .get("bytes")
+                .and_then(|v| v.as_array())
+                .ok_or_else(|| "Expected image bytes".to_string())?;
+            let bytes = parse_byte_array(arr).ok_or_else(|| "Expected image bytes".to_string())?;
+            let mime = map
+                .get("mime")
+                .and_then(|v| v.as_str())
+                .map(str::to_owned)
+                .or(header_mime)
+                .unwrap_or_default();
+            (std::borrow::Cow::Owned(bytes), mime)
+        }
+        tauri::ipc::InvokeBody::Json(_) => return Err("Expected image bytes".to_string()),
     };
-    let mime = request.headers().get("x-mime").and_then(|v| v.to_str().ok()).unwrap_or_default();
-    storage.save_attachment(bytes, mime)
+
+    crate::commands::settings::allow_note_images(&app, &storage);
+    storage.save_attachment(&bytes, &mime)
 }
 
 #[tauri::command]
@@ -63,18 +102,22 @@ pub async fn import_single_markdown_file(
 pub fn scan_markdown_folder(
     folder_path: Option<String>,
     storage: State<'_, StorageManager>,
+    app: AppHandle,
 ) -> Result<ScanSummary, String> {
+    crate::commands::settings::allow_note_images(&app, &storage);
     storage.scan_folder(folder_path.as_deref())
 }
 
 #[tauri::command]
 pub async fn pick_and_scan_folder(
     storage: State<'_, StorageManager>,
+    app: AppHandle,
 ) -> Result<ScanSummary, String> {
     let folder_path = pick(|d| d.set_title("Select Folder to Scan DoIT Notes").pick_folder())
         .await?
         .ok_or_else(|| cancelled("folder"))?;
 
+    crate::commands::settings::allow_note_images(&app, &storage);
     storage.scan_folder(Some(&folder_path))
 }
 
@@ -84,10 +127,12 @@ pub async fn pick_and_scan_folder(
 pub async fn import_folder_as_shelf(
     shelf: Option<String>,
     storage: State<'_, StorageManager>,
+    app: AppHandle,
 ) -> Result<FolderImport, String> {
     let folder = pick(|d| d.set_title("Choose a folder to import as a shelf").pick_folder())
         .await?
         .ok_or_else(|| cancelled("folder"))?;
+    crate::commands::settings::allow_note_images(&app, &storage);
     storage.import_folder_as_shelf(&folder, shelf.as_deref())
 }
 

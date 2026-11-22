@@ -37,7 +37,7 @@ jobs:
         with:
           tagName: ${{ github.ref_name }}
           releaseName: 'DoIT Desktop Core ${{ github.ref_name }}'
-          releaseBody: 'DoIT ${{ github.ref_name }} — Windows dock pill & quick-note shortcut reliability, instant pre-warmed emoji picker, window-centered category & shelf pickers with sidebar open, theme-aware shortcut controls, What''s new button in Settings, and Fedora .rpm self-updater support.'
+          releaseBody: 'DoIT ${{ github.ref_name }} — Global dock & quick-note shortcuts, reliable image attachment & zoomable lightbox across Canvas and Dock, caret placement below images, persistent active note in the dock pill, Windows 10/11 DWM & foreground focus optimizations, smoother scrolling & animations, instant pre-warmed emoji picker, What''s new button in Settings, experimental ILOVEMARKDOWN design, and Fedora .rpm self-updater support.'
           releaseDraft: false
           prerelease: false
           includeUpdaterJson: true

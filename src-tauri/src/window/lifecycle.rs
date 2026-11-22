@@ -221,7 +221,7 @@ pub fn enter_dock(app: &AppHandle, open: DockOpen) -> Result<(), String> {
 pub fn dock_ready(window: &WebviewWindow) -> (DockShape, Option<String>) {
     let app = window.app_handle();
     let Some(opening) = engine().dock_page_mounted() else {
-        return (DockShape::Pill, None);
+        return (DockShape::Pill, engine().dock_note.clone());
     };
     let dock = plain(window);
     let home = opening.screen.and_then(|name| screen_named(&dock, &name)).or_else(|| screen_or_primary(app, Some(&dock)));
@@ -346,7 +346,7 @@ pub fn reshape_dock(app: &AppHandle, shape: DockShape) -> Result<Growth, String>
         }
         DockShape::Pill => {
             show_pill(app, rect);
-            let _ = panel.hide();
+            platform::hide_quietly(&panel);
             webview::idle(&dock, true);
             retire_panel_later(app, generation);
         }
@@ -451,6 +451,13 @@ pub fn quick_note(app: &AppHandle, note: Option<String>) {
     }
 }
 
+/// The dock shortcut: opens the panel from the pill, or puts the panel away. Nothing in the canvas.
+pub fn toggle_panel(app: &AppHandle) {
+    if engine().mode != Mode::Canvas {
+        quick_note(app, None);
+    }
+}
+
 pub fn enter_canvas(app: &AppHandle) {
     if let (Mode::Canvas, Some(canvas)) = (engine().mode, app.get_webview_window(CANVAS)) {
         focus(&plain(&canvas));
@@ -472,6 +479,7 @@ pub fn enter_canvas(app: &AppHandle) {
     let saved = {
         let mut state = engine();
         state.mode = Mode::Canvas;
+        state.dock_note = None;
         state.canvas_departure += 1;
         state.dock_generation += 1;
         state.canvas.clone()

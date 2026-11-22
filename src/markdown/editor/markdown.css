@@ -267,10 +267,9 @@
   background: var(--hover);
 }
 .md-img {
-  display: inline-block;
+  display: block;
   max-width: 100%;
   height: auto;
-  vertical-align: middle;
   margin: 6px 0;
   outline: 1px solid var(--graph-frame);
   outline-offset: 3px;

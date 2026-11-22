@@ -2,6 +2,7 @@ import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { getCurrentWindow } from "@tauri-apps/api/window";
 import { NoteItem, ScanSummary, Shelf, tauriApi } from "../api/tauriBridge";
 import { initCategoryIcons } from "../lib/categoryIcons";
+import { setMarkdownBaseDir } from "../lib/format";
 import { initShelfMarks } from "../lib/shelfMarks";
 import { uid } from "../lib/text";
 
@@ -72,7 +73,12 @@ export function useWorkspace() {
   const load = useCallback(async () => {
     setState("loading");
     try {
-      const [loadedNotes, loadedShelves] = await Promise.all([tauriApi.getNotes(), tauriApi.getShelves()]);
+      const [loadedNotes, loadedShelves, settings] = await Promise.all([
+        tauriApi.getNotes(),
+        tauriApi.getShelves(),
+        tauriApi.getSettings?.().catch(() => null),
+      ]);
+      if (settings?.storage_path) setMarkdownBaseDir(settings.storage_path);
       showAll(loadedNotes);
       setShelfList(loadedShelves);
       migrateCollapsedShelves(loadedShelves);

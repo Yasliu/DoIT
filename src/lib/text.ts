@@ -177,6 +177,13 @@ export function noteMatches(note: NoteItem, query: string): boolean {
   );
 }
 
+/** The dock's search is a quick title lookup: a note comes up only when its title matches. */
+export function titleMatches(note: NoteItem, query: string): boolean {
+  const q = query.trim().toLowerCase();
+  if (!q) return true;
+  return (cleanText(note.title) || "untitled").toLowerCase().includes(q);
+}
+
 export function plainPreview(note: NoteItem, count: number): string[] {
   return note.content
     .filter((item) => item.text.trim().length > 0 && !TABLE_META_RE.test(item.text))

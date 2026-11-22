@@ -3,6 +3,7 @@ import { GraphSpec } from "@/registry/default/graph-spec/graph-spec";
 import { Keys } from "@/registry/default/keys/keys";
 import { AppSettings, DEFAULT_SETTINGS, settingsChanges, tauriApi } from "../../api/tauriBridge";
 import { APP_VERSION } from "../../lib/version";
+import { setMarkdownBaseDir } from "../../lib/format";
 import { BLOCKS_STRUCTURE_SHORTCUT_ROWS, TEXT_MARKS_SHORTCUT_ROWS, applyShortcutSettings } from "../../lib/shortcuts";
 import { applyThemeSettings, isLinux, platform } from "../../platform";
 import { useMarkdownFlag } from "../../platform/DesignSwitch";
@@ -54,7 +55,7 @@ export function Settings({ onStoragePathChanged }: SettingsProps) {
   const [pathInput, setPathInput] = useState("");
   const [version, setVersion] = useState(APP_VERSION);
   const [scan, setScan] = useState<{ busy: boolean; message?: string; failed?: boolean }>({ busy: false });
-  const [quickNote, setQuickNote] = useState<{ supported: boolean | null; error?: string }>({ supported: null });
+  const [shortcuts, setShortcuts] = useState<{ supported: boolean | null; quickNoteError?: string; dockError?: string }>({ supported: null });
   const markdownFlag = useMarkdownFlag();
 
   useEffect(() => {
@@ -62,7 +63,9 @@ export function Settings({ onStoragePathChanged }: SettingsProps) {
       setSettings(res);
       setPathInput(res.storage_path);
     });
-    void tauriApi.quickNoteShortcutStatus().then(({ supported, error }) => setQuickNote({ supported, error: error ?? undefined }));
+    void tauriApi
+      .shortcutStatus()
+      .then(({ supported, quickNoteError, dockError }) => setShortcuts({ supported, quickNoteError: quickNoteError ?? undefined, dockError: dockError ?? undefined }));
     void import("@tauri-apps/api/app")
       .then((m) => m.getVersion())
       .then((v) => setVersion(v === "1.2.3" ? APP_VERSION : v))
@@ -90,6 +93,7 @@ export function Settings({ onStoragePathChanged }: SettingsProps) {
     const res = await tauriApi.patchSettings({ storage_path: pathInput.trim() });
     setSettings(res);
     setPathInput(res.storage_path);
+    setMarkdownBaseDir(res.storage_path);
     onStoragePathChanged();
   };
 
@@ -105,12 +109,13 @@ export function Settings({ onStoragePathChanged }: SettingsProps) {
   };
 
   /** Saved only once the OS accepts the keys; otherwise the row says why and the old keys stay. */
-  const changeQuickNote = async (keys: string) => {
+  const changeShortcut = async (which: "quickNote" | "dock", keys: string) => {
+    const failed = which === "quickNote" ? "quickNoteError" : "dockError";
     try {
-      setSettings(await tauriApi.setQuickNoteShortcut(keys));
-      setQuickNote({ supported: true });
+      setSettings(await (which === "quickNote" ? tauriApi.setQuickNoteShortcut(keys) : tauriApi.setDockShortcut(keys)));
+      setShortcuts((prev) => ({ ...prev, supported: true, [failed]: undefined }));
     } catch (err) {
-      setQuickNote({ supported: true, error: typeof err === "string" ? err : "Those keys can't be used. Try different ones." });
+      setShortcuts((prev) => ({ ...prev, supported: true, [failed]: typeof err === "string" ? err : "Those keys can't be used. Try different ones." }));
     }
   };
 
@@ -199,20 +204,33 @@ export function Settings({ onStoragePathChanged }: SettingsProps) {
           </Section>
 
           <Section title="shortcuts">
-            {quickNote.supported === null ? null : quickNote.supported ? (
-              <Row label="quick note from anywhere" hint={<span className={quickNote.error ? "text-destructive" : undefined}>{quickNote.error ?? "Opens the dock on your latest note, even from another app. Press again to put it away."}</span>}>
-                {settings.quick_note_shortcut && (
-                  <Btn variant="ghost" onClick={() => void changeQuickNote("")}>
-                    off
-                  </Btn>
-                )}
-                <ShortcutField value={settings.quick_note_shortcut ?? ""} def="" onChange={(keys) => void changeQuickNote(keys)} />
-              </Row>
+            {shortcuts.supported === null ? null : shortcuts.supported ? (
+              <>
+                <Row label="show or hide the dock" hint={<span className={shortcuts.dockError ? "text-destructive" : undefined}>{shortcuts.dockError ?? "Opens the dock from the pill, even from another app. Press again to put it away."}</span>}>
+                  {settings.dock_shortcut && (
+                    <Btn variant="ghost" onClick={() => void changeShortcut("dock", "")}>
+                      off
+                    </Btn>
+                  )}
+                  <ShortcutField value={settings.dock_shortcut ?? ""} def="" onChange={(keys) => void changeShortcut("dock", keys)} />
+                </Row>
+                <Row label="quick note from anywhere" hint={<span className={shortcuts.quickNoteError ? "text-destructive" : undefined}>{shortcuts.quickNoteError ?? "Opens the dock on your latest note, even from another app. Press again to put it away."}</span>}>
+                  {settings.quick_note_shortcut && (
+                    <Btn variant="ghost" onClick={() => void changeShortcut("quickNote", "")}>
+                      off
+                    </Btn>
+                  )}
+                  <ShortcutField value={settings.quick_note_shortcut ?? ""} def="" onChange={(keys) => void changeShortcut("quickNote", keys)} />
+                </Row>
+              </>
             ) : (
-              <Row
-                label="quick note from anywhere"
-                hint="Your desktop doesn't let apps listen for keys while another app is in front. In your system's keyboard settings, add a custom shortcut that runs: doit --quick-note"
-              />
+              <>
+                <Row
+                  label="show or hide the dock"
+                  hint="Your desktop doesn't let apps listen for keys while another app is in front. In your system's keyboard settings, add a custom shortcut that runs: doit --toggle-panel"
+                />
+                <Row label="quick note from anywhere" hint="The same way, with a custom shortcut that runs: doit --quick-note" />
+              </>
             )}
             <div className="mt-4">
               <Keys title="app" bindings={APP_SHORTCUTS} frame="rule" />

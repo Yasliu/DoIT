@@ -3,6 +3,7 @@ import { tauriApi, type ContentItem, type NoteItem } from "../api/tauriBridge";
 import { useUndoStack } from "../hooks/useUndoStack";
 import {
   contentToMarkdown,
+  extractClipboardHtmlImage,
   insertEmojiAtCaret,
   insertInlineImageAtCaret,
   insertInlineImageInMarkdown,
@@ -12,20 +13,81 @@ import {
   isRichItalicActive,
   markdownToContent,
   markdownToHtml,
+  rememberImageSrc,
   scrollCaretIntoView,
+  settleImageBlocks,
 } from "../lib/format";
 import { createBodyReader, type BodyReader } from "./bodyReader";
 import { uid } from "../lib/text";
+import { listenZoomWheel } from "../lib/zoomWheel";
 
 const NO_CONTENT: ContentItem[] = [];
 
-function readDataUrl(file: File): Promise<string> {
-  return new Promise((resolve) => {
+const IMAGE_EXT_MIME: Record<string, string> = {
+  png: "image/png",
+  jpg: "image/jpeg",
+  jpeg: "image/jpeg",
+  gif: "image/gif",
+  webp: "image/webp",
+  bmp: "image/bmp",
+  avif: "image/avif",
+  svg: "image/svg+xml",
+};
+
+function imageMimeOf(file: File): string | null {
+  const rawType = (file.type || "").split(";")[0].trim().toLowerCase();
+  if (rawType.startsWith("image/")) return rawType;
+  const ext = file.name.split(".").pop()?.toLowerCase() ?? "";
+  return IMAGE_EXT_MIME[ext] ?? null;
+}
+
+function bytesToBase64(bytes: Uint8Array): string {
+  const chunkSize = 0x8000;
+  const parts: string[] = [];
+  for (let i = 0; i < bytes.length; i += chunkSize) {
+    parts.push(String.fromCharCode(...bytes.subarray(i, i + chunkSize)));
+  }
+  return btoa(parts.join(""));
+}
+
+async function readImageFile(file: File): Promise<{ buffer: ArrayBuffer; dataUrl: string; mime: string } | null> {
+  const mime = imageMimeOf(file);
+  if (!mime) return null;
+  try {
+    const buffer = await file.arrayBuffer();
+    if (buffer.byteLength > 0) {
+      return { buffer, mime, dataUrl: `data:${mime};base64,${bytesToBase64(new Uint8Array(buffer))}` };
+    }
+  } catch {
+    /* fall through to FileReader */
+  }
+  const dataUrl = await new Promise<string>((resolve) => {
     const reader = new FileReader();
-    reader.onload = () => resolve(reader.result as string);
+    reader.onload = () => resolve(typeof reader.result === "string" ? reader.result : "");
     reader.onerror = () => resolve("");
     reader.readAsDataURL(file);
   });
+  if (!dataUrl) return null;
+  const base64 = dataUrl.split(",")[1] ?? "";
+  const bin = base64 ? atob(base64) : "";
+  const bytes = new Uint8Array(bin.length);
+  for (let i = 0; i < bin.length; i++) bytes[i] = bin.charCodeAt(i);
+  return { buffer: bytes.buffer, mime, dataUrl };
+}
+
+function fileFromDataUrl(dataUrl: string, fallbackName = "pasted-image"): File | null {
+  const m = dataUrl.match(/^data:(image\/[a-z0-9.+-]+);base64,([A-Za-z0-9+/=\s]+)$/i);
+  if (!m) return null;
+  const mime = m[1].toLowerCase();
+  const ext = Object.entries(IMAGE_EXT_MIME).find(([, v]) => v === mime)?.[0] ?? "png";
+  try {
+    const bin = atob(m[2].replace(/\s+/g, ""));
+    const bytes = new Uint8Array(bin.length);
+    for (let i = 0; i < bin.length; i++) bytes[i] = bin.charCodeAt(i);
+    return new File([bytes], `${fallbackName}.${ext}`, { type: mime });
+  } catch {
+    return null;
+  }
 }
 
 export interface NoteEditorOptions {
@@ -76,7 +138,10 @@ export function useNoteEditor({ note, edit, titleRef, onSave }: NoteEditorOption
   );
 
   const render = useCallback((content: ContentItem[]) => {
-    if (bodyRef.current) bodyRef.current.innerHTML = markdownToHtml(contentToMarkdown(content));
+    const body = bodyRef.current;
+    if (!body) return;
+    body.innerHTML = markdownToHtml(contentToMarkdown(content));
+    settleImageBlocks(body);
   }, []);
 
   const refreshFormatting = useCallback(() => {
@@ -108,6 +173,7 @@ export function useNoteEditor({ note, edit, titleRef, onSave }: NoteEditorOption
       if (node && current && (renderedId.current !== current.id || !node.innerHTML || node.innerHTML === "<div><br></div>")) {
         renderedId.current = current.id;
         node.innerHTML = markdownToHtml(contentToMarkdown(current.content));
+        settleImageBlocks(node);
       }
     },
     [],
@@ -198,14 +264,15 @@ export function useNoteEditor({ note, edit, titleRef, onSave }: NoteEditorOption
   );
 
   const placeSavedImage = useCallback(
-    (path: string, alt: string) => {
+    (path: string, alt: string, previewSrc?: string) => {
+      if (previewSrc) rememberImageSrc(path, previewSrc);
       if (rawModeRef.current) {
         insertRaw((markdown, caret) => {
           const { text, newCaret } = insertSavedImageInMarkdown(markdown, path, caret, alt);
           return { text, caret: newCaret };
         });
       } else if (bodyRef.current) {
-        insertSavedImageAtCaret(bodyRef.current, path, alt);
+        insertSavedImageAtCaret(bodyRef.current, path, alt, previewSrc);
         input();
       }
     },
@@ -233,13 +300,19 @@ export function useNoteEditor({ note, edit, titleRef, onSave }: NoteEditorOption
    */
   const insertImages = useCallback(
     (files: File[], fallbackAlt: string) => {
+      const targetNoteId = noteRef.current?.id;
       files
-        .filter((file) => file.type.startsWith("image/"))
+        .filter((file) => Boolean(imageMimeOf(file)))
         .forEach(async (file) => {
-          const alt = file.name ? file.name.replace(/\.[^.]+$/, "") : fallbackAlt;
-          const path = noteRef.current?.source_path ? null : await tauriApi.saveAttachment(await file.arrayBuffer(), file.type);
-          if (path) placeSavedImage(path, alt);
-          else placeEmbeddedImage(await readDataUrl(file), alt);
+          const cleanName = !file.name || /^image\.[^.]+$/i.test(file.name) ? "" : file.name.replace(/\.[^.]+$/, "");
+          const alt = cleanName || fallbackAlt;
+          const data = await readImageFile(file);
+          if (!data || !data.dataUrl) return;
+          if (!targetNoteId || noteRef.current?.id !== targetNoteId) return;
+          const path = noteRef.current?.source_path ? null : await tauriApi.saveAttachment(data.buffer, data.mime);
+          if (!targetNoteId || noteRef.current?.id !== targetNoteId) return;
+          if (path) placeSavedImage(path, alt, data.dataUrl);
+          else placeEmbeddedImage(data.dataUrl, alt);
         });
     },
     [placeEmbeddedImage, placeSavedImage],
@@ -280,26 +353,68 @@ export function useNoteEditor({ note, edit, titleRef, onSave }: NoteEditorOption
     else history.redo();
   };
 
-  const imageFiles = (items: DataTransferItemList | FileList | undefined | null): File[] => {
-    if (!items) return [];
-    if (items instanceof FileList) return Array.from(items);
-    return Array.from(items)
-      .filter((item) => item.type.startsWith("image/"))
-      .map((item) => item.getAsFile())
-      .filter((file): file is File => Boolean(file));
+  const collectClipboardImageFiles = (cd: DataTransfer | null | undefined): File[] => {
+    if (!cd) return [];
+    const out: File[] = [];
+    const seen = new Set<string>();
+    const add = (file: File | null | undefined) => {
+      if (!file || !imageMimeOf(file)) return;
+      const sig = `${file.name}:${file.size}:${file.type}`;
+      if (seen.has(sig)) return;
+      seen.add(sig);
+      out.push(file);
+    };
+    if (cd.items) {
+      Array.from(cd.items).forEach((item) => {
+        if (item.kind === "file" || item.type.startsWith("image/")) add(item.getAsFile());
+      });
+    }
+    if (cd.files) {
+      Array.from(cd.files).forEach((file) => add(file));
+    }
+    return out;
   };
 
   const onPaste = (e: React.ClipboardEvent) => {
-    const files = imageFiles(e.clipboardData?.items).filter((file) => file.type.startsWith("image/"));
-    if (files.length === 0) return;
+    const files = collectClipboardImageFiles(e.clipboardData);
+    if (files.length > 0) {
+      e.preventDefault();
+      e.stopPropagation();
+      insertImages(files, "Pasted Image");
+      return;
+    }
+    const text = (e.clipboardData?.getData("text/plain") || "").trim();
+    const html = e.clipboardData?.getData("text/html") || "";
+    const htmlImg = /^(?:\[image\]|https?:\/\/\S+)?$/i.test(text) ? extractClipboardHtmlImage(html) : null;
+    if (!htmlImg) return;
     e.preventDefault();
-    insertImages(files, "Pasted Image");
+    e.stopPropagation();
+    const alt = htmlImg.alt && !/^image$/i.test(htmlImg.alt) ? htmlImg.alt : "Pasted Image";
+    if (htmlImg.src.startsWith("data:")) {
+      const converted = fileFromDataUrl(htmlImg.src, "pasted-image");
+      if (converted) insertImages([converted], alt);
+      else placeEmbeddedImage(htmlImg.src, alt);
+      return;
+    }
+    void fetch(htmlImg.src)
+      .then(async (resp) => {
+        if (!resp.ok) throw new Error("fetch failed");
+        const blob = await resp.blob();
+        if (!blob.type.startsWith("image/")) throw new Error("not image");
+        const ext = Object.entries(IMAGE_EXT_MIME).find(([, v]) => v === blob.type.toLowerCase())?.[0] ?? "png";
+        const file = new File([blob], `pasted-image.${ext}`, { type: blob.type });
+        insertImages([file], alt);
+      })
+      .catch(() => {
+        placeEmbeddedImage(htmlImg.src, alt);
+      });
   };
 
   const onDrop = (e: React.DragEvent) => {
-    const files = imageFiles(e.dataTransfer?.files).filter((file) => file.type.startsWith("image/"));
+    const files = collectClipboardImageFiles(e.dataTransfer);
     if (files.length === 0) return;
     e.preventDefault();
+    e.stopPropagation();
     insertImages(files, "Dropped Image");
   };
 
@@ -401,12 +516,12 @@ export function useNoteZoomListeners(enabled: boolean, adjustZoom: (delta: numbe
       }
     };
 
-    window.addEventListener("wheel", onWheel, { passive: false });
+    const stopWheel = listenZoomWheel(onWheel);
     window.addEventListener("doit:pinch-zoom", onPinchZoom);
     window.addEventListener("gesturestart", onGestureStart, { passive: false });
     window.addEventListener("gesturechange", onGestureChange, { passive: false });
     return () => {
-      window.removeEventListener("wheel", onWheel);
+      stopWheel();
       window.removeEventListener("doit:pinch-zoom", onPinchZoom);
       window.removeEventListener("gesturestart", onGestureStart);
       window.removeEventListener("gesturechange", onGestureChange);

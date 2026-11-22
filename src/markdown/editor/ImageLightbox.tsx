@@ -1,4 +1,5 @@
 import { useCallback, useEffect, useRef, useState } from "react";
+import { createPortal } from "react-dom";
 import { copyImageToClipboard, openExternalUrl } from "../../lib/format";
 import { Btn, Glyph, useLayer } from "../ui";
 
@@ -174,6 +175,37 @@ export function ImageLightbox({ src, onClose }: ImageLightboxProps) {
   // Escape closes only the viewer.
   useLayer(onClose);
 
+  useEffect(() => {
+    const onKey = (e: KeyboardEvent) => {
+      if (!(e.ctrlKey || e.metaKey) || e.altKey) return;
+      if (e.key === "=" || e.key === "+" || e.code === "NumpadAdd" || e.code === "Equal") {
+        e.preventDefault();
+        e.stopPropagation();
+        zoomAt(1.25, null, null, true);
+      } else if (e.key === "-" || e.key === "_" || e.code === "NumpadSubtract" || e.code === "Minus") {
+        e.preventDefault();
+        e.stopPropagation();
+        zoomAt(1 / 1.25, null, null, true);
+      } else if (e.key === "0" || e.code === "Numpad0" || e.code === "Digit0") {
+        e.preventDefault();
+        e.stopPropagation();
+        reset();
+      }
+    };
+    const onPinch = (e: Event) => {
+      const detail = (e as CustomEvent<number>).detail;
+      if (typeof detail === "number" && detail !== 0) {
+        zoomAt(detail > 0 ? 1.15 : 1 / 1.15, null, null, false);
+      }
+    };
+    window.addEventListener("keydown", onKey, true);
+    window.addEventListener("doit:pinch-zoom", onPinch);
+    return () => {
+      window.removeEventListener("keydown", onKey, true);
+      window.removeEventListener("doit:pinch-zoom", onPinch);
+    };
+  }, [reset, zoomAt]);
+
   useEffect(() => () => cancelAnimationFrame(s.current.raf), []);
 
   const onPointerDown = (e: React.PointerEvent<HTMLDivElement>) => {
@@ -220,8 +252,13 @@ export function ImageLightbox({ src, onClose }: ImageLightboxProps) {
     else reset();
   };
 
-  return (
-    <div className="tm-shell fixed inset-0 z-[100] flex select-none flex-col items-center justify-center bg-background/95 p-3" style={{ animation: "tm-fade 140ms var(--ease) both" }}>
+  return createPortal(
+    <div
+      className="tm-shell fixed inset-0 z-[99999] flex select-none flex-col items-center justify-center bg-background/95 p-3"
+      style={{ animation: "tm-fade 140ms var(--ease) both" }}
+      onClick={(e) => e.stopPropagation()}
+      onPointerDown={(e) => e.stopPropagation()}
+    >
       <div className="tm-layer graph-frame z-20 mb-3 flex items-center gap-[1ch] px-[1ch] py-1" onPointerDown={(e) => e.stopPropagation()}>
         <Glyph label="Zoom out" size="sm" onClick={() => zoomAt(1 / 1.25, null, null, true)}>
           −
@@ -267,6 +304,7 @@ export function ImageLightbox({ src, onClose }: ImageLightboxProps) {
           title="Drag to pan · click to zoom 2x · scroll to zoom"
         />
       </div>
-    </div>
+    </div>,
+    document.body,
   );
 }

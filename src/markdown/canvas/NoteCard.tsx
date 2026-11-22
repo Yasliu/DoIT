@@ -3,7 +3,8 @@ import React, { useMemo, useState } from "react";
 import { foldFigures, useFigureMounts } from "../figures";
 import type { NoteItem } from "../../api/tauriBridge";
 import { fontStack } from "../editor/fonts";
-import { copyImageToClipboard, openExternalUrl, previewMarkup, previewText } from "../../lib/format";
+import { ImageLightbox } from "../editor/ImageLightbox";
+import { openExternalUrl, previewMarkup, previewText } from "../../lib/format";
 import { cleanText, densityOf, relativeShort } from "../../lib/text";
 import { Frame, Glyph } from "../ui";
 
@@ -36,7 +37,7 @@ function imagesOf(note: NoteItem): string[] {
 
 /** A note on the canvas: its title on the frame's edge, the rendered note inside, tasks as a bar. */
 function NoteCardComponent({ note, pressed, dragging, landed, reorderTarget, onOpen, onArm, onToggleItem, onContextMenu, onToggleSettled }: NoteCardProps) {
-  const [copied, setCopied] = useState(false);
+  const [previewImage, setPreviewImage] = useState<string | null>(null);
   const [previewEl, setPreviewEl] = useState<HTMLDivElement | null>(null);
   useFigureMounts(previewEl);
   const rawMode = note.format === "txt";
@@ -122,11 +123,7 @@ function NoteCardComponent({ note, pressed, dragging, landed, reorderTarget, onO
               if (img) {
                 event.stopPropagation();
                 event.preventDefault();
-                void copyImageToClipboard(img.src).then((ok) => {
-                  if (!ok) return;
-                  setCopied(true);
-                  window.setTimeout(() => setCopied(false), 1600);
-                });
+                setPreviewImage(img.src);
                 return;
               }
               const link = target.closest("a.md-link") as HTMLAnchorElement | null;
@@ -154,7 +151,7 @@ function NoteCardComponent({ note, pressed, dragging, landed, reorderTarget, onO
               {done}/{total} done
             </span>
           )}
-          {copied && <span className="text-graph-accent">image copied</span>}
+          {previewImage && <ImageLightbox src={previewImage} onClose={() => setPreviewImage(null)} />}
           <span className="tm-card-actions ml-auto flex items-center" onPointerDown={(e) => e.stopPropagation()}>
             {onToggleSettled && !note.source_path && (
               <Glyph

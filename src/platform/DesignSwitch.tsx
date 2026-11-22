@@ -1,4 +1,4 @@
-import { useEffect, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { FlaskConical } from "lucide-react";
 import { tauriApi } from "../api/tauriBridge";
 import { DESIGN_CACHE_KEY, type Design, design, isMarkdown } from ".";
@@ -12,7 +12,14 @@ export async function setDesign(next: Design): Promise<void> {
 }
 
 /** Restarts into `next`, cached up front so the new run's first window paints it straight away. */
-function restartInto(next: Design): void {
+async function restartInto(next: Design, waitFor?: Promise<void> | null): Promise<void> {
+  if (waitFor) {
+    try {
+      await waitFor;
+    } catch {
+      /* still restart if saving failed; settleDesign will reconcile on launch */
+    }
+  }
   try {
     localStorage.setItem(DESIGN_CACHE_KEY, next);
   } catch {
@@ -27,6 +34,7 @@ function restartInto(next: Design): void {
  */
 export function useMarkdownFlag(): { on: boolean; pending: boolean; set: (on: boolean) => void; restart: () => void } {
   const [saved, setSaved] = useState<boolean | null>(null);
+  const pendingSave = useRef<Promise<void> | null>(null);
   useEffect(() => {
     void tauriApi.getSettings().then((s) => setSaved(s.design === "markdown"));
   }, []);
@@ -35,9 +43,11 @@ export function useMarkdownFlag(): { on: boolean; pending: boolean; set: (on: bo
     pending: saved !== null && saved !== isMarkdown,
     set: (on) => {
       setSaved(on);
-      void setDesign(on ? "markdown" : "modern");
+      pendingSave.current = setDesign(on ? "markdown" : "modern");
     },
-    restart: () => restartInto((saved ?? isMarkdown) ? "markdown" : "modern"),
+    restart: () => {
+      void restartInto((saved ?? isMarkdown) ? "markdown" : "modern", pendingSave.current);
+    },
   };
 }
 

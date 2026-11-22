@@ -24,6 +24,7 @@ import {
 import { motion, AnimatePresence } from "motion/react";
 import { CURRENT_VERSION } from "../App";
 import { AppSettings, DEFAULT_SETTINGS, tauriApi } from "../api/tauriBridge";
+import { setMarkdownBaseDir } from "../lib/format";
 import { applyShortcutSettings, BLOCKS_STRUCTURE_SHORTCUT_ROWS, TEXT_MARKS_SHORTCUT_ROWS } from "../lib/shortcuts";
 import { ShortcutField } from "./ShortcutField";
 import { cx } from "../lib/text";
@@ -277,6 +278,7 @@ export function SettingsPanel({ onBack, onStoragePathChanged, onThemeChanged }: 
     });
     applyShortcutSettings(res);
     setSettings(res);
+    setMarkdownBaseDir(res.storage_path);
     setSaved(true);
     setTimeout(() => setSaved(false), 2000);
 
@@ -290,6 +292,7 @@ export function SettingsPanel({ onBack, onStoragePathChanged, onThemeChanged }: 
     const res = await tauriApi.patchSettings(defaults);
     applyShortcutSettings(res);
     setSettings(res);
+    setMarkdownBaseDir(res.storage_path);
     setSaved(true);
     setTimeout(() => setSaved(false), 2000);
   };

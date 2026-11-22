@@ -154,9 +154,42 @@ pub fn ensure_always_on_top(window: &tauri::Window) {
             use gtk::prelude::GtkWindowExt;
             if let Ok(gtk_window) = target.gtk_window() {
                 gtk_window.set_keep_above(true);
+                // Undoes `hide_quietly`, whichever way the window came back.
+                set_opacity(&gtk_window, 1.0);
             }
         });
     }
+}
+
+/// The window's opacity as the desktop composites it (`_NET_WM_WINDOW_OPACITY`), set on the
+/// window itself: a toplevel widget's own opacity is painted by GTK and never reaches the desktop.
+#[cfg(target_os = "linux")]
+#[allow(deprecated)]
+fn set_opacity(window: &gtk::ApplicationWindow, opacity: f64) {
+    use gtk::prelude::WidgetExt;
+    if let Some(gdk_window) = window.window() {
+        gdk_window.set_opacity(opacity);
+    }
+}
+
+/// Hides a dock window without the desktop's own hide effect. GNOME shrinks and fades a window as it
+/// goes, which left the panel's last frame (the pill-sized bar it had closed down to) drifting up
+/// above the pill. The window is made fully transparent first, so the effect has nothing to draw;
+/// its opacity comes back once the effect is over, and whenever it is shown again
+/// (`ensure_always_on_top`).
+pub fn hide_quietly(window: &tauri::Window) {
+    #[cfg(target_os = "linux")]
+    {
+        let target = window.clone();
+        let _ = window.run_on_main_thread(move || {
+            let Ok(gtk_window) = target.gtk_window() else { return };
+            set_opacity(&gtk_window, 0.0);
+            let _ = target.hide();
+            gtk::glib::timeout_add_local_once(std::time::Duration::from_millis(600), move || set_opacity(&gtk_window, 1.0));
+        });
+    }
+    #[cfg(not(target_os = "linux"))]
+    let _ = window.hide();
 }
 
 /// Mutter lets a window being moved slide off the screen, so under X11 the app moves the dock
@@ -474,6 +507,116 @@ pub fn global_shortcuts_work() -> bool {
     std::env::var_os("WAYLAND_DISPLAY").is_none()
 }
 
+/// GNOME keeps user-made shortcuts in this setting: a list of paths, each holding a name, a command
+/// and keys. That works on Wayland and X11 alike, and under Wayland it is the only way a key
+/// pressed in another app can reach DoIT.
+const GNOME_KEYS_SCHEMA: &str = "org.gnome.settings-daemon.plugins.media-keys";
+const GNOME_KEYS_LIST: &str = "custom-keybindings";
+const GNOME_KEYS_FOLDER: &str = "/org/gnome/settings-daemon/plugins/media-keys/custom-keybindings";
+
+fn gsettings(args: &[&str]) -> Result<String, String> {
+    let output = std::process::Command::new("gsettings").args(args).output().map_err(|e| e.to_string())?;
+    if output.status.success() {
+        Ok(String::from_utf8_lossy(&output.stdout).trim().to_string())
+    } else {
+        Err(String::from_utf8_lossy(&output.stderr).trim().to_string())
+    }
+}
+
+/// Whether the desktop can run DoIT on a key of the user's choosing (GNOME), for the sessions where
+/// `global_shortcuts_work` is false.
+pub fn desktop_shortcuts_work() -> bool {
+    cfg!(target_os = "linux")
+        && std::env::var("XDG_CURRENT_DESKTOP").is_ok_and(|desktop| desktop.to_ascii_uppercase().contains("GNOME"))
+        && gsettings(&["get", GNOME_KEYS_SCHEMA, GNOME_KEYS_LIST]).is_ok()
+}
+
+/// GNOME's spelling of `keys` as Settings records them ("Ctrl+Alt+D" is "<Control><Alt>d").
+fn gnome_binding(keys: &str) -> Result<String, String> {
+    let parts: Vec<&str> = keys.split('+').collect();
+    let (key, modifiers) = parts.split_last().ok_or_else(|| format!("{keys} is not a shortcut"))?;
+    let mut binding = String::new();
+    for modifier in modifiers {
+        binding.push_str(match modifier.to_ascii_lowercase().as_str() {
+            "ctrl" | "control" => "<Control>",
+            "alt" => "<Alt>",
+            "shift" => "<Shift>",
+            "super" | "meta" | "cmd" => "<Super>",
+            _ => return Err(format!("{keys} has a key the desktop can't use")),
+        });
+    }
+    let named = match *key {
+        " " | "Space" => "space",
+        "," => "comma",
+        "." => "period",
+        "/" => "slash",
+        "ArrowUp" => "Up",
+        "ArrowDown" => "Down",
+        "ArrowLeft" => "Left",
+        "ArrowRight" => "Right",
+        "Enter" => "Return",
+        other if other.chars().count() == 1 && other.chars().all(|c| c.is_ascii_alphanumeric()) => {
+            binding.push_str(&other.to_ascii_lowercase());
+            return Ok(binding);
+        }
+        other if other.starts_with('F') && other[1..].parse::<u8>().is_ok_and(|n| (1..=12).contains(&n)) => other,
+        _ => return Err(format!("{keys} has a key the desktop can't use")),
+    };
+    binding.push_str(named);
+    Ok(binding)
+}
+
+/// The paths in a `gsettings get custom-keybindings` answer (`['/a/', '/b/']` or `@as []`).
+fn keybinding_paths(list: &str) -> Vec<String> {
+    list.split('\'').skip(1).step_by(2).map(String::from).collect()
+}
+
+fn keybinding_list(paths: &[String]) -> String {
+    format!("[{}]", paths.iter().map(|path| format!("'{path}'")).collect::<Vec<_>>().join(", "))
+}
+
+/// The command a desktop shortcut runs: this program, with `flag`. An AppImage runs from a
+/// temporary mount, so its own file is what has to be started.
+fn shortcut_command(flag: &str) -> Result<String, String> {
+    let program = std::env::var_os("APPIMAGE")
+        .map(PathBuf::from)
+        .or_else(|| std::env::current_exe().ok())
+        .ok_or_else(|| "DoIT can't find its own program file.".to_string())?;
+    let program = program.to_string_lossy();
+    Ok(if program.contains(' ') { format!("'{program}' {flag}") } else { format!("{program} {flag}") })
+}
+
+/// Makes the desktop run `doit <flag>` when `keys` are pressed, anywhere: `Some` sets or replaces the
+/// shortcut `id`, `None` removes it.
+pub fn set_desktop_shortcut(id: &str, label: &str, keys: Option<&str>, flag: &str) -> Result<(), String> {
+    let path = format!("{GNOME_KEYS_FOLDER}/{id}/");
+    let slot = format!("{GNOME_KEYS_SCHEMA}.custom-keybinding:{path}");
+    let mut paths = keybinding_paths(&gsettings(&["get", GNOME_KEYS_SCHEMA, GNOME_KEYS_LIST])?);
+    let listed = paths.contains(&path);
+    match keys {
+        Some(keys) => {
+            let binding = gnome_binding(keys)?;
+            let command = shortcut_command(flag)?;
+            gsettings(&["set", &slot, "name", label])?;
+            gsettings(&["set", &slot, "command", &command])?;
+            gsettings(&["set", &slot, "binding", &binding])?;
+            if !listed {
+                paths.push(path);
+                gsettings(&["set", GNOME_KEYS_SCHEMA, GNOME_KEYS_LIST, &keybinding_list(&paths)])?;
+            }
+        }
+        None if listed => {
+            paths.retain(|listed| *listed != path);
+            gsettings(&["set", GNOME_KEYS_SCHEMA, GNOME_KEYS_LIST, &keybinding_list(&paths)])?;
+            for key in ["name", "command", "binding"] {
+                let _ = gsettings(&["reset", &slot, key]);
+            }
+        }
+        None => {}
+    }
+    Ok(())
+}
+
 /// Installs an rpm update the updater has already verified, after one password prompt. RPM 6
 /// (Fedora 43 and later) refuses packages without a GPG signature, which ours lack, so that check
 /// is skipped: the updater's own signature check is what proves the package genuine. The package
@@ -544,7 +687,7 @@ fn xdg_user_dir(dirs: &str, key: &str, home: &std::path::Path) -> Option<PathBuf
 
 #[cfg(test)]
 mod tests {
-    use super::xdg_user_dir;
+    use super::{gnome_binding, keybinding_list, keybinding_paths, xdg_user_dir};
     use std::path::{Path, PathBuf};
 
     #[test]
@@ -554,5 +697,24 @@ mod tests {
         assert_eq!(xdg_user_dir(dirs, "XDG_DOCUMENTS_DIR", home), Some(PathBuf::from("/home/ana/Dokumente")));
         assert_eq!(xdg_user_dir("XDG_DOCUMENTS_DIR=\"$HOME/\"", "XDG_DOCUMENTS_DIR", home), None);
         assert_eq!(xdg_user_dir("XDG_DOCUMENTS_DIR=\"/data/docs\"", "XDG_DOCUMENTS_DIR", home), Some(PathBuf::from("/data/docs")));
+    }
+
+    #[test]
+    fn writes_keys_the_way_gnome_spells_them() {
+        assert_eq!(gnome_binding("Ctrl+Alt+D").as_deref(), Ok("<Control><Alt>d"));
+        assert_eq!(gnome_binding("Ctrl+Shift+ ").as_deref(), Ok("<Control><Shift>space"));
+        assert_eq!(gnome_binding("Ctrl+Alt+ArrowUp").as_deref(), Ok("<Control><Alt>Up"));
+        assert_eq!(gnome_binding("Ctrl+Alt+F5").as_deref(), Ok("<Control><Alt>F5"));
+        assert!(gnome_binding("Ctrl+Alt+Home").is_err());
+        assert!(gnome_binding("Hyper+D").is_err());
+    }
+
+    #[test]
+    fn reads_and_writes_the_list_of_custom_shortcuts() {
+        assert!(keybinding_paths("@as []").is_empty());
+        let paths = keybinding_paths("['/a/custom0/', '/b/doit-dock/']");
+        assert_eq!(paths, ["/a/custom0/", "/b/doit-dock/"]);
+        assert_eq!(keybinding_list(&paths), "['/a/custom0/', '/b/doit-dock/']");
+        assert_eq!(keybinding_list(&[]), "[]");
     }
 }

@@ -58,8 +58,11 @@ pub fn set_pill_look(look: window::PillLook) {
 
 /// Changes the dock between "panel" and "pill"; the page hides its content while this runs.
 #[tauri::command]
-pub fn set_tray_mode(app: AppHandle, mode: String) -> Result<QuadrantInfo, String> {
+pub fn set_tray_mode(app: AppHandle, mode: String, note_id: Option<String>) -> Result<QuadrantInfo, String> {
     let shape = if mode == "pill" { DockShape::Pill } else { DockShape::Panel };
+    if shape == DockShape::Pill || note_id.is_some() {
+        window::set_dock_note(note_id);
+    }
     let growth = window::reshape_dock(&app, shape)?;
     Ok(QuadrantInfo { grow_x: growth.grow_x.to_string(), grow_y: growth.grow_y.to_string() })
 }

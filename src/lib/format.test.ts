@@ -8,16 +8,22 @@ import {
   contentToMarkdown,
   deleteTableColumn,
   deleteTableRow,
+  handleLinkPaste,
   handleRichEditorKeyDown,
   handleTableMouseDown,
   handleTableMouseMove,
   htmlToMarkdown,
   imageMarkdownWithAlt,
+  inlineMarkdownToHtml,
+  insertSavedImageAtCaret,
   isCaretAtEditorStart,
   markdownToContent,
   markdownToHtml,
+  normalizeEditor,
   previewMarkup,
   scrollCaretIntoView,
+  setMarkdownBaseDir,
+  settleImageBlocks,
 } from "./format";
 import { enableFigureBlocks } from "../markdown/figures";
 import { densityOf, plainPreview, previewLine } from "./text";
@@ -436,5 +442,195 @@ describe("figure blocks", () => {
     const content = markdownToContent(note, [], () => Math.random().toString(36));
     const own = content.find((item) => item.text === "my own task")!;
     expect(previewMarkup(content).taskIds).toEqual([own.id]);
+  });
+});
+
+describe("image insertion and markdown rendering", () => {
+  it("renders saved images immediately using previewSrc while persisting the relative markdown path", () => {
+    const editor = document.createElement("div");
+    editor.contentEditable = "true";
+    editor.innerHTML = "<div><br></div>";
+    document.body.appendChild(editor);
+
+    const firstDiv = editor.firstElementChild as HTMLElement;
+    const range = document.createRange();
+    range.setStart(firstDiv, 0);
+    range.collapse(true);
+    const sel = window.getSelection();
+    sel?.removeAllRanges();
+    sel?.addRange(range);
+
+    const previewDataUrl = "data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mP8z8BQDwAEhQGAhKmMIQAAAABJRU5ErkJggg==";
+    insertSavedImageAtCaret(editor, "assets/deadbeef.png", "Pasted Image", previewDataUrl);
+
+    const img = editor.querySelector("img.md-img") as HTMLImageElement | null;
+    expect(img).not.toBeNull();
+    expect(img!.getAttribute("src")).toBe(previewDataUrl);
+    expect(img!.getAttribute("data-md")).toBe("![Pasted Image](assets/deadbeef.png)");
+    expect(img!.parentElement?.tagName).toBe("DIV");
+    expect(img!.parentElement?.childNodes).toHaveLength(1);
+    const nextLine = img!.parentElement?.nextElementSibling as HTMLElement | null;
+    expect(nextLine?.tagName).toBe("DIV");
+    expect(sel?.anchorNode).toBe(nextLine);
+    expect(htmlToMarkdown(editor)).toBe("![Pasted Image](assets/deadbeef.png)");
+
+    const items = markdownToContent(htmlToMarkdown(editor), [], () => "line");
+    expect(previewMarkup(items).html).toContain(`<img class="md-img"`);
+    expect(previewMarkup(items).html).toContain(previewDataUrl);
+
+    editor.remove();
+  });
+
+  it("never turns unresolved or inline image syntax into a text link", () => {
+    const html = inlineMarkdownToHtml("![image](assets/unresolved.png)");
+    expect(html).not.toContain('class="md-link"');
+    expect(html).toContain("![image](assets/unresolved.png)");
+
+    const editor = document.createElement("div");
+    editor.contentEditable = "true";
+    editor.innerHTML = "<div>![image](https://example.com/photo.png)</div>";
+    document.body.appendChild(editor);
+    normalizeEditor(editor);
+
+    expect(editor.querySelector("a.md-link")).toBeNull();
+    const img = editor.querySelector("img.md-img") as HTMLImageElement | null;
+    expect(img).not.toBeNull();
+    expect(img!.getAttribute("src")).toBe("https://example.com/photo.png");
+
+    editor.remove();
+  });
+
+  it("resolves relative image paths using Windows separators when markdownBaseDir uses backslashes", () => {
+    const win = window as Window & { __TAURI_INTERNALS__?: { convertFileSrc?: (path: string) => string } };
+    const hadInternals = "__TAURI_INTERNALS__" in win;
+    const prevInternals = win.__TAURI_INTERNALS__;
+    const convertFileSrc = vi.fn((path: string) => `asset://localhost/${path}`);
+    win.__TAURI_INTERNALS__ = { convertFileSrc };
+    setMarkdownBaseDir("C:\\Users\\demo\\Documents\\DoIT-Saves");
+
+    try {
+      const html = inlineMarkdownToHtml("![Shot](assets/winshot.png)");
+      expect(convertFileSrc).toHaveBeenCalledWith("C:\\Users\\demo\\Documents\\DoIT-Saves\\assets\\winshot.png", "asset");
+      expect(html).toContain('class="md-img"');
+    } finally {
+      setMarkdownBaseDir("");
+      if (hadInternals) win.__TAURI_INTERNALS__ = prevInternals;
+      else delete win.__TAURI_INTERNALS__;
+    }
+  });
+
+  it("does not intercept clipboard pastes as link pastes when image files are present", () => {
+    const editor = document.createElement("div");
+    editor.innerHTML = "<div>hello world</div>";
+    document.body.appendChild(editor);
+
+    const textNode = editor.firstChild!.firstChild!;
+    const range = document.createRange();
+    range.setStart(textNode, 0);
+    range.setEnd(textNode, 5);
+    const sel = window.getSelection();
+    sel?.removeAllRanges();
+    sel?.addRange(range);
+
+    const file = new File([new Uint8Array([1, 2, 3])], "image.png", { type: "image/png" });
+    const event = {
+      preventDefault: vi.fn(),
+      clipboardData: {
+        getData: (type: string) => (type === "text/plain" ? "https://example.com/image.png" : ""),
+        files: [file],
+        items: [{ kind: "file", type: "image/png", getAsFile: () => file }],
+      },
+    } as unknown as React.ClipboardEvent<HTMLElement>;
+
+    try {
+      expect(handleLinkPaste(event, editor)).toBe(false);
+      expect(event.preventDefault).not.toHaveBeenCalled();
+    } finally {
+      sel?.removeAllRanges();
+      editor.remove();
+    }
+  });
+});
+
+describe("images and the caret", () => {
+  const pixel = "data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mP8z8BQDwAEhQGAhKmMIQAAAABJRU5ErkJggg==";
+  const imageLine = `<div><img class="md-img" contenteditable="false" data-md="![p](a.png)" src="${pixel}"></div>`;
+  const editorWith = (html: string) => {
+    const editor = document.createElement("div");
+    editor.contentEditable = "true";
+    editor.innerHTML = html;
+    document.body.appendChild(editor);
+    return editor;
+  };
+
+  it("locks an image's line and keeps an editable line after it, and before it at the top", () => {
+    const editor = editorWith(imageLine);
+    settleImageBlocks(editor);
+    const [before, line, after] = Array.from(editor.children) as HTMLElement[];
+    expect(line.getAttribute("contenteditable")).toBe("false");
+    expect(before.hasAttribute("data-gap")).toBe(true);
+    expect(after.hasAttribute("data-gap")).toBe(true);
+    // Settling again changes nothing.
+    settleImageBlocks(editor);
+    expect(editor.children).toHaveLength(3);
+    editor.remove();
+  });
+
+  it("leaves text lines around an image as they are, and the note's Markdown unchanged", () => {
+    const editor = editorWith(`<div>above</div>${imageLine}<div>below</div>`);
+    settleImageBlocks(editor);
+    expect(editor.children).toHaveLength(3);
+    expect(htmlToMarkdown(editor)).toBe("above\n![p](a.png)\nbelow");
+    editor.remove();
+  });
+
+  it("does not save the lines it adds", () => {
+    const editor = editorWith(imageLine);
+    settleImageBlocks(editor);
+    expect(htmlToMarkdown(editor)).toBe("![p](a.png)");
+    editor.remove();
+  });
+
+  it("moves a caret left beside an image onto the line after it", () => {
+    const editor = editorWith(`<div>top</div><div><img class="md-img" data-md="![p](a.png)" src="${pixel}">&#8203;</div>`);
+    const line = editor.children[1];
+    const range = document.createRange();
+    range.setStart(line.lastChild as Node, 1);
+    range.collapse(true);
+    const sel = window.getSelection();
+    sel?.removeAllRanges();
+    sel?.addRange(range);
+    settleImageBlocks(editor);
+    const after = editor.children[2];
+    expect(after).toBeDefined();
+    expect(sel?.anchorNode).toBe(after);
+    expect(htmlToMarkdown(editor)).toBe("top\n![p](a.png)");
+    editor.remove();
+  });
+
+  it("drops the line of an image that was deleted instead of leaving a blank no caret can enter", () => {
+    const editor = editorWith(`<div>top</div>${imageLine}<div>below</div>`);
+    settleImageBlocks(editor);
+    editor.querySelector("img")?.remove();
+    settleImageBlocks(editor);
+    expect(editor.children).toHaveLength(2);
+    expect(htmlToMarkdown(editor)).toBe("top\nbelow");
+    editor.remove();
+  });
+
+  it("removes only the image when Backspace is pressed on the line below it", () => {
+    const editor = editorWith(`<div>top</div>${imageLine}<div>below</div>`);
+    settleImageBlocks(editor);
+    const below = editor.lastElementChild as HTMLElement;
+    const range = document.createRange();
+    range.setStart(below.firstChild as Node, 0);
+    range.collapse(true);
+    const sel = window.getSelection();
+    sel?.removeAllRanges();
+    sel?.addRange(range);
+    const event = { key: "Backspace", shiftKey: false, altKey: false, ctrlKey: false, metaKey: false, preventDefault: vi.fn() } as unknown as React.KeyboardEvent<HTMLDivElement>;
+    expect(handleRichEditorKeyDown(event, editor, () => undefined)).toBe(true);
+    expect(htmlToMarkdown(editor)).toBe("top\nbelow");
+    editor.remove();
   });
 });

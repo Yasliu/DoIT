@@ -98,7 +98,11 @@ impl StorageManager {
         let mut file = File::open(path).ok()?;
         let mut contents = String::new();
         file.read_to_string(&mut contents).ok()?;
-        serde_json::from_str(&contents).ok()
+        let mut settings: AppSettings = serde_json::from_str(&contents).ok()?;
+        if settings.dock_shortcut == crate::models::RETIRED_DOCK_SHORTCUT {
+            settings.dock_shortcut = crate::models::DEFAULT_DOCK_SHORTCUT.to_string();
+        }
+        Some(settings)
     }
 
     fn persist_settings(&self) -> Result<(), String> {

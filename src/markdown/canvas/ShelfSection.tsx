@@ -40,7 +40,7 @@ function ShelfSectionComponent(props: ShelfSectionProps) {
       data-shelf={shelf}
       data-drop={dropActive || undefined}
       className="tm-shelf group/section -mx-5 px-5 pb-4 transition-colors duration-200"
-      style={{ animation: "tm-in 320ms var(--ease) both", animationDelay: `${Math.min(index, 8) * 40}ms` }}
+      style={{ animation: "tm-in 320ms var(--ease) backwards", animationDelay: `${Math.min(index, 8) * 40}ms` }}
     >
       <div className="flex h-10 items-center gap-[1.5ch]">
         <button

@@ -35,12 +35,13 @@ pub fn save(notes_dir: &Path, bytes: &[u8], mime: &str) -> Result<String, String
 }
 
 fn extension_for(mime: &str) -> Option<&'static str> {
-    match mime {
-        "image/png" => Some("png"),
-        "image/jpeg" => Some("jpg"),
+    let base = mime.trim().split(';').next().unwrap_or_default().trim().to_ascii_lowercase();
+    match base.as_str() {
+        "image/png" | "image/x-png" => Some("png"),
+        "image/jpeg" | "image/jpg" | "image/pjpeg" => Some("jpg"),
         "image/gif" => Some("gif"),
         "image/webp" => Some("webp"),
-        "image/bmp" => Some("bmp"),
+        "image/bmp" | "image/x-ms-bmp" => Some("bmp"),
         "image/avif" => Some("avif"),
         "image/svg+xml" => Some("svg"),
         _ => None,

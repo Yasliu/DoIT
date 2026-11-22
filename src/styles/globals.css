@@ -571,6 +571,62 @@
   }
 }
 
+/* The dock panel grows out of the pill without the pill moving: first sideways, into the emptier
+   side of the screen, then up or down, by revealing the panel through a window that starts as the
+   pill's footprint (TrayCompanion sets its insets from the way the panel grows). It shrinks back
+   the same way round. Nothing is laid out while it runs. */
+[data-slot="dock-panel"][data-state="in"] {
+  animation: dock-in 300ms linear backwards;
+}
+[data-slot="dock-panel"][data-state="out"] {
+  animation: dock-out 360ms linear forwards;
+}
+@keyframes dock-in {
+  0% {
+    opacity: 0;
+    clip-path: inset(var(--dock-it, 0) var(--dock-ir, 0) var(--dock-ib, 0) var(--dock-il, 0) round var(--r-2xl, 16px));
+    animation-timing-function: cubic-bezier(0.25, 1, 0.5, 1);
+  }
+  12% {
+    opacity: 1;
+  }
+  48% {
+    clip-path: inset(var(--dock-it, 0) 0 var(--dock-ib, 0) 0 round var(--r-2xl, 16px));
+    animation-timing-function: cubic-bezier(0.25, 1, 0.5, 1);
+  }
+  100% {
+    opacity: 1;
+    clip-path: inset(0 0 0 0 round var(--r-2xl, 16px));
+  }
+}
+@keyframes dock-out {
+  0% {
+    clip-path: inset(0 0 0 0 round var(--r-2xl, 16px));
+    animation-timing-function: cubic-bezier(0.5, 0, 0.3, 1);
+  }
+  54% {
+    clip-path: inset(var(--dock-it, 0) 0 var(--dock-ib, 0) 0 round var(--r-2xl, 16px));
+    animation-timing-function: cubic-bezier(0.5, 0, 0.3, 1);
+  }
+  100% {
+    clip-path: inset(var(--dock-end-it, 0) var(--dock-end-ir, 0) var(--dock-end-ib, 0) var(--dock-end-il, 0) round var(--r-lg, 10px));
+  }
+}
+/* What is inside has gone by the time the panel is pill-sized, so the last frame is the pill's body. */
+[data-slot="dock-panel"][data-state="out"] > * {
+  animation: dock-content-out 360ms linear forwards;
+}
+@keyframes dock-content-out {
+  0%,
+  20% {
+    opacity: 1;
+  }
+  62%,
+  100% {
+    opacity: 0;
+  }
+}
+
 @keyframes rise {
   from {
     opacity: 0;
@@ -913,10 +969,9 @@ html[data-theme="monochrome"] .lightscape {
 .md-tbl th { background: rgba(255, 255, 255, 0.02); font-weight: 600; color: #fff; }
 .md-tbl th:focus, .md-tbl td:focus { background: rgba(255, 255, 255, 0.05); }
 .md-img {
-  display: inline-block;
+  display: block;
   max-width: 100%;
   height: auto;
-  vertical-align: middle;
   margin: 6px 0;
   border-radius: 10px;
   border: 1px solid rgba(255, 255, 255, 0.12);

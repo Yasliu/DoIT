@@ -115,6 +115,8 @@ export interface AppSettings {
   dock_on_close?: boolean;
   /** Keys that open the dock panel on the latest note from any app; empty is off. Set via `setQuickNoteShortcut`. */
   quick_note_shortcut?: string;
+  /** Keys that show or hide the dock panel from any app; empty is off. Set via `setDockShortcut`. */
+  dock_shortcut?: string;
   last_seen_version?: string;
   /** Modern design only: colour theme and light/dark choice (see src/platform/modern/theme.ts). */
   palette?: string;
@@ -144,6 +146,7 @@ export const DEFAULT_SETTINGS: AppSettings = {
   hotkey_task: "Ctrl+L",
   theme_mode: "glass",
   dock_on_close: true,
+  dock_shortcut: "Ctrl+Alt+J",
 };
 
 /** The fields of `next` that differ from `prev`, i.e. what a settings screen changed. */
@@ -393,6 +396,10 @@ export const tauriApi = {
   },
 
   async openTrayMode(hasActiveNote?: boolean, noteId?: string): Promise<void> {
+    try {
+      if (noteId) localStorage.setItem("doit.dock_active_note", noteId);
+      else localStorage.removeItem("doit.dock_active_note");
+    } catch {}
     if (!isTauri()) return;
     try {
       await invoke("open_tray_mode", { hasActiveNote: hasActiveNote ?? false, noteId: noteId ?? null });
@@ -401,6 +408,9 @@ export const tauriApi = {
   },
 
   async openCanvasMode(): Promise<void> {
+    try {
+      localStorage.removeItem("doit.dock_active_note");
+    } catch {}
     if (!isTauri()) return;
     try {
       await invoke("open_canvas_mode");
@@ -428,22 +438,40 @@ export const tauriApi = {
   /** Tray page mounted: the backend shows the (pre-positioned) frame and returns the start mode. */
   /** The dock page mounted: the backend shows it and says which shape it is in and which note to open. */
   async trayReady(): Promise<{ shape: "panel" | "pill"; note: string | null }> {
-    if (!isTauri()) return { shape: "panel", note: null };
+    const savedNote = () => {
+      try {
+        return localStorage.getItem("doit.dock_active_note") || null;
+      } catch {
+        return null;
+      }
+    };
+    if (!isTauri()) return { shape: "panel", note: savedNote() };
     try {
       const ready = await invoke<{ shape: string; note: string | null }>("tray_ready");
-      return { shape: ready.shape === "pill" ? "pill" : "panel", note: ready.note ?? null };
+      const note = ready.note ?? savedNote();
+      if (note) {
+        try {
+          localStorage.setItem("doit.dock_active_note", note);
+        } catch {}
+      }
+      return { shape: ready.shape === "pill" ? "pill" : "panel", note };
     } catch {
-      return { shape: "panel", note: null };
+      return { shape: "panel", note: savedNote() };
     }
   },
 
   /** Stores an image next to the notes; returns its relative path, or null if it could not be saved. */
   async saveAttachment(bytes: ArrayBuffer, mime: string): Promise<string | null> {
     if (!isTauri()) return null;
+    const raw = new Uint8Array(bytes);
     try {
-      return await invoke<string>("save_attachment", new Uint8Array(bytes), { headers: { "x-mime": mime } });
+      return await invoke<string>("save_attachment", raw, { headers: { "x-mime": mime } });
     } catch {
-      return null;
+      try {
+        return await invoke<string>("save_attachment", { bytes: Array.from(raw), mime });
+      } catch {
+        return null;
+      }
     }
   },
 
@@ -456,20 +484,30 @@ export const tauriApi = {
     }
   },
 
-  /** Whether a shortcut DoIT sets works from other apps (not under Wayland), and why the saved one
-   * isn't working if DoIT could not take it back when it started. */
-  async quickNoteShortcutStatus(): Promise<{ supported: boolean; error: string | null }> {
-    if (!isTauri()) return { supported: false, error: null };
+  /**
+   * Whether the shortcuts DoIT sets work from other apps (through the OS, or through the desktop's
+   * own shortcut settings under Wayland), and why a saved one isn't working if DoIT could not take
+   * it back when it started.
+   */
+  async shortcutStatus(): Promise<{ supported: boolean; quickNoteError: string | null; dockError: string | null }> {
+    const off = { supported: false, quickNoteError: null, dockError: null };
+    if (!isTauri()) return off;
     try {
-      return await invoke<{ supported: boolean; error: string | null }>("quick_note_shortcut_status");
+      const status = await invoke<{ supported: boolean; quick_note_error: string | null; dock_error: string | null }>("shortcut_status");
+      return { supported: status.supported, quickNoteError: status.quick_note_error, dockError: status.dock_error };
     } catch {
-      return { supported: false, error: null };
+      return off;
     }
   },
 
   /** Takes `keys` as the quick-note shortcut ("" turns it off). Rejects with a sentence to show when the keys can't be used. */
   async setQuickNoteShortcut(keys: string): Promise<AppSettings> {
     return await invoke<AppSettings>("set_quick_note_shortcut", { keys });
+  },
+
+  /** The same for the shortcut that shows or hides the dock panel. */
+  async setDockShortcut(keys: string): Promise<AppSettings> {
+    return await invoke<AppSettings>("set_dock_shortcut", { keys });
   },
 
   async setPillLook(look: PillLook): Promise<void> {
@@ -482,10 +520,16 @@ export const tauriApi = {
   },
 
   /** Mutates the single tray frame between the 380x480 panel and the 180x44 floating bar with dynamic quadrant detection. */
-  async setTrayMode(mode: "panel" | "pill"): Promise<QuadrantInfo | null> {
+  async setTrayMode(mode: "panel" | "pill", noteId?: string | null): Promise<QuadrantInfo | null> {
+    if (mode === "pill" || noteId !== undefined) {
+      try {
+        if (noteId) localStorage.setItem("doit.dock_active_note", noteId);
+        else localStorage.removeItem("doit.dock_active_note");
+      } catch {}
+    }
     if (!isTauri()) return null;
     try {
-      return await invoke<QuadrantInfo>("set_tray_mode", { mode });
+      return await invoke<QuadrantInfo>("set_tray_mode", { mode, noteId: noteId ?? null });
     } catch {
       return null;
     }
@@ -633,11 +677,14 @@ export const tauriApi = {
   },
 
   async restartApp(): Promise<void> {
-    if (!isTauri()) return;
+    if (!isTauri()) {
+      window.location.reload();
+      return;
+    }
     try {
       await invoke("restart_app");
     } catch {
-      /* ignore */
+      window.location.reload();
     }
   },
 

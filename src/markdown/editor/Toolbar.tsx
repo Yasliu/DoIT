@@ -135,7 +135,16 @@ export function Toolbar({ editor, note, onMode, onFont, zoom, compact = false }:
     { key: "quote", glyph: ">", label: "quote", hint: ">", run: act(applyBlockquote) },
     { key: "code", glyph: "`", label: "code block", hint: "```", run: act((ed) => insertCodeBlockAtCaret(ed)) },
     { key: "dl", glyph: ":", label: "definition", hint: ": def", run: act(applyDefinitionList) },
-    { key: "image", glyph: "▣", label: "attach image", hint: hasGallery(note) ? "has images" : <Kbd keys="Ctrl+V" />, run: () => fileInput.current?.click() },
+    {
+      key: "image",
+      glyph: "▣",
+      label: "attach image",
+      hint: hasGallery(note) ? "has images" : <Kbd keys="Ctrl+V" />,
+      run: () => {
+        restoreCaret();
+        fileInput.current?.click();
+      },
+    },
     { key: "icode", section: " ", glyph: "`", label: "inline code", hint: "`x`", run: act(applyInlineCode) },
     { key: "link", glyph: "↗", label: "link", hint: "[t](u)", run: act(applyLink) },
     { key: "del", glyph: "~", label: "strikethrough", hint: "~~x~~", run: act(applyStrikethrough) },
@@ -261,9 +270,11 @@ export function Toolbar({ editor, note, onMode, onFont, zoom, compact = false }:
         multiple
         className="hidden"
         onChange={(e) => {
-          const files = e.target.files;
-          if (files && files.length > 0) editor.insertImages(Array.from(files), "Attached Image");
-          e.target.value = "";
+          const selected = e.target.files ? Array.from(e.target.files) : [];
+          if (selected.length > 0) editor.insertImages(selected, "Attached Image");
+          requestAnimationFrame(() => {
+            if (fileInput.current) fileInput.current.value = "";
+          });
         }}
       />
 

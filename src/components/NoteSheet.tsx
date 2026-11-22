@@ -70,6 +70,13 @@ interface NoteSheetProps {
   isBottomMode?: boolean;
 }
 
+type ToolbarRoom = "cramped" | "tight" | "roomy";
+
+/** How the toolbar fits at `width`: under 520px it drops labels, under 680px it compacts. */
+function toolbarRoom(width: number): ToolbarRoom {
+  return width < 520 ? "cramped" : width < 680 ? "tight" : "roomy";
+}
+
 export function NoteSheet({
   note,
   origin: _origin,
@@ -153,27 +160,25 @@ export function NoteSheet({
     } catch {}
   }, []);
 
-  // Measure actual toolbar rendered width dynamically for fluid responsive scaling
+  // Measure the toolbar's width, but keep only how roomy it is: the drawer's width animates, and
+  // storing every width along the way re-rendered this whole sheet on every frame of it.
   const toolbarRef = useRef<HTMLDivElement>(null);
-  const [toolbarWidth, setToolbarWidth] = useState<number>(() => (width && width > 0 ? width : 580));
+  const [room, setRoom] = useState<ToolbarRoom>(() => toolbarRoom(width && width > 0 ? width : 580));
 
   useLayoutEffect(() => {
     const el = toolbarRef.current;
     if (!el) return;
     const ro = new ResizeObserver((entries) => {
       for (const entry of entries) {
-        if (entry.contentRect.width > 0) {
-          setToolbarWidth(entry.contentRect.width);
-        }
+        if (entry.contentRect.width > 0) setRoom(toolbarRoom(entry.contentRect.width));
       }
     });
     ro.observe(el);
     return () => ro.disconnect();
   }, []);
 
-  const effectiveWidth = isMaximized ? 1200 : (toolbarWidth || width || 580);
-  const isTight = !isMaximized && effectiveWidth < 680;
-  const isVeryTight = !isMaximized && effectiveWidth < 520;
+  const isTight = !isMaximized && room !== "roomy";
+  const isVeryTight = !isMaximized && room === "cramped";
 
   // Load system fonts deferred to not block initial slide-in
   useEffect(() => {
@@ -390,6 +395,7 @@ export function NoteSheet({
 
   useEffect(() => {
     const onKey = (event: KeyboardEvent) => {
+      if (editor.previewImage) return;
       if ((event.ctrlKey || event.metaKey) && !event.altKey) {
         if (event.key === "=" || event.key === "+" || event.code === "NumpadAdd" || event.code === "Equal") {
           event.preventDefault();
@@ -423,7 +429,7 @@ export function NoteSheet({
     };
     document.addEventListener("keydown", onKey);
     return () => document.removeEventListener("keydown", onKey);
-  }, [fontOpen, shelfOpen, adjustZoom, resetZoom]);
+  }, [editor.previewImage, fontOpen, shelfOpen, adjustZoom, resetZoom]);
 
   useEffect(() => {
     return () => {
@@ -751,7 +757,7 @@ export function NoteSheet({
                     "truncate transition-all duration-150 ease-out overflow-hidden inline-block",
                     isMaximized
                       ? "max-w-[140px] opacity-100 ml-1.5"
-                      : (!isTight && effectiveWidth >= 640 ? "max-w-[85px] opacity-100 hidden sm:inline-block ml-1" : "hidden"),
+                      : (!isTight ? "max-w-[85px] opacity-100 hidden sm:inline-block ml-1" : "hidden"),
                   )}
                 >
                   {cleanText(draft.font_family) || "Instrument Sans"}
@@ -972,9 +978,11 @@ export function NoteSheet({
               multiple
               className="hidden"
               onChange={(e) => {
-                const files = e.target.files;
-                if (files && files.length > 0) editor.insertImages(Array.from(files), "Attached Image");
-                e.target.value = "";
+                const selected = e.target.files ? Array.from(e.target.files) : [];
+                if (selected.length > 0) editor.insertImages(selected, "Attached Image");
+                requestAnimationFrame(() => {
+                  if (fileInputRef.current) fileInputRef.current.value = "";
+                });
               }}
             />
 

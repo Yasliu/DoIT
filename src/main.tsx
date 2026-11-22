@@ -2,18 +2,16 @@ import React from "react";
 import ReactDOM from "react-dom/client";
 import { MotionConfig } from "motion/react";
 import { isMarkdown, markPlatform, pick } from "./platform";
+import { reportPillLook } from "./platform/pillLook";
+import { listenZoomWheel } from "./lib/zoomWheel";
 
 markPlatform();
 
 // Block browser-level page zoom from touchpad pinch and Ctrl+wheel anywhere in the app chrome;
 // open note editors handle zoom locally on the note body.
-window.addEventListener(
-  "wheel",
-  (e) => {
-    if (e.ctrlKey || e.metaKey) e.preventDefault();
-  },
-  { passive: false },
-);
+listenZoomWheel((e) => {
+  if (e.ctrlKey || e.metaKey) e.preventDefault();
+});
 for (const type of ["gesturestart", "gesturechange", "gestureend"] as const) {
   window.addEventListener(type, (e) => e.preventDefault(), { passive: false });
 }
@@ -40,6 +38,7 @@ const designs = {
 };
 
 void designs[isMarkdown ? "markdown" : "modern"]().then(({ Canvas, Dock }) => {
+  if ("__TAURI_INTERNALS__" in window) reportPillLook();
   ReactDOM.createRoot(document.getElementById("root") as HTMLElement).render(
     <React.StrictMode>
       {/* The modern design honours the system's reduced-motion setting for spring animations too. */}
