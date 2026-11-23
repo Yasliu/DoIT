@@ -1,15 +1,18 @@
 import { tauriApi } from "../../api/tauriBridge";
+import type { AppUpdate } from "../../hooks/useAppUpdate";
 import { Btn, Glyph, Kbd } from "../ui";
+import { UpdateStatus } from "./UpdateStatus";
 
 interface TopBarProps {
   sidebarOpen: boolean;
   onToggleSidebar: () => void;
   onOpenSearch: () => void;
   onDock: () => void;
+  update: AppUpdate;
 }
 
-/** The window's title bar: the search line and the window's own controls. */
-export function TopBar({ sidebarOpen, onToggleSidebar, onOpenSearch, onDock }: TopBarProps) {
+/** The window's title bar: the search line, the update status and the window's own controls. */
+export function TopBar({ sidebarOpen, onToggleSidebar, onOpenSearch, onDock, update }: TopBarProps) {
   return (
     <header
       data-tauri-drag-region
@@ -37,6 +40,7 @@ export function TopBar({ sidebarOpen, onToggleSidebar, onOpenSearch, onDock }: T
       </div>
 
       <div className="flex shrink-0 items-center gap-[1ch]">
+        <UpdateStatus update={update} />
         <Btn onClick={onDock} title="Shrink to the dock (Ctrl+J)">
           dock
         </Btn>

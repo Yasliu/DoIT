@@ -1,6 +1,7 @@
 import { Minus, PanelLeft, Search, Settings, Square, X } from "lucide-react";
 import { Seek } from "./Seek";
 import { tauriApi } from "../api/tauriBridge";
+import type { UpdateState } from "../hooks/useAppUpdate";
 import { isModern } from "../platform";
 
 interface TitleBarProps {
@@ -15,6 +16,8 @@ interface TitleBarProps {
   sidebarOpen?: boolean;
   onToggleSidebar?: () => void;
   onOpenSearch?: () => void;
+  /** Modern design only: an update waiting in the collapsed sidebar marks its expand button. */
+  updateStatus?: UpdateState["status"];
 }
 
 export function TitleBar({
@@ -27,6 +30,7 @@ export function TitleBar({
   sidebarOpen,
   onToggleSidebar,
   onOpenSearch,
+  updateStatus,
 }: TitleBarProps) {
   return (
     <header
@@ -41,10 +45,19 @@ export function TitleBar({
             type="button"
             onClick={onToggleSidebar}
             className="ui-icon-button"
-            aria-label={sidebarOpen ? "Collapse sidebar" : "Expand sidebar"}
+            aria-label={
+              sidebarOpen
+                ? "Collapse sidebar"
+                : updateStatus && updateStatus !== "none"
+                  ? `Expand sidebar, ${updateStatus === "error" ? "update failed" : updateStatus === "ready" ? "update ready" : "update available"}`
+                  : "Expand sidebar"
+            }
             title={sidebarOpen ? "Collapse sidebar" : "Expand sidebar"}
           >
             <PanelLeft size={16} />
+            {!sidebarOpen && updateStatus && updateStatus !== "none" && (
+              <span className="ui-update-dot" data-status={updateStatus} aria-hidden="true" />
+            )}
           </button>
           <button type="button" onClick={onOpenSearch} className="ui-search-trigger" aria-label="Search notes (Ctrl K)">
             <Search size={15} />

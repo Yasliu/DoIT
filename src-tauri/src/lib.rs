@@ -168,6 +168,8 @@ pub fn run() {
             commands::window::ensure_dock_topmost,
             commands::window::restart_app,
             commands::window::launch_id,
+            commands::window::download_update,
+            commands::window::downloaded_update,
             commands::window::install_update,
             commands::window::quit_app,
             commands::window::flush_done,

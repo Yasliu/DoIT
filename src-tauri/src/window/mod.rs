@@ -171,6 +171,15 @@ pub fn quit(app: &AppHandle) {
     });
 }
 
+/// Blocks until the pages have saved what they hold and every note change is on disk: before an
+/// update installs, because on Windows the installer ends the process without the usual exit.
+/// Never call this on the main thread.
+pub fn save_everything(app: &AppHandle) {
+    remember_maximized(app);
+    flush::pages(app, &[CANVAS, DOCK]);
+    app.state::<StorageManager>().flush_writes();
+}
+
 /// Restarts (after an update) once the pages have saved what they hold.
 pub fn restart(app: &AppHandle) {
     let app = app.clone();
