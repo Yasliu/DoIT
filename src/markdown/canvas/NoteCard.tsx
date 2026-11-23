@@ -7,6 +7,7 @@ import { ImageLightbox } from "../editor/ImageLightbox";
 import { openExternalUrl, previewMarkup, previewText } from "../../lib/format";
 import { cleanText, densityOf, relativeShort } from "../../lib/text";
 import { Frame, Glyph } from "../ui";
+import { useFitPreview } from "./previewFit";
 
 interface NoteCardProps {
   note: NoteItem;
@@ -22,7 +23,6 @@ interface NoteCardProps {
   onToggleSettled?: (note: NoteItem) => void;
 }
 
-const LINE = 19;
 /**
  * Room a figure starting within the preview's lines gets on top of them: a callout or short list
  * fits whole. Past the first two, figures clip like long text instead of stretching the row.
@@ -38,7 +38,7 @@ function imagesOf(note: NoteItem): string[] {
 /** A note on the canvas: its title on the frame's edge, the rendered note inside, tasks as a bar. */
 function NoteCardComponent({ note, pressed, dragging, landed, reorderTarget, onOpen, onArm, onToggleItem, onContextMenu, onToggleSettled }: NoteCardProps) {
   const [previewImage, setPreviewImage] = useState<string | null>(null);
-  const [previewEl, setPreviewEl] = useState<HTMLDivElement | null>(null);
+  const [previewEl, setPreviewEl] = useState<HTMLElement | null>(null);
   useFigureMounts(previewEl);
   const rawMode = note.format === "txt";
   const { density, shownFigures } = useMemo(() => {
@@ -54,7 +54,7 @@ function NoteCardComponent({ note, pressed, dragging, landed, reorderTarget, onO
   const total = note.content.filter((item) => item.is_todo).length;
   const done = note.content.filter((item) => item.is_todo && item.completed).length;
   const images = imagesOf(note);
-  const maxHeight = density.lines * LINE + 6 + shownFigures * FIGURE_ROOM;
+  useFitPreview(previewEl, density.lines, shownFigures * FIGURE_ROOM);
   const title = cleanText(note.title) || "untitled";
 
   return (
@@ -106,14 +106,14 @@ function NoteCardComponent({ note, pressed, dragging, landed, reorderTarget, onO
         {empty ? (
           <p className="text-graph-muted">empty</p>
         ) : rawMode ? (
-          <pre className="md-preview-raw" style={{ maxHeight }}>
+          <pre ref={setPreviewEl} className="md-preview-raw min-h-0 grow basis-0">
             {previewText(note.content)}
           </pre>
         ) : (
           <div
             ref={setPreviewEl}
-            className="md-preview"
-            style={{ maxHeight, fontFamily: fontStack(note.font_family) }}
+            className="md-preview min-h-0 grow basis-0"
+            style={{ fontFamily: fontStack(note.font_family) }}
             onPointerDown={(event) => {
               if ((event.target as HTMLElement).closest(".md-cb, img.md-img")) event.stopPropagation();
             }}
