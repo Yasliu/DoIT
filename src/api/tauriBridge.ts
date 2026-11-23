@@ -81,6 +81,17 @@ export interface PillLook {
   dash?: [number, number];
 }
 
+/** A newer release a check found: `notes` is its release notes, in Markdown. */
+export interface FoundUpdate {
+  rid: number;
+  version: string;
+  notes: string;
+}
+
+export type UpdateCheck =
+  | { kind: "available"; update: FoundUpdate }
+  | { kind: "none" | "store" | "unsupported" | "error" };
+
 export interface QuadrantInfo {
   grow_x: "right" | "left" | "center";
   grow_y: "down" | "up";
@@ -656,14 +667,44 @@ export const tauriApi = {
   },
 
   /**
-   * Downloads, verifies and installs the update a `check()` found (its `rid`), reporting percent done
-   * (null while the size is unknown; 100 once verified, before any password prompt). Rejects with a
-   * sentence to show. Restart afterwards; on Windows the installer does.
+   * Asks the release server whether a newer DoIT exists. `unsupported`: one does, but it ships no
+   * package for this system (retrying fails the same way); `error`: offline or unreachable.
    */
-  async installUpdate(rid: number, onProgress: (percent: number | null) => void): Promise<void> {
+  async checkForUpdate(timeoutMs: number): Promise<UpdateCheck> {
+    if (await this.isMsStorePackage()) return { kind: "store" };
+    if (typeof navigator !== "undefined" && navigator.onLine === false) return { kind: "error" };
+    try {
+      const { check } = await import("@tauri-apps/plugin-updater");
+      const update = await check({ timeout: timeoutMs });
+      if (!update) return { kind: "none" };
+      return { kind: "available", update: { rid: update.rid, version: update.version, notes: update.body ?? "" } };
+    } catch (err) {
+      return { kind: /platforms?` object/.test(String(err)) ? "unsupported" : "error" };
+    }
+  },
+
+  /**
+   * Downloads and verifies the update a check found and keeps it in the backend for `installUpdate`,
+   * reporting percent done (null while the size is unknown). Rejects with a sentence to show.
+   */
+  async downloadUpdate(update: FoundUpdate, onProgress: (percent: number | null) => void): Promise<void> {
     const channel = new Channel<{ received: number; total: number | null }>();
     channel.onmessage = ({ received, total }) => onProgress(total ? Math.min(100, Math.round((received / total) * 100)) : null);
-    await invoke("install_update", { rid, onProgress: channel });
+    await invoke("download_update", { rid: update.rid, onProgress: channel });
+  },
+
+  /** The version already downloaded in this run (by any page), waiting for `installUpdate`. */
+  async downloadedUpdate(): Promise<string | null> {
+    return (await invoke<string | null>("downloaded_update")) ?? null;
+  },
+
+  /**
+   * Saves everything, installs the downloaded update if it is `update`, and restarts into it (a
+   * password prompt or the Windows installer may come first). Resolves once the restart is under
+   * way; rejects with a sentence to show if the install failed.
+   */
+  async installUpdate(update: FoundUpdate): Promise<void> {
+    await invoke("install_update", { version: update.version });
   },
 
   /** Names this run of DoIT: the same in every window until the next launch. Null outside Tauri. */

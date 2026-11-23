@@ -6,7 +6,8 @@ React + TypeScript frontend, Rust backend. Shipped for Windows; a Linux port is 
 ## Layout
 
 - `src/`: React frontend. `api/tauriBridge.ts` is the only place that calls `invoke`; `hooks/`
-  (`useWorkspace` owns app state), `lib/` (pure helpers). `main.tsx` loads one design per run:
+  (`useWorkspace` owns app state, `useAppUpdate` the update check, download, install and "What's
+  new"; each design draws its own update control), `lib/` (pure helpers). `main.tsx` loads one design per run:
   `defaultDesign.ts` or, with the ILOVEMARKDOWN flag on, `markdown/`. Each brings its own styles.
   - Default design: `App.tsx`, `components/`, `styles/globals.css`, and `platform/modern/` (the
     modern look and the components it swaps in). The classic components are still in the tree but
@@ -29,6 +30,8 @@ React + TypeScript frontend, Rust backend. Shipped for Windows; a Linux port is 
     `writer` (one thread writes note files in edit order), `attachments` (images beside the notes).
   - `commands/`: every `#[tauri::command]`, grouped as `notes`, `files`, `settings`, `window`.
     Keep them thin and delegate.
+  - `updates.rs`: downloads an update and keeps it, then installs it when the user restarts
+    (rpm through `platform::install_rpm`).
   - `window/`: owns the mode (canvas, dock pill, dock panel). Callers name the mode they want;
     `placement` is the pure, tested maths, `webview` builds and retires webviews, `lifecycle` runs
     the transitions, `pill/` draws the pill natively (no webview runs once it has been alone for

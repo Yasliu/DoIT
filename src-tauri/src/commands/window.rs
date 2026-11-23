@@ -110,10 +110,11 @@ pub struct UpdateProgress {
     total: Option<u64>,
 }
 
-/// Downloads, verifies and installs the update the page's check found (`rid`, the plugin's handle
-/// for it), so what installs is what the dialog offered. The error is a sentence for the dialog.
+/// Downloads and verifies the update the page's check found (`rid`, the plugin's handle for it), so
+/// what installs is what the page offered, and keeps it for `install_update`. The error is a
+/// sentence to show.
 #[tauri::command]
-pub async fn install_update(
+pub async fn download_update(
     webview: tauri::Webview,
     rid: tauri::ResourceId,
     on_progress: tauri::ipc::Channel<UpdateProgress>,
@@ -123,10 +124,29 @@ pub async fn install_update(
         .resources_table()
         .get::<tauri_plugin_updater::Update>(rid)
         .map_err(|_| "This update is no longer available. Check for updates again.".to_string())?;
-    crate::updates::install(&update, |received, total| {
+    crate::updates::download(&update, |received, total| {
         let _ = on_progress.send(UpdateProgress { received, total });
     })
     .await
+}
+
+/// The version of an update already downloaded in this run, so a rebuilt page offers a restart.
+#[tauri::command]
+pub fn downloaded_update() -> Option<String> {
+    crate::updates::downloaded_version()
+}
+
+/// Saves everything, installs the downloaded update if it is `version`, and restarts DoIT into it.
+/// Returns only if the install failed (Linux: once the restart is scheduled).
+#[tauri::command]
+pub async fn install_update(app: AppHandle, version: String) -> Result<(), String> {
+    let saving = app.clone();
+    tauri::async_runtime::spawn_blocking(move || window::save_everything(&saving))
+        .await
+        .map_err(|e| e.to_string())?;
+    crate::updates::install(&version).await?;
+    window::restart(&app);
+    Ok(())
 }
 
 /// The page saved everything it held after a `flush-pending` request.

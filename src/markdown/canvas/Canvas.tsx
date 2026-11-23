@@ -1,12 +1,12 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import type { NoteItem } from "../../api/tauriBridge";
 import { tauriApi } from "../../api/tauriBridge";
+import { useAppUpdate, type Notify } from "../../hooks/useAppUpdate";
 import { useWorkspace } from "../../hooks/useWorkspace";
 import { dismissBootScreen } from "../../lib/bootScreen";
 import { contentToMarkdown, setMarkdownBaseDir } from "../../lib/format";
 import { applyShortcutSettings, canvasShortcut } from "../../lib/shortcuts";
 import { cleanText } from "../../lib/text";
-import { APP_VERSION } from "../../lib/version";
 import { applyThemeSettings, isLinux } from "../../platform";
 import { cn } from "@/lib/utils";
 import { Btn, Menu, Toast, type MenuItem } from "../ui";
@@ -21,28 +21,15 @@ import { ShelfIndex, type CanvasView } from "./ShelfIndex";
 import { ShelfPicker } from "./ShelfPicker";
 import { Spotlight } from "./Spotlight";
 import { TopBar } from "./TopBar";
-import { UpdateCard, type UpdateInfo } from "./UpdateCard";
 
 interface Toasted {
   id: number;
   message: string;
-  undo?: () => void;
+  action?: Parameters<Notify>[1];
 }
 
 /** The settled view shows every note whatever the shelves' collapsed state. */
 const NOTHING_COLLAPSED: Record<string, boolean> = {};
-const VERSION_TRACKER_KEY = "doit.release_notes_version";
-
-function isVersionLower(current: string | null, target: string): boolean {
-  if (!current) return true;
-  const c = current.replace(/^v/, "").split(".").map(Number);
-  const t = target.replace(/^v/, "").split(".").map(Number);
-  for (let i = 0; i < Math.max(c.length, t.length, 4); i++) {
-    if ((c[i] || 0) < (t[i] || 0)) return true;
-    if ((c[i] || 0) > (t[i] || 0)) return false;
-  }
-  return false;
-}
 
 /** 360px on compact screens, 420px on larger ones. */
 function minDrawerWidth(): number {
@@ -84,8 +71,6 @@ export default function Canvas() {
   const wasSheetOpen = useRef(false);
   const [railOpen, setRailOpen] = useState(true);
   const [toast, setToast] = useState<Toasted | null>(null);
-  const [availableUpdate, setAvailableUpdate] = useState<UpdateInfo | null>(null);
-  const [showReleaseLog, setShowReleaseLog] = useState(false);
   const toastTimer = useRef(0);
   const deepLinkUsed = useRef(false);
 
@@ -99,108 +84,6 @@ export default function Canvas() {
     const fit = () => setDrawerWidth(storedDrawerWidth());
     window.addEventListener("resize", fit);
     return () => window.removeEventListener("resize", fit);
-  }, []);
-
-  // Background update check. GitHub's release CDN sometimes needs 10s+ for the TLS handshake, so
-  // retry with growing patience.
-  const checkForUpdate = useCallback(async (timeoutMs: number): Promise<"found" | "none" | "unsupported" | "error" | "store"> => {
-    if (await tauriApi.isMsStorePackage()) return "store";
-    if (typeof navigator !== "undefined" && navigator.onLine === false) return "error";
-    try {
-      const { check } = await import("@tauri-apps/plugin-updater");
-      const update = await check({ timeout: timeoutMs });
-      if (update && update.available) {
-        setAvailableUpdate({
-          version: update.version,
-          currentVersion: update.currentVersion,
-          notes: update.body,
-          date: update.date,
-          // Installed by the backend, which can install an rpm the way Fedora's RPM accepts it.
-          onInstall: async (onProgress) => {
-            onProgress(0);
-            await tauriApi.installUpdate(update.rid, onProgress);
-            await tauriApi.restartApp();
-          },
-          onDismiss: () => setAvailableUpdate(null),
-        });
-        return "found";
-      }
-      return "none";
-    } catch (err) {
-      // A newer release exists but ships no package for this OS yet: retrying fails the same way.
-      if (/platforms?` object/.test(String(err))) return "unsupported";
-      return "error";
-    }
-  }, []);
-
-  useEffect(() => {
-    let cancelled = false;
-    const timers: number[] = [];
-    const attempts = [
-      { delay: 1200, timeout: 15000 },
-      { delay: 25000, timeout: 30000 },
-      { delay: 120000, timeout: 30000 },
-      { delay: 600000, timeout: 30000 },
-    ];
-    const run = (i: number) => {
-      if (cancelled || i >= attempts.length) return;
-      timers.push(
-        window.setTimeout(async () => {
-          if (cancelled) return;
-          if ((await checkForUpdate(attempts[i].timeout)) === "error") run(i + 1);
-        }, attempts[i].delay),
-      );
-    };
-    run(0);
-    // Long sessions (the dock) re-check every 6 hours.
-    const interval = window.setInterval(() => void checkForUpdate(30000), 6 * 60 * 60 * 1000);
-    return () => {
-      cancelled = true;
-      timers.forEach((t) => window.clearTimeout(t));
-      window.clearInterval(interval);
-    };
-  }, [checkForUpdate]);
-
-  const closeReleaseLog = useCallback(() => {
-    setShowReleaseLog(false);
-    try {
-      sessionStorage.setItem("doit.release_notes_seen", APP_VERSION);
-      localStorage.setItem(VERSION_TRACKER_KEY, APP_VERSION);
-      void tauriApi.patchSettings({ last_seen_version: APP_VERSION });
-    } catch {
-      /* ignore */
-    }
-  }, []);
-
-  // The release log shows once after an upgrade; a fresh install only records the version.
-  useEffect(() => {
-    try {
-      if (sessionStorage.getItem("doit.release_notes_seen") === APP_VERSION) return;
-    } catch {
-      /* ignore storage errors */
-    }
-    void tauriApi.getSettings().then((s) => {
-      try {
-        const localSeen = localStorage.getItem(VERSION_TRACKER_KEY);
-        const diskSeen = s.last_seen_version;
-        const record = () => {
-          localStorage.setItem(VERSION_TRACKER_KEY, APP_VERSION);
-          sessionStorage.setItem("doit.release_notes_seen", APP_VERSION);
-          void tauriApi.patchSettings({ last_seen_version: APP_VERSION });
-        };
-        if (!diskSeen && !localSeen) return record();
-        const previous = diskSeen || localSeen;
-        if (previous && isVersionLower(previous, APP_VERSION)) {
-          setShowReleaseLog(true);
-          record();
-        } else {
-          sessionStorage.setItem("doit.release_notes_seen", APP_VERSION);
-          if (!diskSeen) void tauriApi.patchSettings({ last_seen_version: APP_VERSION });
-        }
-      } catch {
-        /* ignore storage errors */
-      }
-    });
   }, []);
 
   useEffect(() => {
@@ -217,15 +100,16 @@ export default function Canvas() {
     setToast(null);
   }, []);
 
-  const notify = useCallback((message: string, undo?: () => void) => {
+  const notify = useCallback<Notify>((message, action) => {
     window.clearTimeout(toastTimer.current);
-    setToast({ id: Date.now(), message, undo });
+    setToast({ id: Date.now(), message, action });
     toastTimer.current = window.setTimeout(() => {
       deletedRef.current = [];
       setToast(null);
     }, 6200);
   }, []);
   useEffect(() => () => window.clearTimeout(toastTimer.current), []);
+  const update = useAppUpdate(notify);
 
   const open = useCallback((note: NoteItem, maximize = false) => {
     setIsNoteMaximized(maximize);
@@ -255,22 +139,6 @@ export default function Canvas() {
     void tauriApi.canvasReady();
   }, []);
 
-  useEffect(() => {
-    const onManualCheck = async () => {
-      const result = await checkForUpdate(30000);
-      if (result === "store") notify("Updates are managed by the Microsoft Store.");
-      else if (result === "none") notify("You are on the latest version.");
-      else if (result === "unsupported") notify("A newer DoIT is out, but there is no package for this system yet.");
-      else if (result === "error") notify("Could not reach the update server. Try again in a moment.");
-    };
-    const onShowReleaseLog = () => setShowReleaseLog(true);
-    window.addEventListener("doit:check-updates", onManualCheck);
-    window.addEventListener("doit:show-release-log", onShowReleaseLog);
-    return () => {
-      window.removeEventListener("doit:check-updates", onManualCheck);
-      window.removeEventListener("doit:show-release-log", onShowReleaseLog);
-    };
-  }, [checkForUpdate, notify]);
 
   // Files opened from the file manager ("Open with DoIT") are edited in place, never copied.
   const openExternal = useCallback(
@@ -359,9 +227,12 @@ export default function Canvas() {
       setOpenNote(null);
       deletedRef.current = [...deletedRef.current, note];
       const count = deletedRef.current.length;
-      notify(count > 1 ? `${count} notes deleted.` : "Note deleted.", () => {
-        deletedRef.current.forEach((entry) => restore(entry));
-        deletedRef.current = [];
+      notify(count > 1 ? `${count} notes deleted.` : "Note deleted.", {
+        label: "undo",
+        run: () => {
+          deletedRef.current.forEach((entry) => restore(entry));
+          deletedRef.current = [];
+        },
       });
     },
     [remove, restore, notify],
@@ -371,7 +242,10 @@ export default function Canvas() {
   const applySettled = useCallback(
     (next: NoteItem) => {
       patch(next, true);
-      notify(next.is_settled ? "Settled. Search still finds it." : "Back on its shelf.", () => patch({ ...next, is_settled: !next.is_settled }, true));
+      notify(next.is_settled ? "Settled. Search still finds it." : "Back on its shelf.", {
+        label: "undo",
+        run: () => patch({ ...next, is_settled: !next.is_settled }, true),
+      });
     },
     [patch, notify],
   );
@@ -498,7 +372,13 @@ export default function Canvas() {
 
   return (
     <div className="tm-shell flex h-full w-full flex-col overflow-hidden">
-      <TopBar sidebarOpen={railOpen} onToggleSidebar={() => setRailOpen((v) => !v)} onOpenSearch={() => setDialog("search")} onDock={toDock} />
+      <TopBar
+        sidebarOpen={railOpen}
+        onToggleSidebar={() => setRailOpen((v) => !v)}
+        onOpenSearch={() => setDialog("search")}
+        onDock={toDock}
+        update={update}
+      />
 
       <div className="flex min-h-0 flex-1">
         <ShelfIndex
@@ -664,7 +544,7 @@ export default function Canvas() {
         />
       )}
 
-      {toast && <Toast key={toast.id} message={toast.message} undo={toast.undo} onDismiss={dismissToast} />}
+      {toast && <Toast key={toast.id} message={toast.message} action={toast.action} onDismiss={dismissToast} />}
 
       {dialog === "search" && (
         <Spotlight
@@ -713,8 +593,7 @@ export default function Canvas() {
         />
       )}
 
-      {availableUpdate && <UpdateCard info={availableUpdate} />}
-      {showReleaseLog && <ReleaseLog onClose={closeReleaseLog} />}
+      {update.whatsNew && <ReleaseLog onClose={update.closeWhatsNew} />}
     </div>
   );
 }

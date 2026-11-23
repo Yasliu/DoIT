@@ -2,6 +2,8 @@ import { useEffect, useRef, useState } from "react";
 import { motion, Reorder } from "motion/react";
 import { CircleCheck, FolderPlus, MoreHorizontal, Settings, SquarePen } from "lucide-react";
 import { Mark } from "../../components/Mark";
+import type { AppUpdate } from "../../hooks/useAppUpdate";
+import { UpdateButton } from "./UpdateButton";
 import { cleanText, cx } from "../../lib/text";
 import { shelfIcon } from "./ModernSpotlight";
 
@@ -24,6 +26,8 @@ interface ModernSidebarProps {
   onShelfMenu: (event: React.MouseEvent, shelf: string) => void;
   /** The shelves (without Uncategorized, which stays last) in their new order. */
   onReorderShelves: (order: string[]) => void;
+  /** Shown at the end of the brand row while the sidebar is open; the title bar marks it otherwise. */
+  update: AppUpdate;
 }
 
 const isUncategorized = (shelf: string) => shelf.toLowerCase() === "uncategorized";
@@ -119,6 +123,7 @@ export function ModernSidebar(props: ModernSidebarProps) {
       <div className="ui-sidebar-brand" data-tauri-drag-region>
         <Mark size={open ? 26 : 24} className="pointer-events-none shrink-0" />
         {open && <span className="pointer-events-none truncate text-[17px] font-semibold tracking-[-0.02em] text-ink-1">DoIT</span>}
+        <UpdateButton update={props.update} showIcon={open} />
       </div>
 
       <div className="ui-sidebar-header">
